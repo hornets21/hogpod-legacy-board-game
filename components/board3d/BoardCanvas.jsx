@@ -6,7 +6,7 @@
 // หมอก, ฝุ่นเวทมนตร์, Bloom
 // ============================================================
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import BoardTiles from "./BoardTiles";
