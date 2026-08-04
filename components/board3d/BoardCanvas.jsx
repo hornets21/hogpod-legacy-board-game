@@ -13,6 +13,30 @@ import BoardTiles from "./BoardTiles";
 import PlayerTokens from "./PlayerTokens";
 import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
+import DiceModel from "./DiceModel";
+
+function Animated3DDice({ isRolling }) {
+  const diceGroupRef = useRef(null);
+
+  useFrame(({ clock }, dt) => {
+    if (diceGroupRef.current && isRolling) {
+      diceGroupRef.current.rotation.x += dt * 12;
+      diceGroupRef.current.rotation.y += dt * 15;
+      diceGroupRef.current.rotation.z += dt * 8;
+      diceGroupRef.current.position.y = 2.5 + Math.abs(Math.sin(clock.elapsedTime * 15)) * 0.8;
+    } else if (diceGroupRef.current) {
+      diceGroupRef.current.position.y = 1.6 + Math.sin(clock.elapsedTime * 2) * 0.1;
+      diceGroupRef.current.rotation.x = 0.4;
+      diceGroupRef.current.rotation.y = clock.elapsedTime * 0.5;
+    }
+  });
+
+  return (
+    <group ref={diceGroupRef} position={[0, 1.8, 2]} scale={[0.75, 0.75, 0.75]}>
+      <DiceModel />
+    </group>
+  );
+}
 
 // กล้องเอียงมองลงกระดาน + parallax ตามเมาส์เล็กน้อย
 function CameraRig() {
@@ -92,6 +116,8 @@ export default function BoardCanvas({
   trapCells,
   currentPlayerIndex,
   phase,
+  isRolling,
+  diceResult,
 }) {
   const [hoverInfo, setHoverInfo] = useState(null);
   const hoverLines = describeHover(hoverInfo);
@@ -125,6 +151,8 @@ export default function BoardCanvas({
             currentPlayerIndex={currentPlayerIndex}
             phase={phase}
           />
+          {/* 3D Dice Model บนกระดาน */}
+          <Animated3DDice isRolling={isRolling} diceResult={diceResult} />
         </Suspense>
 
         <EffectComposer>

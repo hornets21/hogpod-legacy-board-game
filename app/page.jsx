@@ -251,6 +251,8 @@ export default function Home() {
           trapCells={state.trapCells}
           currentPlayerIndex={state.currentPlayerIndex}
           phase={state.phase}
+          isRolling={isRolling}
+          diceResult={state.diceResult}
         />
       </div>
 
