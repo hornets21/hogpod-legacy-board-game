@@ -257,23 +257,8 @@ export default function Home() {
       {/* ── 3D UI Overlays Layer (pointer-events-none เพื่อไม่ให้บังการคุม 3D) ─ */}
       <div className="relative z-10 w-full h-full p-4 flex flex-col justify-between pointer-events-none overflow-hidden">
 
-        {/* ── Top Floating Bar: Game Title + Admin ────────────── */}
-        <div className="flex items-start justify-between w-full pointer-events-auto">
-          {/* Game Title & Round Badge */}
-          <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/30 backdrop-blur-md shadow-[0_0_25px_rgba(240,184,91,0.15)]">
-            <span className="text-xl animate-pulse">🏰</span>
-            <div>
-              <div className="text-xs font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 uppercase">
-                ห้องแห่งความลับ
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400/90">
-                <span>รอบที่ {state.round}</span>
-                <span className="text-white/20">•</span>
-                <span className="text-cyan-400">ตาที่ {state.turn}</span>
-              </div>
-            </div>
-          </div>
-
+        {/* ── Top Floating Bar: Admin + Game Title ────────────── */}
+        <div className="flex items-center justify-end w-full gap-3 pointer-events-auto">
           {/* Admin Floating Button */}
           <div>
             <button
@@ -287,6 +272,21 @@ export default function Home() {
             >
               👑
             </button>
+          </div>
+
+          {/* Game Title & Round Badge (อยู่ต่อด้านขวาของปุ่ม admin) */}
+          <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/30 backdrop-blur-md shadow-[0_0_25px_rgba(240,184,91,0.15)]">
+            <span className="text-xl animate-pulse">🏰</span>
+            <div>
+              <div className="text-xs font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 uppercase">
+                ห้องแห่งความลับ
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400/90">
+                <span>รอบที่ {state.round}</span>
+                <span className="text-white/20">•</span>
+                <span className="text-cyan-400">ตาที่ {state.turn}</span>
+              </div>
+            </div>
           </div>
         </div>
 
