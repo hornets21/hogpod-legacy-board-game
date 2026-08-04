@@ -2,8 +2,6 @@
 
 import { useCallback, useReducer, useRef, useState, Suspense } from "react";
 import dynamic from "next/dynamic";
-import { Canvas } from "@react-three/fiber";
-import DiceModel from "@/components/board3d/DiceModel";
 import PlayerCard from "@/components/PlayerCard";
 import SetupModal from "@/components/SetupModal";
 import ShopModal from "@/components/ShopModal";
@@ -41,12 +39,32 @@ function gameReducer(state, action) {
   switch (action.type) {
     case "MOVE_AND_CHECK": {
       const player = state.players[state.currentPlayerIndex];
-      const monster = MONSTER_MAP[player.position];
-      const revealedMonsters = { ...state.revealedMonsters };
 
-      if (state.monsterCells.has(player.position) && monster) {
+      // Resolve destination effects only after the 3D token has finished walking.
+      // ROLL_DICE must only update the destination so the token can animate there.
+      if (state.trapCells?.[player.position]) {
+        const trapOwner = state.trapCells[player.position].houseId;
+        if (trapOwner !== player.houseId) {
+          const p = { ...player, hp: 0 };
+          const players = [...state.players];
+          players[state.currentPlayerIndex] = p;
+          let next = handlePlayerDeath({ ...state, players }, state.currentPlayerIndex);
+          return {
+            ...next,
+            log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
+          };
+        }
+      }
+
+      let next = checkWin(state);
+      if (next.winner || next.phase !== "play") return next;
+
+      const monster = MONSTER_MAP[player.position];
+      const revealedMonsters = { ...next.revealedMonsters };
+
+      if (next.monsterCells.has(player.position) && monster) {
         revealedMonsters[player.position] = monster;
-        let next = { ...state, revealedMonsters };
+        next = { ...next, revealedMonsters };
 
         // Check if player can dodge (Bank pet)
         const hasDodge = player.pet?.effect === "dodge_once" && !player.dodgeUsed;
@@ -58,35 +76,13 @@ function gameReducer(state, action) {
         }
         return next;
       }
-      return state;
+
+      return advanceTurn(next);
     }
 
     case "ROLL_DICE": {
-      const dice = rollDice();
+      const dice = action.dice || rollDice();
       let next = movePlayer(state, state.currentPlayerIndex, dice);
-
-      // Check trap
-      const player = next.players[state.currentPlayerIndex];
-      if (next.trapCells?.[player.position]) {
-        const trapOwner = next.trapCells[player.position].houseId;
-        if (trapOwner !== player.houseId) {
-          const p = { ...next.players[state.currentPlayerIndex], hp: 0 };
-          const players = [...next.players];
-          players[state.currentPlayerIndex] = p;
-          next = { ...next, players };
-          next = handlePlayerDeath(next, state.currentPlayerIndex);
-          next = { ...next, log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`] };
-          return next;
-        }
-      }
-
-      // Win check
-      next = checkWin(next);
-
-      // Advance turn if no monster at destination
-      if (!next.winner && !next.monsterCells.has(player.position) && next.phase === "play") {
-        next = advanceTurn(next);
-      }
 
       return next;
     }
@@ -203,6 +199,7 @@ export default function Home() {
   const [logCollapsed, setLogCollapsed] = useState(false);
   const [playersCollapsed, setPlayersCollapsed] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [resetDiceKey, setResetDiceKey] = useState(0);
 
   const currentPlayer = getCurrentPlayer(state);
   const canRoll = state.phase === "play" && !state.shopOpen && !state.combatState && !state.winner && !isRolling;
@@ -211,26 +208,23 @@ export default function Home() {
     if (!canRoll) return;
 
     setIsRolling(true);
+    const rolledVal = Math.floor(Math.random() * 6) + 1; // สุ่มแต้มที่จะทอยได้จริงเพียงค่าเดียว
 
-    // Step 1: Animate dice faces for 1.2 seconds
-    let count = 0;
-    const interval = setInterval(() => {
-      setTempDice(Math.floor(Math.random() * 6) + 1);
-      count += 1;
-      if (count >= 10) {
-        clearInterval(interval);
+    // สุ่มแต้มเดียวส่งเข้า State ทันที ล็อกให้ 3D Dice และการเดินหมากเป็นแต้มเดียวกัน 100%
+    setTempDice(rolledVal);
+
+    // หน่วงเวลา 600ms ให้ลูกเต๋า 3D กระเด้งแบบกระฉับกระเฉง รองรับคอมสเปกต่ำ
+    setTimeout(() => {
+      // ย้ายตำแหน่งตัวหมากบนกระดานตาม rolledVal ที่ออกจริง
+      dispatch({ type: "ROLL_DICE", dice: rolledVal });
+
+      // หน่วงเวลา 1.5 วินาทีให้หมากก้าวเดิน 3D บนกระดานตามแต้ม rolledVal
+      setTimeout(() => {
+        dispatch({ type: "MOVE_AND_CHECK" });
+        setIsRolling(false);
         setTempDice(null);
-
-        // Step 2: Dispatch ROLL_DICE to move player position on 3D board
-        dispatch({ type: "ROLL_DICE" });
-
-        // Step 3: Wait 2.2s for 3D token walk animation to finish completely before triggering monster combat modal
-        setTimeout(() => {
-          dispatch({ type: "MOVE_AND_CHECK" });
-          setIsRolling(false);
-        }, 2200);
-      }
-    }, 120);
+      }, 1500);
+    }, 600);
   }
 
   function handleEndTurn() {
@@ -254,9 +248,51 @@ export default function Home() {
           currentPlayerIndex={state.currentPlayerIndex}
           phase={state.phase}
           isRolling={isRolling}
-          diceResult={state.diceResult}
+          diceResult={displayDiceVal || state.diceResult}
+          onRoll={handleRoll}
+          canRoll={canRoll}
+          resetDiceKey={resetDiceKey}
         />
       </div>
+
+      {/* ── Dice Result Overlay (HTML ป้ายแต้มลูกเต๋ากลางจอ ตรง 100%) ──── */}
+      {isRolling && displayDiceVal && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div style={{
+            background: 'radial-gradient(circle, rgba(15,23,42,0.92) 40%, rgba(15,23,42,0.6) 70%, transparent 100%)',
+            borderRadius: '50%',
+            width: '180px',
+            height: '180px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            border: '4px solid rgba(251,191,36,0.5)',
+            boxShadow: '0 0 60px rgba(251,191,36,0.3), 0 0 120px rgba(245,158,11,0.15)',
+            animation: 'dice-pop 0.3s ease-out',
+          }}>
+            <div style={{
+              fontSize: '80px',
+              fontWeight: 900,
+              color: '#fbbf24',
+              fontFamily: 'monospace',
+              textShadow: '0 0 30px #fbbf24, 0 0 60px #f59e0b',
+              lineHeight: 1,
+            }}>
+              {displayDiceVal}
+            </div>
+            <div style={{
+              fontSize: '14px',
+              color: 'rgba(251,191,36,0.7)',
+              fontWeight: 700,
+              marginTop: '4px',
+              letterSpacing: '2px',
+            }}>
+              เดิน {displayDiceVal} ช่อง
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 3D UI Overlays Layer (pointer-events-none เพื่อไม่ให้บังการคุม 3D) ─ */}
       <div className="relative z-10 w-full h-full p-4 flex flex-col justify-between pointer-events-none overflow-hidden">
@@ -320,36 +356,15 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 3D Interactive Roll Dice Button (ใช้ DiceModel 3D แทรกในปุ่ม) */}
+            {/* Action Controls (รีเซ็ตตำแหน่งเต๋า, จบเทิร์น & ร้านค้า) */}
             <div className="flex items-center gap-2">
               <button
-                onClick={handleRoll}
-                disabled={!canRoll}
-                className={`relative flex items-center gap-2.5 px-5 py-2 rounded-2xl font-black text-xs transition-all duration-300 shadow-2xl backdrop-blur-xl border ${
-                  canRoll
-                    ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border-amber-400/60 text-amber-200 hover:scale-105 hover:border-amber-300 hover:shadow-[0_0_25px_rgba(240,184,91,0.4)] active:scale-95"
-                    : "bg-slate-900/60 border-white/10 text-white/40 cursor-not-allowed opacity-60"
-                }`}
-                title="คลิกเพื่อทอยลูกเต๋า 3D"
+                onClick={() => setResetDiceKey((k) => k + 1)}
+                disabled={isRolling}
+                className="btn-secondary text-xs px-3 py-3 shadow-xl backdrop-blur-md bg-slate-900/80 border-white/15 text-cyan-300 hover:bg-slate-800 font-bold"
+                title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้นบนกระดาน"
               >
-                {/* 3D Mini Viewport สำรับ DiceModel */}
-                <div className={`w-9 h-9 relative ${isRolling ? "animate-spin" : ""}`}>
-                  <Canvas camera={{ position: [0, 0, 3.2], fov: 45 }}>
-                    <ambientLight intensity={1.2} />
-                    <directionalLight position={[2, 3, 2]} intensity={1.5} />
-                    <Suspense fallback={null}>
-                      <DiceModel scale={[0.9, 0.9, 0.9]} rotation={[0.4, 0.8, 0]} />
-                    </Suspense>
-                  </Canvas>
-                </div>
-                <div className="text-left">
-                  <div className="text-amber-300 text-xs font-black">
-                    {isRolling ? "กำลังทอย 3D..." : "ทอยลูกเต๋า 3D"}
-                  </div>
-                  <div className="text-[9px] text-white/60 font-bold">
-                    {displayDiceVal ? `แต้มล่าสุด: ${displayDiceVal}` : "กดเพื่อทอยแต้ม"}
-                  </div>
-                </div>
+                🔄 รีเซ็ตเต๋า
               </button>
               <button
                 onClick={handleEndTurn}

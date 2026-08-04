@@ -8,6 +8,8 @@
 
 import { Suspense, useState, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import BoardTiles from "./BoardTiles";
 import PlayerTokens from "./PlayerTokens";
@@ -15,24 +17,143 @@ import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
 
-function Animated3DDice({ isRolling }) {
+// ─── พิกัดประจำและค่าฟิสิกส์การกระเด้งของลูกเต๋า 3D ──────────
+const BOARD_DICE_POS = [0, 1.8, 4.2];
+const DICE_FLOOR_Y = 1.35; // ระดับพื้นกระทบเหนือแผ่นหินกระดาน (ไม่จมหิน)
+
+// ─── มุมหมุนสำหรับหันหน้าแต้ม 1-6 ของลูกเต๋า 3D ขึ้นด้านบน ───────
+const DICE_FACE_ROTATIONS = {
+  1: [0, 0, 0],
+  2: [Math.PI, 0, 0],
+  3: [0, 0, -Math.PI / 2],
+  4: [0, 0, Math.PI / 2],
+  5: [-Math.PI / 2, 0, 0],
+  6: [Math.PI / 2, 0, 0],
+};
+
+function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }) {
   const diceGroupRef = useRef(null);
 
-  useFrame(({ clock }, dt) => {
-    if (diceGroupRef.current && isRolling) {
-      diceGroupRef.current.rotation.x += dt * 12;
-      diceGroupRef.current.rotation.y += dt * 15;
-      diceGroupRef.current.rotation.z += dt * 8;
-      diceGroupRef.current.position.y = 2.5 + Math.abs(Math.sin(clock.elapsedTime * 15)) * 0.8;
-    } else if (diceGroupRef.current) {
-      diceGroupRef.current.position.y = 1.6 + Math.sin(clock.elapsedTime * 2) * 0.1;
-      diceGroupRef.current.rotation.x = 0.4;
-      diceGroupRef.current.rotation.y = clock.elapsedTime * 0.5;
-    }
+  const phys = useRef({
+    x: 0,
+    y: 1.8,
+    z: -0.5,
+    vx: 0, vy: 0, vz: 0,
+    rx: 0, ry: 0, rz: 0,
+    bouncesLeft: 0,
+    isBouncing: false,
+    wasRolling: false,
   });
 
+  // รีเซ็ตตำแหน่งกลับสู่ศูนย์กลางด้านบนเมื่อ resetDiceKey เปลี่ยน
+  const prevResetKey = useRef(resetDiceKey);
+  if (prevResetKey.current !== resetDiceKey) {
+    prevResetKey.current = resetDiceKey;
+    phys.current.x = 0;
+    phys.current.y = 1.8;
+    phys.current.z = -0.5;
+    phys.current.vx = 0;
+    phys.current.vy = 0;
+    phys.current.vz = 0;
+    phys.current.isBouncing = false;
+  }
+
+  useFrame(({ clock }, dt) => {
+    const ref = diceGroupRef.current;
+    if (!ref) return;
+
+    const p = phys.current;
+    const delta = Math.min(dt, 0.033); // ล็อก Delta Time ป้องกันการกระตุกหรือเร่งความเร็วตาม FPS เครื่อง
+
+    // เมื่อกดทอย: สุ่มแรงโยนกระเด้ง
+    if (isRolling && !p.wasRolling) {
+      p.isBouncing = true;
+      p.bouncesLeft = Math.floor(Math.random() * 4) + 2;
+      p.x = 0; p.z = 1.0; p.y = 2.4;
+      p.vy = 8.5;
+      p.rx = (Math.random() - 0.5) * 30;
+      p.ry = (Math.random() - 0.5) * 35;
+      p.rz = (Math.random() - 0.5) * 30;
+    }
+    p.wasRolling = isRolling;
+
+    if (p.isBouncing) {
+      p.vy -= delta * 24;
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      p.z += p.vz * delta;
+
+      ref.rotation.x += p.rx * delta;
+      ref.rotation.y += p.ry * delta;
+      ref.rotation.z += p.rz * delta;
+
+      if (p.y <= DICE_FLOOR_Y) {
+        p.y = DICE_FLOOR_Y;
+        if (p.bouncesLeft > 1) {
+          p.bouncesLeft -= 1;
+          p.vy = Math.abs(p.vy) * 0.5;
+          p.vx *= 0.6;
+          p.vz *= 0.6;
+          p.rx *= 0.6;
+          p.ry *= 0.6;
+          p.rz *= 0.6;
+        } else {
+          p.isBouncing = false;
+          p.vy = 0; p.vx = 0; p.vz = 0;
+        }
+      }
+      ref.position.set(p.x, p.y, p.z);
+    } else if (diceResult && DICE_FACE_ROTATIONS[diceResult]) {
+      // เมื่อกระเด้งจบ ให้ล็อกมุมหน้าแต้มที่ออกจริงอย่างแม่นยำ 100% เหนือพื้นกระดาน
+      const targetRot = DICE_FACE_ROTATIONS[diceResult];
+
+      ref.position.set(p.x, DICE_FLOOR_Y, p.z);
+      ref.rotation.x = targetRot[0];
+      ref.rotation.y = targetRot[1];
+      ref.rotation.z = targetRot[2];
+    } else {
+      // สภาวะรอทอยปกติ: วางนิ่งอยู่อย่างสวยงามเหนือกระดานด้านบน
+      ref.position.set(0, DICE_FLOOR_Y, -0.5);
+      ref.rotation.x = 0;
+      ref.rotation.y = 0;
+      ref.rotation.z = 0;
+    }
+
+    phys.current.x = ref.position.x;
+    phys.current.y = ref.position.y;
+    phys.current.z = ref.position.z;
+  });
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (canRoll && onRoll) {
+      onRoll();
+    }
+  };
+
+  const handlePointerOver = (e) => {
+    e.stopPropagation();
+    document.body.style.cursor = canRoll ? "pointer" : "default";
+  };
+
+  const handlePointerOut = () => {
+    document.body.style.cursor = "default";
+  };
+
+  // ขนาด Scale 18.0 ตามคำสั่งอย่างแม่นยำ
+  const scale = 18.0;
+
+
   return (
-    <group ref={diceGroupRef} position={[0, 1.8, 2]} scale={[0.75, 0.75, 0.75]}>
+    <group
+      ref={diceGroupRef}
+      position={[phys.current.x, phys.current.y, phys.current.z]}
+      scale={[scale, scale, scale]}
+      onClick={handleClick}
+      onPointerDown={handleClick}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
       <DiceModel />
     </group>
   );
@@ -54,15 +175,15 @@ function SceneLights() {
   return (
     <group>
       {/* แสงรอบทิศเย็นๆ */}
-      <ambientLight color="#33405e" intensity={0.9} />
-      {/* แสงจันทร์สีฟ้า พร้อมเงา */}
+      <ambientLight color="#33405e" intensity={1.1} />
+      {/* แสงจันทร์สีฟ้า ประหยัดทรัพยากรการ์ดจอ สำหรับคอมสเปกต่ำ */}
       <directionalLight
         position={[-7, 13, 7]}
         color="#8fb4ff"
         intensity={1.5}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
         shadow-camera-left={-9}
         shadow-camera-right={9}
         shadow-camera-top={9}
@@ -118,6 +239,9 @@ export default function BoardCanvas({
   phase,
   isRolling,
   diceResult,
+  onRoll,
+  canRoll,
+  resetDiceKey,
 }) {
   const [hoverInfo, setHoverInfo] = useState(null);
   const hoverLines = describeHover(hoverInfo);
@@ -125,10 +249,17 @@ export default function BoardCanvas({
   return (
     <div className="board3d-wrap">
       <Canvas
-        shadows
-        dpr={[1, 2]}
+        shadows={{ type: THREE.PCFSoftShadowMap }}
+        dpr={[1, 1.5]} // ปรับ Resolution สเกลอัตโนมัติ ช่วยลื่นไหลมากบนคอมพิวเตอร์สเปกต่ำ
+        performance={{ min: 0.5 }} // ปรับลดสเตตัสเอฟเฟกต์อัตโนมัติเมื่อ FPS ตก
         camera={{ position: [0, 11, 10.8], fov: 40, near: 0.1, far: 80 }}
-        gl={{ antialias: true }}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+          precision: "mediump", // โหมดการประมวลผลการ์ดจอความเร็วสูง เหมาะสำหรับคอมสเปกต่ำ
+          failIfMajorPerformanceCaveat: false,
+        }}
       >
         <color attach="background" args={["#070912"]} />
         <fog attach="fog" args={["#070912", 15, 36]} />
@@ -151,8 +282,14 @@ export default function BoardCanvas({
             currentPlayerIndex={currentPlayerIndex}
             phase={phase}
           />
-          {/* 3D Dice Model บนกระดาน */}
-          <Animated3DDice isRolling={isRolling} diceResult={diceResult} />
+          {/* 3D Dice Model บนกระดาน (คลิกเพื่อทอยได้) */}
+          <Animated3DDice
+            isRolling={isRolling}
+            diceResult={diceResult}
+            onRoll={onRoll}
+            canRoll={canRoll}
+            resetDiceKey={resetDiceKey}
+          />
         </Suspense>
 
         <EffectComposer>

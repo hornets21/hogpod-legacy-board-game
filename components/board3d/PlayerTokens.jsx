@@ -11,8 +11,8 @@ import * as THREE from "three";
 import { cellToWorld, TOKEN_OFFSETS } from "@/lib/boardLayout";
 import { getEmojiTexture } from "./textures";
 
-const WALK_SPEED = 2.8; // ช่องต่อวินาที (เดินนุ่มนวลเห็นจังหวะก้าวชัดเจน)
-const TELEPORT_SPEED = 4.5;
+const WALK_SPEED = 6.5; // เพิ่มความเร็วเดินเพื่อก้าวทันครบ 6 ช่องสมบูรณ์
+const TELEPORT_SPEED = 5.0;
 
 export default function PlayerTokens({ players, currentPlayerIndex, phase }) {
   return (
@@ -39,6 +39,8 @@ function Token({ player, index, isActive }) {
     queue: [],
     targetCell: null,
     scale: 1,
+    segmentDistance: 0,
+    segmentProgress: 0,
   });
   const prevPos = useRef(player.position);
 
@@ -52,7 +54,7 @@ function Token({ player, index, isActive }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤6) หรือเทเลพอร์ต
+  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤100) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก
   useEffect(() => {
     const prev = prevPos.current;
     const next = player.position;
@@ -61,10 +63,15 @@ function Token({ player, index, isActive }) {
 
     const diff = next - prev;
     const a = anim.current;
-    if (diff > 0 && diff <= 6) {
+
+    // ถ้าเป็นการเดินปกติไปข้างหน้า (1-6 ช่อง) ให้คิวเดินทีละช่องจนครบก้าว
+    if (diff > 0 && diff <= 90) {
       for (let c = prev + 1; c <= next; c++) a.queue.push(c);
+      a.segmentDistance = 0;
+      a.segmentProgress = 0;
       if (a.mode === "idle") a.mode = "walk";
     } else {
+      // ถ้าเป็นการถอยกลับ (งูเห่า/ตายกลับจุดเริ่มต้น) ให้วาร์ป
       a.queue = [];
       a.targetCell = next;
       a.mode = "teleportOut";
@@ -81,25 +88,52 @@ function Token({ player, index, isActive }) {
     const delta = Math.min(dt, 0.05);
 
     if (a.mode === "walk" && a.queue.length > 0) {
-      const [tx, , tz] = cellToWorld(a.queue[0]);
+      const nextCell = a.queue[0];
+      const [tx, , tz] = cellToWorld(nextCell);
       const targetX = tx + offset[0];
       const targetZ = tz + offset[2];
       const dx = targetX - g.position.x;
       const dz = targetZ - g.position.z;
       const dist = Math.hypot(dx, dz);
-      const step = WALK_SPEED * delta;
+      const step = 8.0 * delta; // ความเร็วก้าวเดินเหมาะสม ก้าวละช่องชัดเจน
+
+      // เริ่มรอบกระโดดใหม่ทุกครั้งที่เข้าสู่ช่องถัดไป
+      if (a.segmentDistance <= 0) {
+        a.segmentDistance = Math.max(dist, 0.001);
+        a.segmentProgress = 0;
+      }
 
       if (dist <= step) {
+        // เมื่อย่างก้าวถึงช่องเป้าหมายแล้ว ให้ขยับเข้าช่องถัดไปในคิว
         g.position.x = targetX;
         g.position.z = targetZ;
+        a.segmentProgress = 1;
         a.queue.shift();
-        if (a.queue.length === 0) a.mode = "idle";
+        if (a.queue.length === 0) {
+          a.mode = "idle";
+          a.segmentDistance = 0;
+          g.position.y = 0;
+          g.rotation.x = 0;
+          g.rotation.z = 0;
+        } else {
+          a.segmentDistance = 0;
+        }
       } else {
+        // ก้าวเดินทีละช่องตามพิกัด XZ จริงของกระดาน
         g.position.x += (dx / dist) * step;
         g.position.z += (dz / dist) * step;
+        a.segmentProgress = THREE.MathUtils.clamp(
+          1 - dist / a.segmentDistance,
+          0,
+          1,
+        );
+
+        // กระเด้งหนึ่งรอบต่อหนึ่งช่อง: ยกตัวสูงสุดตรงกลาง แล้วลงนุ่ม ๆ
+        const hop = Math.sin(a.segmentProgress * Math.PI);
+        g.position.y = 0.04 + hop * 0.5;
+        g.rotation.x = Math.sin(a.segmentProgress * Math.PI * 2) * 0.12;
+        g.rotation.z = Math.cos(a.segmentProgress * Math.PI) * 0.1;
       }
-      // กระโดดเด้งๆ ระหว่างเดิน
-      g.position.y = Math.abs(Math.sin(t * 14)) * 0.38 + 0.05;
     } else if (a.mode === "teleportOut") {
       a.scale = Math.max(0.01, a.scale - TELEPORT_SPEED * delta);
       g.scale.setScalar(a.scale);
