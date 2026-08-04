@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useReducer, useRef, useState, Suspense } from "react";
 import dynamic from "next/dynamic";
+import { Canvas } from "@react-three/fiber";
+import DiceModel from "@/components/board3d/DiceModel";
 import PlayerCard from "@/components/PlayerCard";
 import SetupModal from "@/components/SetupModal";
 import ShopModal from "@/components/ShopModal";
@@ -318,17 +320,36 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Dice & Action Controls */}
+            {/* 3D Interactive Roll Dice Button (ใช้ DiceModel 3D แทรกในปุ่ม) */}
             <div className="flex items-center gap-2">
-              <div className={`dice-display text-xl w-12 h-12 ${isRolling ? "animate-shake scale-110" : ""}`}>
-                {diceFace}
-              </div>
               <button
                 onClick={handleRoll}
                 disabled={!canRoll}
-                className="btn-primary text-xs px-5 py-3 shadow-xl font-black"
+                className={`relative flex items-center gap-2.5 px-5 py-2 rounded-2xl font-black text-xs transition-all duration-300 shadow-2xl backdrop-blur-xl border ${
+                  canRoll
+                    ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border-amber-400/60 text-amber-200 hover:scale-105 hover:border-amber-300 hover:shadow-[0_0_25px_rgba(240,184,91,0.4)] active:scale-95"
+                    : "bg-slate-900/60 border-white/10 text-white/40 cursor-not-allowed opacity-60"
+                }`}
+                title="คลิกเพื่อทอยลูกเต๋า 3D"
               >
-                {isRolling ? "🎲 กำลังทอย..." : "🎲 ทอยลูกเต๋า"}
+                {/* 3D Mini Viewport สำรับ DiceModel */}
+                <div className={`w-9 h-9 relative ${isRolling ? "animate-spin" : ""}`}>
+                  <Canvas camera={{ position: [0, 0, 3.2], fov: 45 }}>
+                    <ambientLight intensity={1.2} />
+                    <directionalLight position={[2, 3, 2]} intensity={1.5} />
+                    <Suspense fallback={null}>
+                      <DiceModel scale={[0.9, 0.9, 0.9]} rotation={[0.4, 0.8, 0]} />
+                    </Suspense>
+                  </Canvas>
+                </div>
+                <div className="text-left">
+                  <div className="text-amber-300 text-xs font-black">
+                    {isRolling ? "กำลังทอย 3D..." : "ทอยลูกเต๋า 3D"}
+                  </div>
+                  <div className="text-[9px] text-white/60 font-bold">
+                    {displayDiceVal ? `แต้มล่าสุด: ${displayDiceVal}` : "กดเพื่อทอยแต้ม"}
+                  </div>
+                </div>
               </button>
               <button
                 onClick={handleEndTurn}
