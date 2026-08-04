@@ -4,18 +4,24 @@ import React, { useRef } from "react";
 import { useGLTF } from "@react-three/drei";
 
 export default function DiceModel(props) {
-  const { nodes, materials } = useGLTF("/models/dice.glb");
+  const { scene, nodes, materials } = useGLTF("/models/dice.glb");
 
-  return (
-    <group {...props} dispose={null}>
-      {nodes.Cube && materials.phong1SG ? (
+  if (nodes?.Cube && materials?.phong1SG) {
+    return (
+      <group {...props} dispose={null}>
         <mesh
           castShadow
           receiveShadow
           geometry={nodes.Cube.geometry}
           material={materials.phong1SG}
         />
-      ) : null}
+      </group>
+    );
+  }
+
+  return (
+    <group {...props} dispose={null}>
+      <primitive object={scene} />
     </group>
   );
 }
