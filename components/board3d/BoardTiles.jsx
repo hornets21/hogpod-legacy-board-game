@@ -1,0 +1,187 @@
+"use client";
+
+// ============================================================
+// BoardTiles — แผ่นหิน 90 ช่องของกระดาน 3D
+// ============================================================
+
+import { useMemo, useRef, useState } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+import {
+  buildGrid,
+  getCellType,
+  cellToWorld,
+  TILE_SIZE,
+} from "@/lib/boardLayout";
+import { CELL_TELEPORT, MONSTER_MAP } from "@/lib/gameData";
+import { getTileTopTexture } from "./textures";
+
+// โทนสีแผ่นหินแต่ละประเภท (ธีม Hogwarts Legacy: หินเข้ม + เรืองแสงเวทมนตร์)
+const TILE_STYLES = {
+  normal:  { bg: "#232b3d", border: "rgba(255,255,255,0.07)",  emissive: "#000000", ei: 0 },
+  ladder:  { bg: "#123f2b", border: "rgba(34,197,94,0.45)",    emissive: "#22c55e", ei: 0.28 },
+  snake:   { bg: "#451a1a", border: "rgba(239,68,68,0.5)",     emissive: "#ef4444", ei: 0.28 },
+  boss:    { bg: "#3d0f0f", border: "rgba(255,60,60,0.8)",     emissive: "#ef4444", ei: 0.6 },
+  elite:   { bg: "#40350a", border: "rgba(234,179,8,0.6)",     emissive: "#eab308", ei: 0.38 },
+  monster: { bg: "#2d1b45", border: "rgba(168,85,247,0.55)",   emissive: "#a855f7", ei: 0.3 },
+  hidden:  { bg: "#141926", border: "rgba(255,255,255,0.05)",  emissive: "#000000", ei: 0 },
+  healer:  { bg: "#0e3b2e", border: "rgba(52,211,153,0.55)",   emissive: "#34d399", ei: 0.32 },
+  win:     { bg: "#4a3a10", border: "rgba(240,184,91,0.95)",   emissive: "#f0b85b", ei: 0.5 },
+};
+
+const TILE_HEIGHT = 0.34;
+const geometryCache = { box: null, side: null, bottom: null };
+
+function getShared() {
+  if (!geometryCache.box) {
+    geometryCache.box = new THREE.BoxGeometry(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
+    geometryCache.side = new THREE.MeshStandardMaterial({
+      color: "#151a29",
+      roughness: 0.9,
+      metalness: 0.05,
+    });
+    geometryCache.bottom = new THREE.MeshStandardMaterial({
+      color: "#0b0e18",
+      roughness: 1,
+    });
+  }
+  return geometryCache;
+}
+
+// material หน้าบนของแต่ละช่อง (cache ตามเลขช่อง)
+const topMatCache = new Map();
+function getTopMaterial(cell, type) {
+  const style = TILE_STYLES[type] || TILE_STYLES.normal;
+  const key = `${cell}|${type}`;
+  if (!topMatCache.has(key)) {
+    topMatCache.set(
+      key,
+      new THREE.MeshStandardMaterial({
+        map: getTileTopTexture(cell, style.bg, style.border),
+        emissive: new THREE.Color(style.emissive),
+        emissiveIntensity: style.ei,
+        roughness: 0.72,
+        metalness: 0.08,
+      })
+    );
+  }
+  return topMatCache.get(key);
+}
+
+export default function BoardTiles({ revealedMonsters, onHoverCell }) {
+  const grid = useMemo(() => buildGrid(), []);
+  const [hoveredCell, setHoveredCell] = useState(null);
+  const highlightRef = useRef(null);
+
+  // แสงกะพริบของแถบ highlight ช่องที่ hover
+  useFrame(({ clock }) => {
+    if (highlightRef.current) {
+      highlightRef.current.material.opacity =
+        0.35 + Math.sin(clock.elapsedTime * 6) * 0.15;
+    }
+  });
+
+  const handleHover = (cell) => (e) => {
+    e.stopPropagation();
+    setHoveredCell(cell);
+    document.body.style.cursor = "pointer";
+    if (onHoverCell) {
+      const type = getCellType(cell);
+      onHoverCell({
+        cell,
+        type,
+        monster: revealedMonsters?.[cell] || null,
+        monsterInfo: MONSTER_MAP[cell] || null,
+        teleport: CELL_TELEPORT[cell] || null,
+      });
+    }
+  };
+
+  const handleOut = () => {
+    setHoveredCell(null);
+    document.body.style.cursor = "default";
+    if (onHoverCell) onHoverCell(null);
+  };
+
+  const shared = getShared();
+
+  return (
+    <group>
+      {grid.flatMap((row) =>
+        row.map((cell) => {
+          const type = cell === 90 ? "win" : getCellType(cell);
+          const [x, , z] = cellToWorld(cell);
+          const top = getTopMaterial(cell, type);
+          const mats = [shared.side, shared.side, top, shared.bottom, shared.side, shared.side];
+          const isBoss = type === "boss";
+          const yScale = isBoss ? 1.5 : type === "win" ? 1.35 : 1;
+
+          return (
+            <mesh
+              key={cell}
+              geometry={shared.box}
+              material={mats}
+              position={[x, (TILE_HEIGHT * yScale) / 2 - 0.02, z]}
+              scale={[1, yScale, 1]}
+              receiveShadow
+              onPointerOver={handleHover(cell)}
+              onPointerOut={handleOut}
+            />
+          );
+        })
+      )}
+
+      {/* แถบเรืองแสงช่องที่ hover */}
+      {hoveredCell != null && (
+        <mesh
+          ref={highlightRef}
+          position={[
+            cellToWorld(hoveredCell)[0],
+            TILE_HEIGHT + 0.03,
+            cellToWorld(hoveredCell)[2],
+          ]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[TILE_SIZE * 1.06, TILE_SIZE * 1.06]} />
+          <meshBasicMaterial
+            color="#f0b85b"
+            transparent
+            opacity={0.4}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* ลำแสงแท่นชัยชนะ (ช่อง 90) */}
+      <WinBeacon />
+    </group>
+  );
+}
+
+function WinBeacon() {
+  const beamRef = useRef(null);
+  const [x, , z] = cellToWorld(90);
+
+  useFrame(({ clock }) => {
+    if (beamRef.current) {
+      beamRef.current.material.opacity =
+        0.12 + Math.sin(clock.elapsedTime * 1.6) * 0.05;
+      beamRef.current.rotation.y = clock.elapsedTime * 0.4;
+    }
+  });
+
+  return (
+    <mesh ref={beamRef} position={[x, 3.2, z]}>
+      <cylinderGeometry args={[0.34, 0.55, 6, 20, 1, true]} />
+      <meshBasicMaterial
+        color="#f0b85b"
+        transparent
+        opacity={0.14}
+        blending={THREE.AdditiveBlending}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
