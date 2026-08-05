@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState, Suspense } from "react";
 import dynamic from "next/dynamic";
 import PlayerCard from "@/components/PlayerCard";
+import TitleScreen from "@/components/TitleScreen";
 import SetupModal from "@/components/SetupModal";
+import InitiativeModal from "@/components/InitiativeModal";
 import ShopModal from "@/components/ShopModal";
 import CombatModal from "@/components/CombatModal";
 import PvpCombatModal from "@/components/PvpCombatModal";
@@ -225,12 +227,58 @@ function gameReducer(state, action) {
       return state;
     }
 
+    case "START_TITLE": {
+      return { ...state, phase: "title" };
+    }
+
+    case "START_NEW_GAME": {
+      clearSavedGameState();
+      return {
+        ...createInitialGameState(),
+        phase: "setup",
+      };
+    }
+
+    case "START_SETUP": {
+      return { ...state, phase: "setup" };
+    }
+
     case "COMPLETE_SETUP": {
+      // Roll initiative d20 for all 4 players to determine turn order
+      const rollScores = action.players.map((p, idx) => ({
+        player: p,
+        idx,
+        score: Math.floor(Math.random() * 20) + 1,
+      }));
+
+      // Sort by score descending (highest roll walks first)
+      rollScores.sort((a, b) => b.score - a.score);
+
+      const orderedPlayers = rollScores.map((item) => item.player);
+
+      const initiativeLogs = rollScores.map(
+        (item, rank) => `#${rank + 1} ${item.player.emoji} ${item.player.name} (ทอยได้ ${item.score} แต้ม)`
+      );
+
       return {
         ...state,
-        players: action.players,
+        players: orderedPlayers,
+        currentPlayerIndex: 0,
+        phase: "initiative",
+        initiativeRolls: rollScores,
+        log: [
+          ...state.log,
+          "🎲 ติดตั้งอุปกรณ์เสร็จสิ้น! ทำการสุ่มทอยเต๋าลำดับการเดิน:",
+          ...initiativeLogs,
+          `🎯 ${orderedPlayers[0].name} ได้คะแนนสูงสุด ทอยเต๋าเดินเป็นคนแรก!`,
+        ],
+      };
+    }
+
+    case "START_PLAY": {
+      return {
+        ...state,
         phase: "play",
-        log: [...state.log, "🎮 ติดตั้งอุปกรณ์และเตรียมความพร้อมเรียบร้อย เริ่มการแข่งขันห้องแห่งความลับ!"],
       };
     }
 
@@ -379,12 +427,12 @@ function gameReducer(state, action) {
 export default function Home() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialGameState);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [hasSavedGame, setHasSavedGame] = useState(false);
 
-  // ดึงข้อมูลเกมที่เซฟไว้จาก localStorage มาใช้ในฝั่ง Client หลังจาก Hydrate สำเร็จ เพื่อป้องกันปัญหา Hydration Error
   useEffect(() => {
     const saved = loadGameState();
-    if (saved) {
-      dispatch({ type: "LOAD_SAVED_STATE", savedState: saved });
+    if (saved && (saved.phase === "play" || saved.phase === "combat")) {
+      setHasSavedGame(true);
     }
     setHasHydrated(true);
   }, []);
@@ -392,7 +440,11 @@ export default function Home() {
   // บันทึกสถานะเกมลงใน localStorage อัตโนมัติทุกครั้งที่ State มีการเปลี่ยนแปลง (เฉพาะหลังจาก Hydrate แล้ว)
   useEffect(() => {
     if (hasHydrated && state) {
-      saveGameState(state);
+      // Do not overwrite an existing resumable game while the title screen is open.
+      // A title state is only a UI state, not a playable save point.
+      if (state.phase !== "title") {
+        saveGameState(state);
+      }
     }
   }, [state, hasHydrated]);
 
@@ -447,24 +499,26 @@ export default function Home() {
     <div className="game-shell relative w-screen h-screen overflow-hidden bg-[#070912]">
 
       {/* ── 3D Canvas (Full Screen Viewport) ───────────────────── */}
-      <div className="absolute inset-0 z-0">
-        <BoardCanvas
-          players={state.players}
-          revealedMonsters={state.revealedMonsters}
-          monsterCells={state.monsterCells}
-          monsterMap={state.monsterMap}
-          cellTeleport={state.cellTeleport}
-          trapCells={state.trapCells}
-          usedLadders={state.usedLadders}
-          currentPlayerIndex={state.currentPlayerIndex}
-          phase={state.phase}
-          isRolling={isRolling}
-          diceResult={displayDiceVal || state.diceResult}
-          onRoll={handleRoll}
-          canRoll={canRoll}
-          resetDiceKey={resetDiceKey}
-        />
-      </div>
+      {state.phase !== "title" && (
+        <div className="absolute inset-0 z-0">
+          <BoardCanvas
+            players={state.players}
+            revealedMonsters={state.revealedMonsters}
+            monsterCells={state.monsterCells}
+            monsterMap={state.monsterMap}
+            cellTeleport={state.cellTeleport}
+            trapCells={state.trapCells}
+            usedLadders={state.usedLadders}
+            currentPlayerIndex={state.currentPlayerIndex}
+            phase={state.phase}
+            isRolling={isRolling}
+            diceResult={displayDiceVal || state.diceResult}
+            onRoll={handleRoll}
+            canRoll={canRoll}
+            resetDiceKey={resetDiceKey}
+          />
+        </div>
+      )}
 
       {/* ── Dice Result Overlay (HTML ป้ายแต้มลูกเต๋ากลางจอ ตรง 100%) ──── */}
       {isRolling && displayDiceVal && (
@@ -506,137 +560,136 @@ export default function Home() {
       )}
 
       {/* ── 3D UI Overlays Layer (pointer-events-none เพื่อไม่ให้บังการคุม 3D) ─ */}
-      <div className="relative z-10 w-full h-full p-4 flex flex-col justify-between pointer-events-none overflow-hidden">
+      {state.phase !== "title" && (
+        <div className="relative z-10 w-full h-full p-4 flex flex-col justify-between pointer-events-none overflow-hidden">
 
-        {/* ── Top Floating Bar: Action Buttons + Admin + Game Title + BGM Controller ────────────── */}
-        <div className="flex items-center justify-end w-full gap-2 pointer-events-auto">
-          {/* Background Music Player */}
-          <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
+          {/* ── Top Floating Bar: Action Buttons + Admin + Game Title + BGM Controller ────────────── */}
+          <div className="flex items-center justify-end w-full gap-2 pointer-events-auto">
+            {/* Background Music Player */}
+            <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
 
-          {/* Quick Action Emoji Buttons (Admin, Shop, Reset Dice) */}
-          <div className="flex items-center gap-2">
-            {/* Admin Floating Button */}
-            <button
-              onClick={() => setAdminOpen((o) => !o)}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md ${
-                adminOpen
-                  ? "bg-amber-500/30 border-2 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(240,184,91,0.4)] scale-105"
-                  : "bg-slate-950/80 border border-white/15 text-slate-300 hover:border-amber-400/50 hover:bg-amber-500/10 hover:scale-105 shadow-lg"
-              }`}
-              title="เมนูแอดมิน"
-            >
-              👑
-            </button>
+            {/* Quick Action Emoji Buttons (Admin, Shop, Reset Dice) */}
+            <div className="flex items-center gap-2">
+              {/* Admin Floating Button */}
+              <button
+                onClick={() => setAdminOpen((o) => !o)}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md ${
+                  adminOpen
+                    ? "bg-amber-500/30 border-2 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(240,184,91,0.4)] scale-105"
+                    : "bg-slate-950/80 border border-white/15 text-slate-300 hover:border-amber-400/50 hover:bg-amber-500/10 hover:scale-105 shadow-lg"
+                }`}
+                title="เมนูแอดมิน"
+              >
+                👑
+              </button>
 
-            {/* Shop Button */}
-            <button
-              onClick={() => dispatch({ type: "OPEN_SHOP" })}
-              disabled={!!state.combatState}
-              className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-yellow-300 hover:border-yellow-400/50 hover:bg-yellow-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-              title="เปิดร้านค้าฮอกปด"
-            >
-              🏪
-            </button>
+              {/* Shop Button */}
+              <button
+                onClick={() => dispatch({ type: "OPEN_SHOP" })}
+                disabled={!!state.combatState}
+                className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-yellow-300 hover:border-yellow-400/50 hover:bg-yellow-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                title="เปิดร้านค้าฮอกปด"
+              >
+                🏪
+              </button>
 
-            {/* Reset Dice Button */}
-            <button
-              onClick={() => setResetDiceKey((k) => k + 1)}
-              disabled={isRolling}
-              className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-              title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้น"
-            >
-              🔄
-            </button>
-          </div>
+              {/* Reset Dice Button */}
+              <button
+                onClick={() => setResetDiceKey((k) => k + 1)}
+                disabled={isRolling}
+                className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้น"
+              >
+                🔄
+              </button>
+            </div>
 
-          {/* Game Title & Round Badge */}
-          <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/30 backdrop-blur-md shadow-[0_0_25px_rgba(240,184,91,0.15)]">
-            <span className="text-xl animate-pulse">🏰</span>
-            <div>
-              <div className="text-xs font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 uppercase">
-                ห้องแห่งความลับ
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400/90">
-                <span>รอบที่ {state.round}</span>
-                <span className="text-white/20">•</span>
-                <span className="text-cyan-400">ตาที่ {state.turn}</span>
+            {/* Game Title & Round Badge */}
+            <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/30 backdrop-blur-md shadow-[0_0_25px_rgba(240,184,91,0.15)]">
+              <span className="text-xl animate-pulse">🏰</span>
+              <div>
+                <div className="text-xs font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 uppercase">
+                  ห้องแห่งความลับ
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400/90">
+                  <span>รอบที่ {state.round}</span>
+                  <span className="text-white/20">•</span>
+                  <span className="text-cyan-400">ตาที่ {state.turn}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Left Floating Layer: Player Cards Panel ─ */}
-        <div className="absolute top-20 left-4 bottom-6 z-10 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3 pointer-events-auto overflow-y-auto pr-1 custom-scrollbar">
-
-          {/* Left Player Cards List (พับได้) */}
-          {playersCollapsed ? (
-            <div className="players-mini-bar flex-col gap-2 bg-slate-950/85 backdrop-blur-xl border border-white/10 p-2.5 rounded-2xl">
-              <div className="flex justify-between items-center w-full pb-1 border-b border-white/10">
-                <span className="text-xs font-bold text-slate-300">ผู้เล่นทั้งหมด ({state.players.length})</span>
-                <button
-                  onClick={() => setPlayersCollapsed(false)}
-                  className="panel-collapse-btn text-xs"
-                  title="แสดงการ์ดบ้าน"
-                >
-                  ▼
-                </button>
-              </div>
-              <div className="flex flex-col gap-1.5 w-full">
-                {state.players.map((p, i) => {
-                  const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-                  const active = i === state.currentPlayerIndex && state.phase === "play";
-                  return (
-                    <div
-                      key={p.houseId}
-                      className={`player-mini-chip w-full ${active ? "player-mini-chip-active" : ""}`}
-                      style={{ "--house-color": p.color }}
-                      title={`${p.name} · HP ${Math.max(0, p.hp)}/${p.maxHp} · ช่อง ${p.position} · ${p.gold.toLocaleString()} Gold`}
-                    >
-                      <span className="text-sm">{p.emoji}</span>
-                      <div className="player-mini-info flex-1">
-                        <div className="player-mini-name">{p.nameEn}</div>
-                        <div className="player-mini-hp">
-                          <div
-                            className="player-mini-hp-fill"
-                            style={{
-                              width: `${hpPct}%`,
-                              backgroundColor: hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444",
-                            }}
-                          />
+          {/* ── Left Floating Layer: Player Cards Panel ─ */}
+          <div className="absolute top-20 left-4 bottom-6 z-10 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3 pointer-events-auto overflow-y-auto pr-1 custom-scrollbar">
+            {playersCollapsed ? (
+              <div className="players-mini-bar flex-col gap-2 bg-slate-950/85 backdrop-blur-xl border border-white/10 p-2.5 rounded-2xl">
+                <div className="flex justify-between items-center w-full pb-1 border-b border-white/10">
+                  <span className="text-xs font-bold text-slate-300">ผู้เล่นทั้งหมด ({state.players.length})</span>
+                  <button
+                    onClick={() => setPlayersCollapsed(false)}
+                    className="panel-collapse-btn text-xs"
+                    title="แสดงการ์ดบ้าน"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5 w-full">
+                  {state.players.map((p, i) => {
+                    const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
+                    const active = i === state.currentPlayerIndex && state.phase === "play";
+                    return (
+                      <div
+                        key={p.houseId}
+                        className={`player-mini-chip w-full ${active ? "player-mini-chip-active" : ""}`}
+                        style={{ "--house-color": p.color }}
+                        title={`${p.name} · HP ${Math.max(0, p.hp)}/${p.maxHp} · ช่อง ${p.position} · ${p.gold.toLocaleString()} Gold`}
+                      >
+                        <span className="text-sm">{p.emoji}</span>
+                        <div className="player-mini-info flex-1">
+                          <div className="player-mini-name">{p.nameEn}</div>
+                          <div className="player-mini-hp">
+                            <div
+                              className="player-mini-hp-fill"
+                              style={{
+                                width: `${hpPct}%`,
+                                backgroundColor: hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444",
+                              }}
+                            />
+                          </div>
                         </div>
+                        <span className="player-mini-pos">#{p.position}</span>
                       </div>
-                      <span className="player-mini-pos">#{p.position}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 flex-shrink-0">
-              <div className="flex justify-between items-center px-1">
-                <span className="text-xs font-bold text-amber-300/80">ข้อมูลผู้เล่น</span>
-                <button
-                  onClick={() => setPlayersCollapsed(true)}
-                  className="text-xs text-white/50 hover:text-white bg-slate-900/60 px-2 py-0.5 rounded-lg border border-white/10"
-                  title="ย่อการ์ดบ้าน"
-                >
-                  ▲ พับเก็บ
-                </button>
+            ) : (
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-xs font-bold text-amber-300/80">ข้อมูลผู้เล่น</span>
+                  <button
+                    onClick={() => setPlayersCollapsed(true)}
+                    className="text-xs text-white/50 hover:text-white bg-slate-900/60 px-2 py-0.5 rounded-lg border border-white/10"
+                    title="ย่อการ์ดบ้าน"
+                  >
+                    ▲ พับเก็บ
+                  </button>
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {state.players.map((p, i) => (
+                    <PlayerCard
+                      key={p.houseId}
+                      player={p}
+                      playerIndex={i}
+                      isActive={i === state.currentPlayerIndex && state.phase === "play"}
+                      onUseSkill={(skillId, pIdx) => dispatch({ type: "USE_SKILL", skillId, playerIndex: pIdx })}
+                      onUsePotion={(potionId, pIdx) => dispatch({ type: "USE_POTION", potionId, playerIndex: pIdx })}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-col gap-2.5">
-                {state.players.map((p, i) => (
-                  <PlayerCard
-                    key={p.houseId}
-                    player={p}
-                    playerIndex={i}
-                    isActive={i === state.currentPlayerIndex && state.phase === "play"}
-                    onUseSkill={(skillId, pIdx) => dispatch({ type: "USE_SKILL", skillId, playerIndex: pIdx })}
-                    onUsePotion={(potionId, pIdx) => dispatch({ type: "USE_POTION", potionId, playerIndex: pIdx })}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            )}
         </div>
 
         {/* ── Right Floating Layer: Floating Game Log (History) ด้านขวา ─ */}
@@ -649,6 +702,7 @@ export default function Home() {
         </div>
 
       </div>
+      )}
 
       {/* Admin Modal Popover */}
       {adminOpen && (
@@ -661,6 +715,22 @@ export default function Home() {
         />
       )}
 
+      {/* ── Title Screen (Intro Splash Screen) ──────────────────── */}
+      {state.phase === "title" && (
+        <TitleScreen
+          onStartNewGame={() => dispatch({ type: "START_NEW_GAME" })}
+          hasSavedGame={hasSavedGame}
+          onContinueGame={() => {
+            const saved = loadGameState();
+            if (saved) {
+              dispatch({ type: "LOAD_SAVED_STATE", savedState: saved });
+            } else {
+              dispatch({ type: "START_NEW_GAME" });
+            }
+          }}
+        />
+      )}
+
       {/* ── Pre-Game Setup Modal ───────────────────────────────── */}
       {state.phase === "setup" && (
         <SetupModal
@@ -668,6 +738,14 @@ export default function Home() {
           onCompleteSetup={(updatedPlayers) => {
             dispatch({ type: "COMPLETE_SETUP", players: updatedPlayers });
           }}
+        />
+      )}
+
+      {/* ── Initiative Roll Modal (Auto Roll Turn Order) ──────── */}
+      {state.phase === "initiative" && (
+        <InitiativeModal
+          initiativeRolls={state.initiativeRolls}
+          onStartPlay={() => dispatch({ type: "START_PLAY" })}
         />
       )}
 
