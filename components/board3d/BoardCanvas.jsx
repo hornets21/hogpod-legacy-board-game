@@ -16,6 +16,8 @@ import PlayerTokens from "./PlayerTokens";
 import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
+import PlaneMonster from "./PlaneMonster";
+import { MONSTER_MAP } from "@/lib/gameData";
 
 // ─── พิกัดประจำและค่าฟิสิกส์การกระเด้งของลูกเต๋า 3D ──────────
 const BOARD_DICE_POS = [0, 1.8, 4.2];
@@ -234,7 +236,11 @@ function describeHover(info) {
 export default function BoardCanvas({
   players,
   revealedMonsters,
+  monsterCells,
+  monsterMap,
+  cellTeleport,
   trapCells,
+  usedLadders,
   currentPlayerIndex,
   phase,
   isRolling,
@@ -271,12 +277,34 @@ export default function BoardCanvas({
           <Atmosphere />
           <BoardTiles
             revealedMonsters={revealedMonsters}
+            usedLadders={usedLadders}
+            monsterMap={monsterMap}
+            cellTeleport={cellTeleport}
             onHoverCell={setHoverInfo}
           />
           <CellMarkers
             revealedMonsters={revealedMonsters}
             trapCells={trapCells}
+            usedLadders={usedLadders}
+            monsterMap={monsterMap}
+            cellTeleport={cellTeleport}
           />
+          {/* แสดงภาพมอนสเตอร์ 2D Plane สำหรับมอนสเตอร์ที่ยังไม่ถูกกำจัด */}
+          {Array.from(monsterCells || []).map((cellNum) => {
+            const c = Number(cellNum);
+            const monster = (monsterMap || MONSTER_MAP)[c];
+            const imgPath = monster?.image || "/images/monsters/ชบ7000.webp";
+            const isBoss = monster?.isBoss || c === 90;
+
+            return (
+              <PlaneMonster
+                key={`plane-mon-${c}`}
+                cell={c}
+                imagePath={imgPath}
+                isBoss={isBoss}
+              />
+            );
+          })}
           <PlayerTokens
             players={players}
             currentPlayerIndex={currentPlayerIndex}

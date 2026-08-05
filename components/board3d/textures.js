@@ -13,6 +13,7 @@ const EMOJI_FONT = `"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", s
 // Texture แสง radial gradient (ใช้กับ sprite แสงเทียน/แสงเวท)
 export function getGlowTexture() {
   if (glowTexture) return glowTexture;
+  if (typeof window === "undefined") return null;
 
   const size = 128;
   const canvas = document.createElement("canvas");
@@ -38,6 +39,7 @@ export function getGlowTexture() {
 // Texture emoji สำหรับ sprite (มอนสเตอร์ / งู / บันได / กับดัก / ถ้วยรางวัล)
 export function getEmojiTexture(emoji) {
   if (emojiCache.has(emoji)) return emojiCache.get(emoji);
+  if (typeof window === "undefined") return null;
 
   const size = 128;
   const canvas = document.createElement("canvas");
@@ -56,10 +58,11 @@ export function getEmojiTexture(emoji) {
   return tex;
 }
 
-// Texture หน้าบนของแผ่นหิน: สีพื้นตามประเภทช่อง + เลขช่องสลัก
+// Texture หน้าบนของแผ่นหิน: สีพื้นตามประเภทช่อง + กรอบสลัก
 export function getTileTopTexture(cell, bgColor, borderColor) {
   const key = `${cell}|${bgColor}|${borderColor}`;
   if (tileTopCache.has(key)) return tileTopCache.get(key);
+  if (typeof window === "undefined") return null;
 
   const size = 128;
   const canvas = document.createElement("canvas");
@@ -68,11 +71,11 @@ export function getTileTopTexture(cell, bgColor, borderColor) {
   const ctx = canvas.getContext("2d");
 
   // พื้นหิน
-  ctx.fillStyle = bgColor;
+  ctx.fillStyle = bgColor || "#232b3d";
   ctx.fillRect(0, 0, size, size);
 
   // ลายหินจางๆ (noise เส้น)
-  ctx.strokeStyle = "rgba(255,255,255,0.03)";
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
   ctx.lineWidth = 1;
   for (let i = 0; i < 5; i++) {
     const y = 12 + i * 26 + ((cell * 13 + i * 7) % 11);
@@ -83,16 +86,11 @@ export function getTileTopTexture(cell, bgColor, borderColor) {
   }
 
   // กรอบ
-  ctx.strokeStyle = borderColor;
-  ctx.lineWidth = 5;
-  ctx.strokeRect(4, 4, size - 8, size - 8);
-
-  // เลขช่อง
-  ctx.font = `900 44px Inter, system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  ctx.fillText(String(cell), size / 2, size / 2 + 2);
+  if (borderColor) {
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(4, 4, size - 8, size - 8);
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -100,3 +98,4 @@ export function getTileTopTexture(cell, bgColor, borderColor) {
   tileTopCache.set(key, tex);
   return tex;
 }
+

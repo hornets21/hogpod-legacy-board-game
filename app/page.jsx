@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useReducer, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, Suspense } from "react";
 import dynamic from "next/dynamic";
 import PlayerCard from "@/components/PlayerCard";
 import SetupModal from "@/components/SetupModal";
 import ShopModal from "@/components/ShopModal";
 import CombatModal from "@/components/CombatModal";
+import PvpCombatModal from "@/components/PvpCombatModal";
+import BgmPlayer from "@/components/BgmPlayer";
 import GameLog from "@/components/GameLog";
+import AdminModal from "@/components/AdminModal";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
 const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
@@ -30,9 +33,12 @@ import {
   advanceTurn,
   checkWin,
   getTotalDmg,
+  saveGameState,
+  loadGameState,
+  clearSavedGameState,
 } from "@/lib/gameEngine";
 
-import { MONSTER_MAP } from "@/lib/gameData";
+import { MONSTER_MAP, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS } from "@/lib/gameData";
 
 // ─── Reducer ─────────────────────────────────────────────────
 function gameReducer(state, action) {
@@ -49,19 +55,22 @@ function gameReducer(state, action) {
           const players = [...state.players];
           players[state.currentPlayerIndex] = p;
           let next = handlePlayerDeath({ ...state, players }, state.currentPlayerIndex);
-          return {
+          next = {
             ...next,
             log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
           };
+          return advanceTurn(next);
         }
       }
 
       let next = checkWin(state);
       if (next.winner || next.phase !== "play") return next;
 
-      const monster = MONSTER_MAP[player.position];
+      const monsterMap = next.monsterMap || MONSTER_MAP;
+      const monster = monsterMap[player.position];
       const revealedMonsters = { ...next.revealedMonsters };
 
+      // 1. ตรวจสอบมอนสเตอร์ในช่อง
       if (next.monsterCells.has(player.position) && monster) {
         revealedMonsters[player.position] = monster;
         next = { ...next, revealedMonsters };
@@ -77,13 +86,38 @@ function gameReducer(state, action) {
         return next;
       }
 
+      // 2. ตรวจสอบการเผชิญหน้าผู้เล่นในช่องเดียวกัน (Multi-Player PvP Encounter)
+      const otherPlayersOnCell = next.players
+        .map((p, idx) => ({ p, idx }))
+        .filter(({ p, idx }) => idx !== state.currentPlayerIndex && p.isAlive && p.position === player.position);
+
+      if (otherPlayersOnCell.length > 0) {
+        const participantIndices = [state.currentPlayerIndex, ...otherPlayersOnCell.map((o) => o.idx)];
+        return {
+          ...next,
+          pvpEncounter: {
+            cell: player.position,
+            participantIndices,
+            attackerIndex: state.currentPlayerIndex,
+          },
+          log: [
+            ...next.log,
+            `⚔️ การประลองหลากบ้าน! ${next.players[state.currentPlayerIndex].name} และ ${otherPlayersOnCell.map((o) => o.p.name).join(", ")} พบกันที่ช่อง ${player.position}!`,
+          ],
+        };
+      }
+
       return advanceTurn(next);
     }
 
     case "ROLL_DICE": {
       const dice = action.dice || rollDice();
       let next = movePlayer(state, state.currentPlayerIndex, dice);
-
+      if (next.players[state.currentPlayerIndex]?.nextRollOverride) {
+        const players = [...next.players];
+        players[state.currentPlayerIndex] = { ...players[state.currentPlayerIndex], nextRollOverride: null };
+        next = { ...next, players };
+      }
       return next;
     }
 
@@ -111,20 +145,23 @@ function gameReducer(state, action) {
             log: [...next.log, `💰 ${p.name} ได้รับ ${goldReward.toLocaleString()} เหรียญ!`],
           };
           next = checkWin(next);
-          if (!next.winner) {
-            next = advanceTurn(next);
-          }
+        }
+
+        if (!next.winner) {
+          next = advanceTurn(next);
         }
       }
       return next;
     }
 
     case "USE_SKILL": {
-      return useSkill(state, state.currentPlayerIndex, action.skillId, action.targetIndex);
+      const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      return useSkill(state, pIdx, action.skillId, action.targetIndex);
     }
 
     case "USE_POTION": {
-      return usePotion(state, state.currentPlayerIndex, action.potionId);
+      const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      return usePotion(state, pIdx, action.potionId);
     }
 
     case "BUY_ITEM": {
@@ -141,6 +178,35 @@ function gameReducer(state, action) {
 
     case "CLOSE_SHOP": {
       return { ...state, shopOpen: false };
+    }
+
+    case "PVP_ACTION": {
+      const pvp = state.pvpEncounter;
+      if (!pvp) return state;
+
+      if (action.choice === "resolve" && action.updatedPlayers) {
+        let players = [...action.updatedPlayers];
+        let next = {
+          ...state,
+          players,
+          pvpEncounter: null,
+          log: [...state.log, ...(action.logEntries || [])],
+        };
+
+        // Check if any player died in PvP and process respawn
+        players.forEach((p, i) => {
+          if (p.hp <= 0) {
+            next = handlePlayerDeath(next, i);
+          }
+        });
+
+        return advanceTurn(next);
+      }
+
+      return advanceTurn({
+        ...state,
+        pvpEncounter: null,
+      });
     }
 
     case "FLEE_COMBAT": {
@@ -178,11 +244,129 @@ function gameReducer(state, action) {
       return {
         ...state,
         players,
-        log: [...state.log, `👑 แอดมินแจกเงิน +${action.amount.toLocaleString()} Gold ให้บ้าน ${state.players[action.playerIndex].name}!`],
+        log: [...state.log, `👑 แอดมินสายเปย์แจกเงิน +${action.amount.toLocaleString()} Gold ให้บ้าน ${state.players[action.playerIndex].name}!`],
       };
     }
 
+    case "ADMIN_GIVE_ITEM": {
+      const { playerIndex, itemType, itemId, itemData } = action;
+      const players = [...state.players];
+      const p = { ...players[playerIndex] };
+      let itemLogName = itemId;
+
+      if (itemType === "wand") {
+        const isVip = itemId === "vip";
+        const wandName = isVip ? p.vipWand : p.commonWand;
+        const dmgBonus = isVip ? 35 : 20;
+        p.wand = { type: itemId, name: wandName, dmgBonus };
+        itemLogName = wandName;
+      } else if (itemType === "armor") {
+        const armor = itemData || ARMOR_POOL.find((a) => a.id === itemId);
+        if (armor) {
+          p.armor = armor;
+          itemLogName = armor.name;
+        }
+      } else if (itemType === "amulet") {
+        const amulet = itemData || AMULET_POOL.find((a) => a.id === itemId);
+        if (amulet) {
+          p.amulet = amulet;
+          itemLogName = amulet.name;
+        }
+      } else if (itemType === "potion") {
+        const pot = POTIONS[itemId];
+        if (p.potions.length < 5) {
+          p.potions = [...p.potions, itemId];
+        } else {
+          p.potions = [...p.potions.slice(0, 4), itemId];
+        }
+        if (pot) itemLogName = pot.name;
+      } else if (itemType === "skill") {
+        const sk = SKILLS[itemId];
+        if (!p.skills.includes(itemId)) {
+          if (p.skills.length < 2) {
+            p.skills = [...p.skills, itemId];
+          } else {
+            p.skills = [...p.skills.slice(0, 1), itemId];
+          }
+        }
+        if (sk) itemLogName = sk.name;
+      } else if (itemType === "pet") {
+        const pet = itemData || PETS[itemId];
+        if (pet) {
+          p.pet = pet;
+          itemLogName = pet.name;
+        }
+      }
+
+      players[playerIndex] = p;
+      return {
+        ...state,
+        players,
+        log: [...state.log, `👑 แอดมินสายเปย์มอบไอเทม "${itemLogName}" ให้บ้าน ${p.name}!`],
+      };
+    }
+
+    case "ADMIN_REMOVE_ITEM": {
+      const { playerIndex, itemType } = action;
+      const players = [...state.players];
+      const p = { ...players[playerIndex] };
+
+      if (itemType === "wand") p.wand = null;
+      if (itemType === "armor") p.armor = null;
+      if (itemType === "amulet") p.amulet = null;
+      if (itemType === "pet") p.pet = null;
+      if (itemType === "clear_potions") p.potions = [];
+      if (itemType === "clear_skills") p.skills = [];
+
+      players[playerIndex] = p;
+      return {
+        ...state,
+        players,
+        log: [...state.log, `👑 แอดมินถอดไอเทม (${itemType}) จากบ้าน ${p.name}`],
+      };
+    }
+
+    case "ADMIN_GOD_MODE": {
+      const { playerIndex } = action;
+      const players = [...state.players];
+      const p = { ...players[playerIndex] };
+      p.wand = { type: "vip", name: p.vipWand, dmgBonus: 35 };
+      p.armor = ARMOR_POOL[0];
+      p.amulet = AMULET_POOL[1];
+      p.pet = PETS.hisoka;
+      p.potions = ["heal", "revive", "cooldown", "damage", "poison"];
+      p.skills = ["phoenix_force", "thunder_star"];
+      p.gold += 50000;
+      p.hp = p.maxHp;
+      p.isAlive = true;
+      players[playerIndex] = p;
+      return {
+        ...state,
+        players,
+        log: [...state.log, `⚡ 👑 PAY TO WIN GOD MODE: แอดมินเปย์จัดเต็ม VIP Gear ให้บ้าน ${p.name}!`],
+      };
+    }
+
+    case "ADMIN_REVIVE_PLAYER": {
+      const { playerIndex } = action;
+      const players = [...state.players];
+      const p = { ...players[playerIndex] };
+      p.hp = p.maxHp;
+      p.isAlive = true;
+      players[playerIndex] = p;
+      return {
+        ...state,
+        players,
+        log: [...state.log, `💖 👑 แอดมินฟื้นฟู HP และคืนชีพให้บ้าน ${p.name}!`],
+      };
+    }
+
+    case "LOAD_SAVED_STATE": {
+      return action.savedState;
+    }
+
     case "RESET": {
+      clearSavedGameState();
       return createInitialGameState();
     }
 
@@ -194,11 +378,30 @@ function gameReducer(state, action) {
 // ─── Component ────────────────────────────────────────────────
 export default function Home() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialGameState);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  // ดึงข้อมูลเกมที่เซฟไว้จาก localStorage มาใช้ในฝั่ง Client หลังจาก Hydrate สำเร็จ เพื่อป้องกันปัญหา Hydration Error
+  useEffect(() => {
+    const saved = loadGameState();
+    if (saved) {
+      dispatch({ type: "LOAD_SAVED_STATE", savedState: saved });
+    }
+    setHasHydrated(true);
+  }, []);
+
+  // บันทึกสถานะเกมลงใน localStorage อัตโนมัติทุกครั้งที่ State มีการเปลี่ยนแปลง (เฉพาะหลังจาก Hydrate แล้ว)
+  useEffect(() => {
+    if (hasHydrated && state) {
+      saveGameState(state);
+    }
+  }, [state, hasHydrated]);
+
   const [isRolling, setIsRolling] = useState(false);
   const [tempDice, setTempDice] = useState(null);
   const [logCollapsed, setLogCollapsed] = useState(false);
   const [playersCollapsed, setPlayersCollapsed] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [bgmMuted, setBgmMuted] = useState(false);
   const [resetDiceKey, setResetDiceKey] = useState(0);
 
   const currentPlayer = getCurrentPlayer(state);
@@ -208,7 +411,11 @@ export default function Home() {
     if (!canRoll) return;
 
     setIsRolling(true);
-    const rolledVal = Math.floor(Math.random() * 6) + 1; // สุ่มแต้มที่จะทอยได้จริงเพียงค่าเดียว
+    const player = state.players[state.currentPlayerIndex];
+    let rolledVal = Math.floor(Math.random() * 6) + 1;
+    if (player?.nextRollOverride) {
+      rolledVal = player.nextRollOverride;
+    }
 
     // สุ่มแต้มเดียวส่งเข้า State ทันที ล็อกให้ 3D Dice และการเดินหมากเป็นแต้มเดียวกัน 100%
     setTempDice(rolledVal);
@@ -244,7 +451,11 @@ export default function Home() {
         <BoardCanvas
           players={state.players}
           revealedMonsters={state.revealedMonsters}
+          monsterCells={state.monsterCells}
+          monsterMap={state.monsterMap}
+          cellTeleport={state.cellTeleport}
           trapCells={state.trapCells}
+          usedLadders={state.usedLadders}
           currentPlayerIndex={state.currentPlayerIndex}
           phase={state.phase}
           isRolling={isRolling}
@@ -297,10 +508,14 @@ export default function Home() {
       {/* ── 3D UI Overlays Layer (pointer-events-none เพื่อไม่ให้บังการคุม 3D) ─ */}
       <div className="relative z-10 w-full h-full p-4 flex flex-col justify-between pointer-events-none overflow-hidden">
 
-        {/* ── Top Floating Bar: Admin + Game Title ────────────── */}
-        <div className="flex items-center justify-end w-full gap-3 pointer-events-auto">
-          {/* Admin Floating Button */}
-          <div>
+        {/* ── Top Floating Bar: Action Buttons + Admin + Game Title + BGM Controller ────────────── */}
+        <div className="flex items-center justify-end w-full gap-2 pointer-events-auto">
+          {/* Background Music Player */}
+          <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
+
+          {/* Quick Action Emoji Buttons (Admin, Shop, Reset Dice) */}
+          <div className="flex items-center gap-2">
+            {/* Admin Floating Button */}
             <button
               onClick={() => setAdminOpen((o) => !o)}
               className={`w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md ${
@@ -312,9 +527,29 @@ export default function Home() {
             >
               👑
             </button>
+
+            {/* Shop Button */}
+            <button
+              onClick={() => dispatch({ type: "OPEN_SHOP" })}
+              disabled={!!state.combatState}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-yellow-300 hover:border-yellow-400/50 hover:bg-yellow-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              title="เปิดร้านค้าฮอกปด"
+            >
+              🏪
+            </button>
+
+            {/* Reset Dice Button */}
+            <button
+              onClick={() => setResetDiceKey((k) => k + 1)}
+              disabled={isRolling}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้น"
+            >
+              🔄
+            </button>
           </div>
 
-          {/* Game Title & Round Badge (อยู่ต่อด้านขวาของปุ่ม admin) */}
+          {/* Game Title & Round Badge */}
           <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/30 backdrop-blur-md shadow-[0_0_25px_rgba(240,184,91,0.15)]">
             <span className="text-xl animate-pulse">🏰</span>
             <div>
@@ -330,76 +565,35 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── Middle Layer: Floating Game Log (History) ด้านขวา ─ */}
-        <div className="absolute top-20 right-4 bottom-28 z-10 w-72 pointer-events-auto max-h-[60vh] flex flex-col">
-          <GameLog
-            log={state.log}
-            collapsed={logCollapsed}
-            onToggleCollapse={() => setLogCollapsed((c) => !c)}
-          />
-        </div>
+        {/* ── Left Floating Layer: Player Cards Panel ─ */}
+        <div className="absolute top-20 left-4 bottom-6 z-10 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3 pointer-events-auto overflow-y-auto pr-1 custom-scrollbar">
 
-        {/* ── Bottom Floating Layer: Turn Control + Player Cards ─ */}
-        <div className="w-full flex flex-col gap-3 pointer-events-auto mt-auto max-w-6xl mx-auto">
-
-          {/* Turn Indicator & Controls HUD */}
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl backdrop-blur-xl bg-slate-950/85 border border-white/15 shadow-2xl">
-            {/* Active House Info */}
-            <div
-              className="turn-indicator flex items-center gap-3 px-3 py-1.5 rounded-xl flex-1 max-w-xs"
-              style={{ "--house-color": currentPlayer.color }}
-            >
-              <span className="text-2xl">{currentPlayer.emoji}</span>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-black text-white truncate">{currentPlayer.name}</div>
-                <div className="text-[9px] text-white/70 font-semibold truncate">ตาเดินของ {currentPlayer.nameEn}</div>
-              </div>
-            </div>
-
-            {/* Action Controls (รีเซ็ตตำแหน่งเต๋า, จบเทิร์น & ร้านค้า) */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setResetDiceKey((k) => k + 1)}
-                disabled={isRolling}
-                className="btn-secondary text-xs px-3 py-3 shadow-xl backdrop-blur-md bg-slate-900/80 border-white/15 text-cyan-300 hover:bg-slate-800 font-bold"
-                title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้นบนกระดาน"
-              >
-                🔄 รีเซ็ตเต๋า
-              </button>
-              <button
-                onClick={handleEndTurn}
-                disabled={state.phase !== "play" || isRolling || !!state.combatState}
-                className="btn-secondary text-xs px-3 py-3 shadow-xl backdrop-blur-md bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 font-bold"
-                title="จบเทิร์นและส่งต่อตาเดินให้บ้านถัดไป"
-              >
-                ⏭️ จบเทิร์น
-              </button>
-              <button
-                onClick={() => dispatch({ type: "OPEN_SHOP" })}
-                disabled={!!state.combatState}
-                className="btn-secondary text-xs px-3.5 py-3 shadow-xl backdrop-blur-md bg-slate-950/80"
-              >
-                🏪 ร้านค้า
-              </button>
-            </div>
-          </div>
-
-          {/* Bottom Player Panels (พับได้) */}
+          {/* Left Player Cards List (พับได้) */}
           {playersCollapsed ? (
-            <div className="players-mini-bar flex-shrink-0 bg-slate-950/85 backdrop-blur-xl border border-white/10">
-              <div className="flex items-center gap-2 flex-1 overflow-x-auto">
+            <div className="players-mini-bar flex-col gap-2 bg-slate-950/85 backdrop-blur-xl border border-white/10 p-2.5 rounded-2xl">
+              <div className="flex justify-between items-center w-full pb-1 border-b border-white/10">
+                <span className="text-xs font-bold text-slate-300">ผู้เล่นทั้งหมด ({state.players.length})</span>
+                <button
+                  onClick={() => setPlayersCollapsed(false)}
+                  className="panel-collapse-btn text-xs"
+                  title="แสดงการ์ดบ้าน"
+                >
+                  ▼
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5 w-full">
                 {state.players.map((p, i) => {
                   const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
                   const active = i === state.currentPlayerIndex && state.phase === "play";
                   return (
                     <div
                       key={p.houseId}
-                      className={`player-mini-chip ${active ? "player-mini-chip-active" : ""}`}
+                      className={`player-mini-chip w-full ${active ? "player-mini-chip-active" : ""}`}
                       style={{ "--house-color": p.color }}
                       title={`${p.name} · HP ${Math.max(0, p.hp)}/${p.maxHp} · ช่อง ${p.position} · ${p.gold.toLocaleString()} Gold`}
                     >
                       <span className="text-sm">{p.emoji}</span>
-                      <div className="player-mini-info">
+                      <div className="player-mini-info flex-1">
                         <div className="player-mini-name">{p.nameEn}</div>
                         <div className="player-mini-hp">
                           <div
@@ -416,84 +610,55 @@ export default function Home() {
                   );
                 })}
               </div>
-              <button
-                onClick={() => setPlayersCollapsed(false)}
-                className="panel-collapse-btn flex-shrink-0"
-                title="แสดงการ์ดบ้าน"
-              >
-                ▲
-              </button>
             </div>
           ) : (
-            <div className="relative flex-shrink-0">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-xs font-bold text-amber-300/80">ข้อมูลผู้เล่น</span>
+                <button
+                  onClick={() => setPlayersCollapsed(true)}
+                  className="text-xs text-white/50 hover:text-white bg-slate-900/60 px-2 py-0.5 rounded-lg border border-white/10"
+                  title="ย่อการ์ดบ้าน"
+                >
+                  ▲ พับเก็บ
+                </button>
+              </div>
+              <div className="flex flex-col gap-2.5">
                 {state.players.map((p, i) => (
                   <PlayerCard
                     key={p.houseId}
                     player={p}
+                    playerIndex={i}
                     isActive={i === state.currentPlayerIndex && state.phase === "play"}
-                    onUseSkill={(skillId) => dispatch({ type: "USE_SKILL", skillId })}
-                    onUsePotion={(potionId) => dispatch({ type: "USE_POTION", potionId })}
+                    onUseSkill={(skillId, pIdx) => dispatch({ type: "USE_SKILL", skillId, playerIndex: pIdx })}
+                    onUsePotion={(potionId, pIdx) => dispatch({ type: "USE_POTION", potionId, playerIndex: pIdx })}
                   />
                 ))}
               </div>
-              <button
-                onClick={() => setPlayersCollapsed(true)}
-                className="players-collapse-toggle"
-                title="พับการ์ดบ้าน"
-              >
-                ▼ พับการ์ดบ้าน
-              </button>
             </div>
           )}
+        </div>
+
+        {/* ── Right Floating Layer: Floating Game Log (History) ด้านขวา ─ */}
+        <div className="absolute top-20 right-4 bottom-6 z-10 w-72 pointer-events-auto max-h-[60vh] flex flex-col">
+          <GameLog
+            log={state.log}
+            collapsed={logCollapsed}
+            onToggleCollapse={() => setLogCollapsed((c) => !c)}
+          />
         </div>
 
       </div>
 
       {/* Admin Modal Popover */}
       {adminOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in pointer-events-auto">
-          <div className="relative w-full max-w-sm bg-slate-950/95 border-2 border-amber-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(240,184,91,0.2)]">
-            <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">👑</span>
-                <h3 className="font-black text-white text-base">คำสั่งเมนูแอดมิน</h3>
-              </div>
-              <button
-                onClick={() => setAdminOpen(false)}
-                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center font-bold text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="text-xs font-black uppercase tracking-wider text-amber-400/90 mb-3">
-              💰 แจกเงิน +2,000 Gold ให้บ้าน:
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              {state.players.map((p, idx) => (
-                <button
-                  key={p.houseId}
-                  onClick={() => dispatch({ type: "ADMIN_ADD_GOLD", playerIndex: idx, amount: 2000 })}
-                  className="text-xs font-black px-3 py-2.5 rounded-xl border border-white/15 hover:border-amber-400 hover:scale-[1.02] transition-all text-white flex items-center gap-2 shadow-md"
-                  style={{ backgroundColor: `${p.color}35` }}
-                  title={`แจก +2,000 Gold ให้ ${p.name}`}
-                >
-                  <span className="text-base">{p.emoji}</span>
-                  <span className="truncate">{p.nameEn}</span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => { setAdminOpen(false); dispatch({ type: "RESET" }); }}
-              className="w-full py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-black text-xs transition-all shadow-lg flex items-center justify-center gap-2"
-            >
-              <span>🔄</span> Reset เกมเริ่มต้นใหม่
-            </button>
-          </div>
-        </div>
+        <AdminModal
+          players={state.players}
+          onDispatch={dispatch}
+          onClose={() => setAdminOpen(false)}
+          isBgmMuted={bgmMuted}
+          onToggleBgm={() => setBgmMuted((m) => !m)}
+        />
       )}
 
       {/* ── Pre-Game Setup Modal ───────────────────────────────── */}
@@ -514,6 +679,15 @@ export default function Home() {
             dispatch({ type: "BUY_ITEM", itemType, itemId });
           }}
           onClose={() => dispatch({ type: "CLOSE_SHOP" })}
+        />
+      )}
+
+      {/* ── PvP Encounter Modal ───────────────────────────────── */}
+      {state.pvpEncounter && (
+        <PvpCombatModal
+          pvpEncounter={state.pvpEncounter}
+          players={state.players}
+          onPvpAction={(actionPayload) => dispatch({ type: "PVP_ACTION", ...actionPayload })}
         />
       )}
 

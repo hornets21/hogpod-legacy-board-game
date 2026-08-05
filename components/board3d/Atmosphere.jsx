@@ -99,16 +99,18 @@ function FloatingCandles() {
             />
           </mesh>
           {/* รัศมีแวบๆ รอบเปลวไฟ */}
-          <sprite position={[0, 0.3, 0]} scale={[0.55, 0.55, 0.55]}>
-            <spriteMaterial
-              map={getGlowTexture()}
-              color="#ffb45e"
-              transparent
-              opacity={0.6}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </sprite>
+          {getGlowTexture() && (
+            <sprite position={[0, 0.3, 0]} scale={[0.55, 0.55, 0.55]}>
+              <spriteMaterial
+                map={getGlowTexture()}
+                color="#ffb45e"
+                transparent
+                opacity={0.6}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </sprite>
+          )}
         </group>
       ))}
     </group>

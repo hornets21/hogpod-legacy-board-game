@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
+import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
 
 export default function SetupModal({ players, onCompleteSetup }) {
   const [currentHouseIndex, setCurrentHouseIndex] = useState(0);
@@ -9,6 +9,19 @@ export default function SetupModal({ players, onCompleteSetup }) {
   const [activeTab, setActiveTab] = useState("wands"); // wands | pets | skills
 
   const currentPlayer = setupPlayers[currentHouseIndex];
+  const houseInfo = HOUSES[currentPlayer?.houseId] || {};
+
+  const equippedWandName = currentPlayer?.wand
+    ? (currentPlayer.wand.type === "vip"
+        ? (currentPlayer.vipWand || houseInfo.vipWand)
+        : (currentPlayer.commonWand || houseInfo.commonWand))
+    : "ยังไม่ได้สวมใส่";
+
+  const equippedWandImg = currentPlayer?.wand
+    ? (currentPlayer.wand.type === "vip"
+        ? (currentPlayer.vipWandImg || houseInfo.vipWandImg)
+        : (currentPlayer.commonWandImg || houseInfo.commonWandImg))
+    : null;
 
   function handleToggleEquip(itemType, itemId) {
     const updated = [...setupPlayers];
@@ -18,7 +31,11 @@ export default function SetupModal({ players, onCompleteSetup }) {
       if (p.wand?.type === itemId) {
         p.wand = null; // Unequip
       } else {
-        p.wand = { type: itemId, dmgBonus: itemId === "common" ? 20 : 35 };
+        p.wand = { 
+          type: itemId, 
+          name: itemId === "vip" ? (p.vipWand || houseInfo.vipWand) : (p.commonWand || houseInfo.commonWand),
+          dmgBonus: itemId === "common" ? 20 : 35 
+        };
       }
     } else if (itemType === "pet") {
       if (p.pet?.id === itemId) {
@@ -46,7 +63,7 @@ export default function SetupModal({ players, onCompleteSetup }) {
     }
   }
 
-  const totalDmg = currentPlayer.baseDmg + (currentPlayer.wand?.dmgBonus || 0) + (currentPlayer.amulet?.dmgBonus || 0);
+  const totalDmg = (currentPlayer.baseDmg || 0) + (currentPlayer.wand?.dmgBonus || 0) + (currentPlayer.amulet?.dmgBonus || 0);
 
   return (
     <div className="modal-overlay z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
@@ -110,8 +127,9 @@ export default function SetupModal({ players, onCompleteSetup }) {
             <SlotFrame
               label="WAND (อาวุธ)"
               icon="🪄"
+              img={equippedWandImg}
               active={!!currentPlayer.wand}
-              itemTitle={currentPlayer.wand ? (currentPlayer.wand.type === "vip" ? currentPlayer.vipWand : currentPlayer.commonWand) : "ยังไม่ได้สวมใส่"}
+              itemTitle={equippedWandName}
               itemSub={currentPlayer.wand ? `+${currentPlayer.wand.dmgBonus} DMG` : "แตะเพื่อเลือกซื้อ"}
             />
             <SlotFrame
@@ -188,17 +206,17 @@ export default function SetupModal({ players, onCompleteSetup }) {
             {activeTab === "wands" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ShopCard
-                  title={`ไม้กายสิทธิ์ทั่วไป (${currentPlayer.commonWand})`}
+                  title={`ไม้กายสิทธิ์ทั่วไป (${currentPlayer.commonWand || houseInfo.commonWand})`}
                   desc="+20 ดาเมจ (1,290 Gold)"
                   price={1290}
                   gold={currentPlayer.gold}
                   owned={currentPlayer.wand?.type === "common"}
                   onBuy={() => handleToggleEquip("wand", "common")}
                   icon="🪄"
-                  img={currentPlayer.commonWandImg || "/images/items/06_ไม้มะยม.webp"}
+                  img={currentPlayer.commonWandImg || houseInfo.commonWandImg}
                 />
                 <ShopCard
-                  title={`ไม้กายสิทธิ์ VIP (${currentPlayer.vipWand})`}
+                  title={`ไม้กายสิทธิ์ VIP (${currentPlayer.vipWand || houseInfo.vipWand})`}
                   desc="+35 ดาเมจ (2,200 Gold)"
                   price={2200}
                   gold={currentPlayer.gold}
@@ -272,13 +290,24 @@ export default function SetupModal({ players, onCompleteSetup }) {
   );
 }
 
-function SlotFrame({ label, icon, active, itemTitle, itemSub }) {
+function SlotFrame({ label, icon, img, active, itemTitle, itemSub }) {
   return (
     <div className={`p-3 rounded-2xl border-2 transition-all flex items-center gap-3 relative overflow-hidden ${
       active ? "border-amber-400 bg-amber-950/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]" : "border-white/10 bg-black/40"
     }`}>
-      <div className="w-10 h-10 rounded-xl border border-white/20 bg-black flex items-center justify-center text-xl flex-shrink-0">
-        {icon}
+      <div className="w-10 h-10 rounded-xl border border-white/20 bg-black flex items-center justify-center text-xl flex-shrink-0 overflow-hidden relative shadow-inner">
+        {img ? (
+          <img
+            src={img}
+            alt={label}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              e.currentTarget.nextElementSibling.style.display = "block";
+            }}
+          />
+        ) : null}
+        <span className={`text-xl ${img ? "hidden" : "block"}`}>{icon}</span>
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[9px] font-black uppercase text-amber-400 tracking-wider">{label}</div>

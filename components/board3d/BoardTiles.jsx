@@ -6,6 +6,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useTexture, Text } from "@react-three/drei";
 import * as THREE from "three";
 import {
   buildGrid,
@@ -48,30 +49,35 @@ function getShared() {
   return geometryCache;
 }
 
-// material หน้าบนของแต่ละช่อง (cache ตามเลขช่อง)
+// material หน้าบนของแต่ละช่อง
 const topMatCache = new Map();
-function getTopMaterial(cell, type) {
+function getTopMaterial(cell, type, imageTexture) {
   const style = TILE_STYLES[type] || TILE_STYLES.normal;
   const key = `${cell}|${type}`;
   if (!topMatCache.has(key)) {
-    topMatCache.set(
-      key,
-      new THREE.MeshStandardMaterial({
-        map: getTileTopTexture(cell, style.bg, style.border),
-        emissive: new THREE.Color(style.emissive),
-        emissiveIntensity: style.ei,
-        roughness: 0.72,
-        metalness: 0.08,
-      })
-    );
+    const mat = new THREE.MeshStandardMaterial({
+      map: imageTexture || getTileTopTexture(cell, style.bg, style.border),
+      color: "#ffffff", // ใช้สีขาวบริสุทธิ์เพื่อยึดภาพ Texture ทั้งหมดตามต้นฉบับ ไม่ย้อมสีพื้นหลัง
+      emissive: new THREE.Color(style.emissive),
+      emissiveIntensity: style.ei,
+      roughness: 0.72,
+      metalness: 0.08,
+    });
+    topMatCache.set(key, mat);
   }
   return topMatCache.get(key);
 }
 
-export default function BoardTiles({ revealedMonsters, onHoverCell }) {
+export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, cellTeleport, onHoverCell }) {
   const grid = useMemo(() => buildGrid(), []);
   const [hoveredCell, setHoveredCell] = useState(null);
   const highlightRef = useRef(null);
+
+  // โหลด Texture ฝั่ง WebGL ด้วย useTexture (Standard drei helper)
+  const textures = useTexture({
+    odd: "/images/textures/texture-1-board.webp",
+    even: "/images/textures/texture-2-board.webp",
+  });
 
   // แสงกะพริบของแถบ highlight ช่องที่ hover
   useFrame(({ clock }) => {
@@ -86,13 +92,13 @@ export default function BoardTiles({ revealedMonsters, onHoverCell }) {
     setHoveredCell(cell);
     document.body.style.cursor = "pointer";
     if (onHoverCell) {
-      const type = getCellType(cell);
+      const type = getCellType(cell, usedLadders, monsterMap, cellTeleport);
       onHoverCell({
         cell,
         type,
         monster: revealedMonsters?.[cell] || null,
-        monsterInfo: MONSTER_MAP[cell] || null,
-        teleport: CELL_TELEPORT[cell] || null,
+        monsterInfo: (monsterMap || MONSTER_MAP)[cell] || null,
+        teleport: (cellTeleport || CELL_TELEPORT)[cell] || null,
       });
     }
   };
@@ -109,24 +115,41 @@ export default function BoardTiles({ revealedMonsters, onHoverCell }) {
     <group>
       {grid.flatMap((row) =>
         row.map((cell) => {
-          const type = cell === 90 ? "win" : getCellType(cell);
+          const type = cell === 90 ? "win" : getCellType(cell, usedLadders, monsterMap, cellTeleport);
           const [x, , z] = cellToWorld(cell);
-          const top = getTopMaterial(cell, type);
+          const isOdd = cell % 2 !== 0;
+          const bgTex = isOdd ? textures.odd : textures.even;
+          const top = getTopMaterial(cell, type, bgTex);
           const mats = [shared.side, shared.side, top, shared.bottom, shared.side, shared.side];
           const isBoss = type === "boss";
           const yScale = isBoss ? 1.5 : type === "win" ? 1.35 : 1;
+          const topY = TILE_HEIGHT * yScale - 0.01;
 
           return (
-            <mesh
-              key={cell}
-              geometry={shared.box}
-              material={mats}
-              position={[x, (TILE_HEIGHT * yScale) / 2 - 0.02, z]}
-              scale={[1, yScale, 1]}
-              receiveShadow
-              onPointerOver={handleHover(cell)}
-              onPointerOut={handleOut}
-            />
+            <group key={cell}>
+              <mesh
+                geometry={shared.box}
+                material={mats}
+                position={[x, (TILE_HEIGHT * yScale) / 2 - 0.02, z]}
+                scale={[1, yScale, 1]}
+                receiveShadow
+                onPointerOver={handleHover(cell)}
+                onPointerOut={handleOut}
+              />
+              {/* เลขช่อง 3D ลอยอยู่บนหน้าแผ่นหิน */}
+              <Text
+                position={[x, topY + 0.01, z]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                fontSize={0.48}
+                color="#ffffff"
+                anchorX="center"
+                anchorY="middle"
+                outlineWidth={0.04}
+                outlineColor="#000000"
+              >
+                {cell}
+              </Text>
+            </group>
           );
         })
       )}

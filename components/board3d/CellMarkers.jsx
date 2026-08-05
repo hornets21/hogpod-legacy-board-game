@@ -12,16 +12,16 @@ import { getEmojiTexture } from "./textures";
 
 const FLOAT_Y = 1.02;
 
-export default function CellMarkers({ revealedMonsters, trapCells }) {
+export default function CellMarkers({ revealedMonsters, trapCells, usedLadders, monsterMap, cellTeleport }) {
   const grid = useMemo(() => buildGrid(), []);
 
   const markers = useMemo(() => {
     const list = [];
     for (const row of grid) {
       for (const cell of row) {
-        const type = getCellType(cell);
+        const type = getCellType(cell, usedLadders, monsterMap, cellTeleport);
         const revealed = revealedMonsters?.[cell];
-        const monsterInfo = MONSTER_MAP[cell];
+        const monsterInfo = (monsterMap || MONSTER_MAP)[cell];
         const hasTrap = trapCells?.[cell];
 
         if (type === "ladder") {
@@ -30,15 +30,7 @@ export default function CellMarkers({ revealedMonsters, trapCells }) {
           list.push({ key: `snk-${cell}`, cell, emoji: "🐍", opacity: 0.95 });
         }
 
-        if (revealed) {
-          list.push({ key: `mon-${cell}`, cell, emoji: revealed.emoji || "👾", opacity: 1 });
-        } else if (type === "boss") {
-          list.push({ key: `boss-${cell}`, cell, emoji: "👿", opacity: 0.35 });
-        } else if (type === "elite") {
-          list.push({ key: `elite-${cell}`, cell, emoji: "⚔️", opacity: 0.35 });
-        } else if (type === "healer" && monsterInfo) {
-          list.push({ key: `heal-${cell}`, cell, emoji: monsterInfo.emoji || "👼", opacity: 0.95 });
-        }
+        // ยกเลิก Emoji มอนสเตอร์ทั้งหมด — ใช้ PlaneMonster (รูปภาพ 2D) แสดงแทนใน BoardCanvas
 
         if (hasTrap) {
           list.push({ key: `trap-${cell}`, cell, emoji: "☠️", opacity: 1, dy: 0.28 });
@@ -50,7 +42,7 @@ export default function CellMarkers({ revealedMonsters, trapCells }) {
       }
     }
     return list;
-  }, [grid, revealedMonsters, trapCells]);
+  }, [grid, revealedMonsters, trapCells, usedLadders, monsterMap, cellTeleport]);
 
   return (
     <group>

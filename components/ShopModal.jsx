@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
+import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
 
 export default function ShopModal({ player, onBuy, onClose }) {
   const [activeCategory, setActiveCategory] = useState("wands"); // wands | armor | amulets | potions | skills | pets
 
   if (!player) return null;
+
+  const houseData = HOUSES[player.houseId] || {};
+  const commonWandName = player.commonWand || houseData.commonWand || "ไม้ทั่วไป";
+  const commonWandImg = player.commonWandImg || houseData.commonWandImg;
+  const vipWandName = player.vipWand || houseData.vipWand || "ไม้ VIP";
+  const vipWandImg = player.vipWandImg || houseData.vipWandImg;
 
   return (
     <div className="modal-overlay z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-md" onClick={onClose}>
@@ -65,22 +71,22 @@ export default function ShopModal({ player, onBuy, onClose }) {
                 {activeCategory === "wands" && (
                   <>
                     <ShopShelfCard
-                      title={`ไม้ทั่วไป: ${player.commonWand}`}
+                      title={`ไม้ทั่วไป: ${commonWandName}`}
                       sub={`ไม้ประจำบ้าน ${player.name} (+20 DMG)`}
                       price={1290}
                       gold={player.gold}
                       icon="🪄"
-                      img={player.commonWandImg || "/images/items/06_ไม้มะยม.webp"}
+                      img={commonWandImg}
                       owned={player.wand?.type === "common"}
                       onBuy={() => onBuy("wand", "common")}
                     />
                     <ShopShelfCard
-                      title={`ไม้ VIP: ${player.vipWand}`}
+                      title={`ไม้ VIP: ${vipWandName}`}
                       sub={`ไม้ระดับสูงประจำบ้าน ${player.name} (+35 DMG)`}
                       price={2200}
                       gold={player.gold}
                       icon="✨"
-                      img={player.vipWandImg || "/images/items/03_ไม้ตะเคียน.webp"}
+                      img={vipWandImg}
                       owned={player.wand?.type === "vip"}
                       onBuy={() => onBuy("wand", "vip")}
                     />
@@ -186,7 +192,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
               {/* NPC SHOPKEEPER CHARACTER PORTRAIT FRAME */}
               <div className="w-36 h-48 rounded-2xl border-4 border-[#7a4c28] bg-black/80 shadow-[0_0_25px_rgba(0,0,0,0.8)] overflow-hidden relative flex items-center justify-center group mb-3">
                 <img
-                  src="/images/shopkeeper.png"
+                  src="/images/npc/พ่อค้าลึกลับ.webp"
                   alt="Shopkeeper"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   onError={(e) => {

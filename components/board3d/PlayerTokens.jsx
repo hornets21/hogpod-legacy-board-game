@@ -54,15 +54,24 @@ function Token({ player, index, isActive }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤100) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก
+  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤100) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก/RESET
   useEffect(() => {
     const prev = prevPos.current;
     const next = player.position;
     if (prev === next) return;
     prevPos.current = next;
 
-    const diff = next - prev;
     const a = anim.current;
+    if (next === 1) {
+      // ถ้าเป็นการ Reset เกม ให้ตั้งตำแหน่งกลับมาช่อง 1 ทันที และล้าง queue เดิน
+      a.queue = [];
+      a.mode = "idle";
+      const [x, , z] = cellToWorld(1);
+      groupRef.current?.position.set(x + offset[0], 0, z + offset[2]);
+      return;
+    }
+
+    const diff = next - prev;
 
     // ถ้าเป็นการเดินปกติไปข้างหน้า (1-6 ช่อง) ให้คิวเดินทีละช่องจนครบก้าว
     if (diff > 0 && diff <= 90) {

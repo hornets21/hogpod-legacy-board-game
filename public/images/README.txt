@@ -7,3 +7,4 @@
 - `public/images/items/` — รูปไอเทม ไม้กายสิทธิ์ เสื้อเกราะ เครื่องราง ยา (`wand_common.png`, `potion_heal.png`)
 - `public/images/pets/` — รูปสัตว์วิเศษ (`hisoka.png`, `okarun.png`, `bank.png`)
 - `public/images/cards/` — รูปการ์ด หรือองค์ประกอบอื่นๆ
+- `public/images/npc/` — รูปภาพ NPC พ่อค้า และตัวละครอื่นๆ (`shopkeeper.png`)
