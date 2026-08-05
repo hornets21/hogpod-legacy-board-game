@@ -45,14 +45,11 @@ function Token({ player, index, isActive }) {
   const prevPos = useRef(player.position);
 
   const offset = TOKEN_OFFSETS[index % TOKEN_OFFSETS.length];
-
-  // วางตำแหน่งเริ่มต้นทันที
-  useEffect(() => {
-    const [x, , z] = cellToWorld(player.position);
-    groupRef.current?.position.set(x + offset[0], 0, z + offset[2]);
-    prevPos.current = player.position;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const initialPosition = useRef(null);
+  if (initialPosition.current === null) {
+    const [initialX, , initialZ] = cellToWorld(player.position);
+    initialPosition.current = [initialX + offset[0], 0, initialZ + offset[2]];
+  }
 
   // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤100) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก/RESET
   useEffect(() => {
@@ -177,7 +174,7 @@ function Token({ player, index, isActive }) {
   const color = isDead ? "#6b7280" : player.color;
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={initialPosition.current}>
       <group rotation={[isDead ? 0.9 : 0, 0, isDead ? 0.9 : 0]}>
         {/* ฐานหิน */}
         <mesh position={[0, 0.4, 0]} castShadow>

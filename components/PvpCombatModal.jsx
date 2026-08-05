@@ -83,7 +83,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
         const cdBase = sk.cooldown || 3;
         const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? cdBase - 1 : cdBase;
         playerObj.skillCooldowns = { ...(playerObj.skillCooldowns || {}), [skId]: cdActual };
-        logEntries.push(`✨ ${playerObj.name} ปลดปล่อยคาถา "${sk.nameTh || sk.name}" (${sk.emoji})!`);
+        logEntries.push(`✨ ${playerObj.name} ปลดปล่อยคาถา "${sk.nameTh || sk.name}"!`);
 
         if (sk.dmg) skillBonusDmg += sk.dmg;
       }
@@ -458,7 +458,9 @@ function RenderFighterCard({
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base shrink-0">{sk.emoji}</span>
+                      <div className="w-7 h-7 rounded-lg border border-white/15 bg-black/50 flex items-center justify-center overflow-hidden shrink-0">
+                        <img src={`/images/skills/${sk.id}_skill.webp`} alt={sk.name} className="w-full h-full object-contain p-0.5" />
+                      </div>
                       <div className="min-w-0">
                         <div className="font-bold truncate">{sk.nameTh || sk.name}</div>
                         <div className="text-[9px] text-white/50 truncate">{sk.description}</div>
@@ -505,7 +507,24 @@ function RenderFighterCard({
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base shrink-0">{pot.emoji}</span>
+                      <div className="w-7 h-7 rounded-lg border border-white/15 bg-black/50 flex items-center justify-center overflow-hidden shrink-0">
+                        {pot.image ? (
+                          <>
+                            <img
+                              src={pot.image}
+                              alt={pot.name}
+                              className="w-full h-full object-contain p-0.5"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                e.currentTarget.nextElementSibling.style.display = "flex";
+                              }}
+                            />
+                            <span className="hidden w-full h-full items-center justify-center text-base" />
+                          </>
+                        ) : (
+                          <span className="text-base" />
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <div className="font-bold truncate">{pot.name}</div>
                         <div className="text-[9px] text-white/50 truncate">{pot.description}</div>

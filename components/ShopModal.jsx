@@ -129,7 +129,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
                         sub={pot.description}
                         price={pot.price}
                         gold={player.gold}
-                        icon={pot.emoji}
+                        icon={null}
                         img={pot.image}
                         disabled={player.potions.length >= 5}
                         onBuy={() => onBuy("potion", id)}
@@ -146,8 +146,8 @@ export default function ShopModal({ player, onBuy, onClose }) {
                         sub={skill.description}
                         price={2000}
                         gold={player.gold}
-                        icon={skill.emoji}
-                        img={`/images/skills/${skill.id}.png`}
+                        icon={null}
+                        img={`/images/skills/${skill.id}_skill.webp`}
                         owned={owned}
                         disabled={!owned && player.skills.length >= 2}
                         onBuy={() => onBuy("skill", skill.id)}
@@ -274,7 +274,7 @@ function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disa
           <img
             src={img}
             alt={title}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+            className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-300"
             onError={(e) => {
               e.currentTarget.style.display = "none";
               e.currentTarget.nextElementSibling.style.display = "flex";

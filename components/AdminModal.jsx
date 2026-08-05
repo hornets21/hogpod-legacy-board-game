@@ -171,11 +171,29 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {/* Wand Slot */}
-                <div className="bg-black/40 border border-white/10 p-2 rounded-xl flex items-center justify-between">
-                  <div className="min-w-0">
+                <div className="bg-black/40 border border-white/10 p-2 rounded-xl flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg border border-white/10 bg-black/60 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {player.wand ? (
+                      <>
+                        <img
+                          src={player.wand.type === "vip" ? player.vipWandImg : player.commonWandImg}
+                          alt={player.wand.type === "vip" ? player.vipWand : player.commonWand}
+                          className="w-full h-full object-contain p-0.5"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling.style.display = "flex";
+                          }}
+                        />
+                        <span className="hidden w-full h-full items-center justify-center text-base">{player.wand.type === "vip" ? "✨" : "🪄"}</span>
+                      </>
+                    ) : (
+                      <span className="text-base">🪄</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <div className="text-[9px] text-white/40 font-bold">🪄 ไม้กายสิทธิ์</div>
                     <div className="text-xs font-black text-amber-300 truncate">
-                      {player.wand ? (player.wand.type === "vip" ? `✨ ${player.vipWand}` : `🪄 ${player.commonWand}`) : "ไม่มี"}
+                      {player.wand ? (player.wand.type === "vip" ? player.vipWand : player.commonWand) : "ไม่มี"}
                     </div>
                   </div>
                   {player.wand && (
@@ -268,14 +286,35 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                   return (
                     <div
                       key={slotIdx}
-                      className={`h-10 rounded-xl border flex flex-col items-center justify-center p-1 relative text-center ${
+                      className={`h-16 rounded-xl border flex flex-col items-center justify-center p-1 relative text-center ${
                         pot
                           ? "border-emerald-500/40 bg-emerald-950/30 text-white"
                           : "border-white/10 bg-black/40 text-white/20"
                       }`}
                       title={pot ? pot.name : "ช่องว่าง"}
                     >
-                      <span className="text-sm">{pot ? pot.emoji : "•"}</span>
+                      <div className="w-full h-10 flex items-center justify-center overflow-hidden rounded">
+                        {pot ? (
+                          pot.image ? (
+                            <>
+                              <img
+                                src={pot.image}
+                                alt={pot.name}
+                                className="w-full h-full object-contain p-0.5"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  e.currentTarget.nextElementSibling.style.display = "flex";
+                                }}
+                              />
+                              <span className="hidden w-full h-full items-center justify-center text-base" />
+                            </>
+                          ) : (
+                            <span className="text-base" />
+                          )
+                        ) : (
+                          <span className="text-base">•</span>
+                        )}
+                      </div>
                       <span className="text-[8px] font-black truncate w-full">{pot ? pot.name : "ว่าง"}</span>
                     </div>
                   );
@@ -309,7 +348,13 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                           : "border-white/10 bg-black/40 text-white/20"
                       }`}
                     >
-                      <span className="text-base">{skill ? skill.emoji : "🔮"}</span>
+                      <div className="w-6 h-6 rounded shrink-0 flex items-center justify-center overflow-hidden bg-black/40">
+                        {skill ? (
+                          <img src={`/images/skills/${skill.id}_skill.webp`} alt={skill.name} className="w-full h-full object-contain" />
+                        ) : (
+                          <span className="text-xs">🔮</span>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-[10px] font-black truncate">{skill ? skill.name : "ช่องสกิลว่าง"}</div>
                         {skill && <div className="text-[8px] text-white/40 truncate">{skill.description}</div>}
@@ -381,6 +426,7 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <ItemGrantCard
                       icon="🪄"
+                      img={player.commonWandImg}
                       title={`ไม้ทั่วไป: ${player.commonWand}`}
                       desc="ไม้ประจำบ้าน (+20 DMG)"
                       badge="COMMON"
@@ -395,6 +441,7 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                     />
                     <ItemGrantCard
                       icon="✨"
+                      img={player.vipWandImg}
                       title={`ไม้ VIP: ${player.vipWand}`}
                       desc="ไม้ VIP ประจำบ้าน (+35 DMG)"
                       badge="VIP TIER"
@@ -480,7 +527,8 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                     {POTION_LIST.map((potion) => (
                       <ItemGrantCard
                         key={potion.id}
-                        icon={potion.emoji}
+                        icon={null}
+                        img={potion.image}
                         title={potion.name}
                         desc={potion.description}
                         badge={potion.nameEn}
@@ -508,7 +556,8 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                     {SKILL_LIST.map((skill) => (
                       <ItemGrantCard
                         key={skill.id}
-                        icon={skill.emoji}
+                        icon={null}
+                        img={`/images/skills/${skill.id}_skill.webp`}
                         title={skill.name}
                         desc={skill.description}
                         stats={`CoolDown: ${skill.cooldown} Turns`}
@@ -596,13 +645,30 @@ function ShopTab({ active, icon, label, onClick }) {
   );
 }
 
-function ItemGrantCard({ icon, title, desc, stats, badge, badgeColor, onGrant }) {
+function ItemGrantCard({ icon, img, title, desc, stats, badge, badgeColor, onGrant }) {
   return (
     <div className="bg-black/50 border border-white/10 hover:border-amber-500/50 rounded-xl p-3 flex flex-col justify-between transition-all group">
       <div>
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="flex items-center gap-2 font-black text-xs text-white">
-            <span className="text-lg">{icon}</span>
+            <div className="w-7 h-7 rounded-lg border border-white/10 bg-black/60 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {img ? (
+                <>
+                  <img
+                    src={img}
+                    alt={title}
+                    className="w-full h-full object-contain p-0.5"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling.style.display = "flex";
+                    }}
+                  />
+                  <span className="hidden w-full h-full items-center justify-center text-lg">{icon}</span>
+                </>
+              ) : (
+                <span className="text-lg">{icon}</span>
+              )}
+            </div>
             <span className="group-hover:text-amber-300 transition-colors">{title}</span>
           </div>
           {badge && (

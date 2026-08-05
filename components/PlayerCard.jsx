@@ -17,10 +17,10 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
 
   // Equipment slots helper
   const equipSlots = [
-    { type: "Wand", icon: "🪄", item: player.wand ? (player.wand.name || (player.wand.type === "vip" ? "VIP Wand" : "Common Wand")) : null },
+    { type: "Wand", icon: "🪄", item: player.wand ? (player.wand.name || (player.wand.type === "vip" ? "VIP Wand" : "Common Wand")) : null, img: player.wand ? (player.wand.type === "vip" ? player.vipWandImg : player.commonWandImg) : null },
     { type: "Armor", icon: "🛡️", item: player.armor ? player.armor.name : null },
     { type: "Amulet", icon: "📿", item: player.amulet ? player.amulet.name : null },
-    { type: "Pet", icon: "🐾", item: player.pet ? player.pet.name : null },
+    { type: "Pet", icon: "🐾", item: player.pet ? player.pet.name : null, img: player.pet ? `/images/pets/${player.pet.id}.png` : null },
   ];
 
   // Potion inventory slots (5 slots)
@@ -131,8 +131,23 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
                   }`}
                   title={slot.item ? `${slot.type}: ${slot.item}` : `ช่องว่าง (${slot.type})`}
                 >
-                  <span className="text-[10px]">{slot.icon}</span>
-                  <span className="text-[8px] font-black truncate w-full">{slot.item || slot.type}</span>
+                  {slot.item && slot.img ? (
+                    <>
+                      <img
+                        src={slot.img}
+                        alt={slot.item}
+                        className="w-full h-full object-contain p-0.5 absolute inset-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          e.currentTarget.nextElementSibling.style.display = "flex";
+                        }}
+                      />
+                      <span className="hidden w-full h-full items-center justify-center text-[10px]">{slot.icon}</span>
+                    </>
+                  ) : (
+                    <span className="text-[10px]">{slot.icon}</span>
+                  )}
+                  <span className="text-[8px] font-black truncate w-full relative z-10 bg-black/40 px-0.5 rounded">{slot.item || slot.type}</span>
                 </div>
               ))}
             </div>
@@ -158,7 +173,26 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
                     }`}
                     title={pot ? pot.name : "ช่องยาว่าง"}
                   >
-                    {pot ? pot.emoji : "•"}
+                    {pot ? (
+                      pot.image ? (
+                        <>
+                          <img
+                            src={pot.image}
+                            alt={pot.name}
+                            className="w-full h-full object-contain p-0.5"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                              e.currentTarget.nextElementSibling.style.display = "flex";
+                            }}
+                          />
+                          <span className="hidden w-full h-full items-center justify-center text-sm" />
+                        </>
+                      ) : (
+                        <span />
+                      )
+                    ) : (
+                      "•"
+                    )}
                   </button>
                 );
               })}
@@ -190,10 +224,16 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
                     }`}
                     title={skill ? `${skill.nameTh || skill.name}: ${skill.description}` : "ยังไม่ได้รับการฝึกคาถา"}
                   >
-                    <span className="text-sm">{skill ? skill.emoji : "🔮"}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-black truncate">{skill ? (skill.nameTh || skill.name) : "ว่าง"}</div>
-                    </div>
+                    <div className="w-6 h-6 rounded shrink-0 flex items-center justify-center overflow-hidden bg-black/40">
+                    {skill ? (
+                      <img src={`/images/skills/${skill.id}_skill.webp`} alt={skill.name} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-sm">🔮</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-black truncate">{skill ? (skill.nameTh || skill.name) : "ว่าง"}</div>
+                  </div>
                     {cd > 0 && <span className="text-[8px] bg-red-950 text-red-400 border border-red-500/30 px-1 rounded font-black">{cd}T</span>}
                   </button>
                 );

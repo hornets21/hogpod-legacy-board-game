@@ -260,7 +260,8 @@ export default function SetupModal({ players, onCompleteSetup }) {
                       owned={isOwned}
                       disabled={!isOwned && currentPlayer.skills.length >= 2}
                       onBuy={() => handleToggleEquip("skill", sk.id)}
-                      icon={sk.emoji}
+                      icon={null}
+                      img={`/images/skills/${sk.id}_skill.webp`}
                     />
                   );
                 })}
@@ -300,7 +301,7 @@ function SlotFrame({ label, icon, img, active, itemTitle, itemSub }) {
           <img
             src={img}
             alt={label}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-0.5"
             onError={(e) => {
               e.currentTarget.style.display = "none";
               e.currentTarget.nextElementSibling.style.display = "block";
@@ -351,7 +352,7 @@ function ShopCard({ title, desc, price, gold, onBuy, icon, img, owned = false, d
           <img
             src={img}
             alt={title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-0.5"
             onError={(e) => {
               e.currentTarget.style.display = "none";
               e.currentTarget.nextElementSibling.style.display = "block";
