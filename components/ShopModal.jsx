@@ -130,7 +130,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
                         price={pot.price}
                         gold={player.gold}
                         icon={pot.emoji}
-                        img={`/images/items/potion_${id}.png`}
+                        img={pot.image}
                         disabled={player.potions.length >= 5}
                         onBuy={() => onBuy("potion", id)}
                       />

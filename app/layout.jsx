@@ -4,6 +4,22 @@ export const metadata = {
   title: "ห้องแห่งความลับ — โรงเรียนไสยศาสตร์ฮอกปด",
   description:
     "บอร์ดเกมบันไดงูสุดมันส์ มี 4 บ้าน กระดาน 90 ช่อง มอนสเตอร์ สกิล ยา และสัตว์วิเศษ",
+  manifest: "/site.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "ฮอกปด Board",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({ children }) {
