@@ -262,15 +262,12 @@ export default function BoardCanvas({
         camera={{ position: [0, 11, 10.8], fov: 40, near: 0.1, far: 80 }}
         gl={{
           antialias: true,
-          alpha: false,
+          alpha: true, // เปิดความโปร่งใสเพื่อให้มองเห็นภาพพื้นหลัง CSS ชัดเจน
           powerPreference: "high-performance",
           precision: "mediump", // โหมดการประมวลผลการ์ดจอความเร็วสูง เหมาะสำหรับคอมสเปกต่ำ
           failIfMajorPerformanceCaveat: false,
         }}
       >
-        <color attach="background" args={["#070912"]} />
-        <fog attach="fog" args={["#070912", 15, 36]} />
-
         <SceneLights />
         <CameraRig />
 

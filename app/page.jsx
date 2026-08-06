@@ -626,8 +626,18 @@ export default function Home() {
   return (
     <motion.div
       animate={shakeControls}
-      className="game-shell relative w-screen h-screen overflow-hidden bg-[#070912]"
+      className="game-shell relative w-screen h-screen overflow-hidden bg-black"
     >
+      {/* ── Background Animated Video (Loop) ───────────────────── */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0 opacity-90 pointer-events-none"
+      >
+        <source src="/images/system/magic_room_loop.webm" type="video/webm" />
+      </video>
 
       {/* ── 3D Canvas (Full Screen Viewport) ───────────────────── */}
       {state.phase !== "title" && (

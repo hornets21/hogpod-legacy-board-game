@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { BOARD_COLS, BOARD_ROWS, TILE_GAP } from "@/lib/boardLayout";
 import { getGlowTexture } from "./textures";
@@ -15,28 +15,26 @@ const BOARD_W = BOARD_COLS * TILE_GAP;
 const BOARD_D = BOARD_ROWS * TILE_GAP;
 
 export default function Atmosphere() {
+  const pedestalTexture = useLoader(THREE.TextureLoader, "/images/textures/ancient-dark-stone-pedestal-slab.webp");
+
+  useMemo(() => {
+    if (pedestalTexture) {
+      pedestalTexture.colorSpace = THREE.SRGBColorSpace;
+      pedestalTexture.wrapS = THREE.RepeatWrapping;
+      pedestalTexture.wrapT = THREE.RepeatWrapping;
+      pedestalTexture.repeat.set(4, 4); // ปรับลาย Texture ให้มีสเกลเล็กละเอียด สมจริง ไม่ขยายใหญ่เกินไป
+    }
+  }, [pedestalTexture]);
+
   return (
     <group>
-      {/* พื้นปราสาทรอบกระดาน */}
-      <mesh position={[0, -0.46, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[70, 70]} />
-        <meshStandardMaterial color="#0a0d17" roughness={1} metalness={0} />
-      </mesh>
-
-      {/* แท่นหินรองกระดาน */}
-      <mesh position={[0, -0.24, 0]} receiveShadow>
-        <boxGeometry args={[BOARD_W + 0.9, 0.44, BOARD_D + 0.9]} />
-        <meshStandardMaterial color="#171c2c" roughness={0.92} metalness={0.05} />
-      </mesh>
-      {/* ขอบทองของแท่น */}
-      <mesh position={[0, -0.03, 0]}>
-        <boxGeometry args={[BOARD_W + 0.94, 0.03, BOARD_D + 0.94]} />
+      {/* แท่นหินรองกระดานขนาดพอดี ได้สัดส่วนสมจริง */}
+      <mesh position={[0, -0.16, 0]} receiveShadow>
+        <boxGeometry args={[BOARD_W + 0.8, 0.28, BOARD_D + 0.8]} />
         <meshStandardMaterial
-          color="#3a2f14"
-          emissive="#f0b85b"
-          emissiveIntensity={0.25}
-          roughness={0.5}
-          metalness={0.4}
+          map={pedestalTexture}
+          roughness={0.75}
+          metalness={0.1}
         />
       </mesh>
 
@@ -185,17 +183,17 @@ function FlickeringLights() {
       <pointLight
         ref={l1}
         position={[-(BOARD_W / 2 + 1.7), 3, 0]}
-        color="#ffb45e"
-        intensity={26}
-        distance={16}
+        color="#ffe2b4"
+        intensity={8}
+        distance={14}
         decay={2}
       />
       <pointLight
         ref={l2}
         position={[BOARD_W / 2 + 1.7, 3.4, 0]}
-        color="#ffb45e"
-        intensity={22}
-        distance={16}
+        color="#ffe2b4"
+        intensity={6}
+        distance={14}
         decay={2}
       />
     </group>
