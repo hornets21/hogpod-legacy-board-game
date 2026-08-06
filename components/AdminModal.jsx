@@ -11,12 +11,14 @@ import {
   PETS,
   PET_LIST,
   WANDS,
+  NPCS,
+  NPC_CONFIG,
 } from "@/lib/gameData";
 import { getTotalDmg } from "@/lib/gameEngine";
 
 import { setSfxVolume, getSfxVolume } from "@/lib/sfx";
 
-export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, onToggleBgm, onConfirmSetup }) {
+export default function AdminModal({ state, players, onDispatch, onClose, isBgmMuted, onToggleBgm, onConfirmSetup }) {
   const [selectedHouseIdx, setSelectedHouseIdx] = useState(0);
   const [activeCategory, setActiveCategory] = useState("gold"); // gold | wand | armor | amulet | potion | skill | pet
   const [sfxVol, setSfxVolState] = useState(() => (typeof window !== "undefined" ? getSfxVolume() : 0.8));
@@ -443,6 +445,7 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-white/10 flex-shrink-0 mb-3">
               <ShopTab active={activeCategory === "gold"} icon="💰" label="เงิน Gold" onClick={() => setActiveCategory("gold")} />
+              <ShopTab active={activeCategory === "npc"} icon="🤖" label="ระบบ NPC & Gold" onClick={() => setActiveCategory("npc")} />
               <ShopTab active={activeCategory === "wand"} icon="🪄" label="ไม้กายสิทธิ์" onClick={() => setActiveCategory("wand")} />
               <ShopTab active={activeCategory === "armor"} icon="🛡️" label="เสื้อเกราะ" onClick={() => setActiveCategory("armor")} />
               <ShopTab active={activeCategory === "amulet"} icon="📿" label="เครื่องราง" onClick={() => setActiveCategory("amulet")} />
@@ -455,9 +458,38 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
             <div className="flex-1 overflow-y-auto pr-1">
               {/* GOLD CATEGORY */}
               {activeCategory === "gold" && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* MOBA Passive Gold Admin Controls */}
+                  <div className="bg-black/50 border border-amber-500/30 p-3 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">💰</span>
+                        <div className="font-black text-xs text-amber-300 uppercase tracking-wider">
+                          ระบบเพิ่มเงินอัตโนมัติ (MOBA Auto Gold)
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onDispatch({ type: "TOGGLE_AUTO_GOLD" })}
+                        className="px-3 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-black text-xs transition-all"
+                      >
+                        ⚡ สลับเปิด/ปิด
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-white/60">
+                      แจกเงิน Passive Gold อัตโนมัติให้ทุกบ้านที่ยังไม่เสียชีวิตทุกๆ 3 วินาที (+20 Gold / tick)
+                    </p>
+                    <div className="pt-1">
+                      <button
+                        onClick={() => onDispatch({ type: "TRIGGER_GOLD_RAIN" })}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-95 transition-all"
+                      >
+                        <span>🌧️</span> 💰 ปล่อยฝนเงิน MOBA Rain (+1,000 Gold ให้ทุกบ้าน)
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="text-xs font-black text-amber-400 uppercase tracking-wider">
-                    💰 แจกเงิน Gold ให้ {player.name}:
+                    💰 แจกเงิน Gold รายบ้าน ให้ {player.name}:
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[2000, 5000, 10000, 50000, 100000].map((amt) => (
@@ -476,6 +508,144 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
                         <span>+{amt.toLocaleString()} Gold</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* NPC & MOBA SYSTEM CATEGORY */}
+              {activeCategory === "npc" && (
+                <div className="space-y-4">
+                  {/* MOBA Gold Rate Customizer */}
+                  <div className="bg-black/60 border border-amber-500/40 p-4 rounded-2xl space-y-3 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">💰</span>
+                        <div>
+                          <h4 className="font-black text-sm text-amber-300">ตั้งค่าระบบเงิน MOBA Auto Gold</h4>
+                          <p className="text-[11px] text-slate-300">ปรับเปลี่ยนความเร็วและจำนวนเงิน Passive Gold ที่แจกให้ผู้เล่นอัตโนมัติ</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onDispatch({ type: "TOGGLE_AUTO_GOLD" })}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-black transition-all ${
+                          state?.autoGoldEnabled !== false
+                            ? "bg-emerald-950/80 border-emerald-500/60 text-emerald-300"
+                            : "bg-red-950/80 border-red-500/60 text-red-300"
+                        }`}
+                      >
+                        {state?.autoGoldEnabled !== false ? "🟢 เปิดใช้งานอยู่" : "🔴 ปิดใช้งาน"}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {[
+                        { label: "Standard (+10g/3s)", amt: 10, sec: 3 },
+                        { label: "Fast (+20g/3s)", amt: 20, sec: 3 },
+                        { label: "Turbo (+50g/2s)", amt: 50, sec: 2 },
+                        { label: "Ultra (+100g/1s)", amt: 100, sec: 1 },
+                      ].map((p) => {
+                        const isCurrent = (state?.autoGoldAmount ?? 10) === p.amt && (state?.autoGoldInterval ?? 3) === p.sec;
+                        return (
+                          <button
+                            key={p.label}
+                            onClick={() =>
+                              onDispatch({
+                                type: "SET_AUTO_GOLD_SETTINGS",
+                                autoGoldAmount: p.amt,
+                                autoGoldInterval: p.sec,
+                                autoGoldEnabled: true,
+                              })
+                            }
+                            className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all ${
+                              isCurrent
+                                ? "bg-amber-500/30 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)] scale-[1.02]"
+                                : "bg-slate-900/80 border-slate-800 text-slate-300 hover:border-amber-500/40"
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* NPC Control & Respawn Section */}
+                  <div className="bg-black/60 border border-blue-500/40 p-4 rounded-2xl space-y-3 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">🧙‍♂️</span>
+                        <div>
+                          <h4 className="font-black text-sm text-blue-300">ระบบสุ่มเกิดและควบคุม NPC บนกระดาน</h4>
+                          <p className="text-[11px] text-slate-300">บังคับสุ่มเกิด NPC ใหม่ หรือวาร์ปตัวละครไปยังตำแหน่ง NPC</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onDispatch({ type: "SPAWN_ALL_NPCS" })}
+                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(59,130,246,0.4)] transition-all active:scale-95 flex items-center gap-1.5"
+                      >
+                        <span>🔄</span>
+                        <span>สุ่มเกิด NPC ทั้งหมดทันที</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      {Object.values(NPCS).map((npc) => {
+                        const npcState = state?.npcs?.[npc.id];
+                        const isSpawned = npcState?.isSpawned;
+                        const cell = npcState?.cell;
+                        const cd = npcState?.cooldown || 0;
+
+                        return (
+                          <div
+                            key={npc.id}
+                            className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between space-y-2"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
+                                <img src={npc.image} alt={npc.name} className="w-full h-full object-cover object-top" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs text-white truncate flex items-center gap-1">
+                                  <span>{npc.emoji}</span>
+                                  <span>{npc.name}</span>
+                                </div>
+                                <div className="mt-1">
+                                  {isSpawned ? (
+                                    <span className="text-[10px] bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                                      📍 เกิดที่ช่อง {cell}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] bg-amber-950/80 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                                      ⏳ เกิดใหม่ใน {Math.floor(cd / 60)}:{Math.max(0, cd % 60).toString().padStart(2, "0")} นาที ({cd}s)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5 pt-1">
+                              <button
+                                onClick={() => onDispatch({ type: "FORCE_SPAWN_NPC", npcId: npc.id })}
+                                className="py-1.5 px-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-400/50 text-blue-200 font-bold text-[10px] transition-all"
+                              >
+                                ⚡ สุ่มเกิดใหม่
+                              </button>
+                              <button
+                                disabled={!isSpawned}
+                                onClick={() => onDispatch({ type: "TELEPORT_TO_NPC", npcId: npc.id, playerIndex: selectedHouseIdx })}
+                                className={`py-1.5 px-2 rounded-xl border text-[10px] font-bold transition-all ${
+                                  isSpawned
+                                    ? "bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300"
+                                    : "bg-slate-800/40 border-slate-700 text-slate-500 cursor-not-allowed"
+                                }`}
+                              >
+                                🚀 วาร์ปหา NPC
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}

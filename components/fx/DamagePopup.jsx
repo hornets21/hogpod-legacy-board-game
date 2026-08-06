@@ -23,6 +23,7 @@ export default function DamagePopup({ playerIndex }) {
       case "skill_monster": return "#f59e0b"; // ส้ม
       case "monster":       return "#ef4444";
       case "heal":          return "#22c55e"; // เขียว
+      case "gold":          return "#facc15"; // เหลืองทอง MOBA Gold
       case "buff":          return "#fbbf24"; // ทอง
       case "monster_died":  return "#a855f7"; // ม่วง
       default:              return "#ef4444";
@@ -47,16 +48,19 @@ export default function DamagePopup({ playerIndex }) {
   }, [playerIndex]);
 
   useEffect(() => {
-    // Subscribe ทั้ง damage + heal event
+    // Subscribe ทั้ง damage + heal + gold event
     const unsubDamage = on(FX_EVENTS.DAMAGE_DEALT, pushPopup);
     const unsubHeal = on(FX_EVENTS.HEAL, (p) => {
       pushPopup({ targetIndex: p.targetIndex, amount: p.amount, type: "heal" });
     });
+    const unsubGold = on(FX_EVENTS.GOLD_GAIN, (p) => {
+      pushPopup({ targetIndex: p.targetIndex, amount: p.amount, type: "gold" });
+    });
 
-    // monster_died → แสดงป้ายว่ากำจัดมอนสเตอร์ (ถ้าผู้เล่นนั้นคือคนปล่อย skill)
     return () => {
       unsubDamage();
       unsubHeal();
+      unsubGold();
     };
   }, [pushPopup]);
 
@@ -76,10 +80,10 @@ export default function DamagePopup({ playerIndex }) {
               textShadow: `0 0 10px ${colorFor(p.type)}`,
             }}
           >
-            {p.type === "heal" ? "+" : "-"}
+            {p.type === "heal" || p.type === "gold" ? "+" : "-"}
             {p.amount}
             <span className="text-xs ml-0.5 opacity-90">
-              {p.type === "heal" ? "HP" : "DMG"}
+              {p.type === "heal" ? "HP" : p.type === "gold" ? "Gold" : "DMG"}
             </span>
           </motion.div>
         ))}

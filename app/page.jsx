@@ -15,7 +15,12 @@ import GameLog from "@/components/GameLog";
 import AdminModal from "@/components/AdminModal";
 import SkillTargetPicker from "@/components/SkillTargetPicker";
 import TrapCellPicker from "@/components/TrapCellPicker";
-import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy } from "@/lib/skillFxBus";
+import MobaAutoGoldWidget from "@/components/MobaAutoGoldWidget";
+import NpcSpawnWidget from "@/components/NpcSpawnWidget";
+import NpcSkillModal from "@/components/NpcSkillModal";
+import NpcPetModal from "@/components/NpcPetModal";
+import NpcDoctorModal from "@/components/NpcDoctorModal";
+import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain } from "@/lib/skillFxBus";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
 const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
@@ -42,6 +47,13 @@ import {
   saveGameState,
   loadGameState,
   clearSavedGameState,
+  handleNpcLanding,
+  swapPlayerSkill,
+  changePlayerPet,
+  despawnNpc,
+  spawnNpc,
+  spawnAllNpcs,
+  tickNpcCooldowns,
 } from "@/lib/gameEngine";
 
 import { MONSTER_MAP, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS } from "@/lib/gameData";
@@ -145,6 +157,35 @@ function gameReducer(state, action) {
         };
       }
 
+      // 3. ตรวจสอบ NPC บนช่องกระดาน
+      const spawnedNpc = Object.values(next.npcs || {}).find(
+        (n) => n && n.isSpawned && n.cell === player.position
+      );
+      if (spawnedNpc) {
+        const npcResult = handleNpcLanding(next, state.currentPlayerIndex, spawnedNpc.id);
+        if (npcResult.action === "doctor_granted") {
+          return {
+            ...npcResult.state,
+            doctorModalData: { player, grantedPotions: npcResult.grantedPotions },
+          };
+        }
+        if (npcResult.action === "open_skill_modal") {
+          return {
+            ...npcResult.state,
+            skillModalPlayer: player,
+          };
+        }
+        if (npcResult.action === "open_pet_modal") {
+          return {
+            ...npcResult.state,
+            petModalPlayer: player,
+          };
+        }
+        if (npcResult.action === "skill_granted" || npcResult.action === "pet_granted") {
+          return npcResult.state;
+        }
+      }
+
       return advanceTurn(next);
     }
 
@@ -217,6 +258,47 @@ function gameReducer(state, action) {
 
     case "OPEN_SHOP": {
       return { ...state, shopOpen: true };
+    }
+
+    case "SWAP_NPC_SKILL": {
+      return swapPlayerSkill(state, state.currentPlayerIndex, action.oldSkillId, action.newSkill);
+    }
+
+    case "CHANGE_NPC_PET": {
+      return changePlayerPet(state, state.currentPlayerIndex, action.newPet);
+    }
+
+    case "CLOSE_DOCTOR_MODAL": {
+      return { ...state, doctorModalData: null };
+    }
+
+    case "CLOSE_SKILL_MODAL": {
+      return despawnNpc({ ...state, skillModalPlayer: null }, "skill_trainer");
+    }
+
+    case "CLOSE_PET_MODAL": {
+      return despawnNpc({ ...state, petModalPlayer: null }, "pet_trainer");
+    }
+
+    case "FORCE_SPAWN_NPC": {
+      return spawnNpc(state, action.npcId);
+    }
+
+    case "SPAWN_ALL_NPCS": {
+      return spawnAllNpcs(state);
+    }
+
+    case "TELEPORT_TO_NPC": {
+      const npc = state.npcs?.[action.npcId];
+      if (!npc || !npc.cell) return state;
+      const players = [...state.players];
+      const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      players[targetIdx] = { ...players[targetIdx], position: npc.cell };
+      return {
+        ...state,
+        players,
+        log: [...state.log, `🌀 [แอดมิน] วาร์ป ${players[targetIdx].name} ไปยังช่อง ${npc.cell} (NPC ${action.npcId})`],
+      };
     }
 
     case "CLOSE_SHOP": {
@@ -451,6 +533,67 @@ function gameReducer(state, action) {
       };
     }
 
+    case "TICK_SECOND": {
+      return tickNpcCooldowns(state, 1);
+    }
+
+    case "PASSIVE_GOLD_TICK": {
+      if (state.autoGoldEnabled === false) return state;
+      const goldAmt = state.autoGoldAmount ?? 10;
+      const players = state.players.map((p, idx) => {
+        if (!p.isAlive || p.hp <= 0) return p;
+        emitGoldGain({ targetIndex: idx, amount: goldAmt });
+        return { ...p, gold: p.gold + goldAmt };
+      });
+      return {
+        ...state,
+        players,
+        autoGoldTickCount: (state.autoGoldTickCount || 0) + 1,
+      };
+    }
+
+    case "TOGGLE_AUTO_GOLD": {
+      const nextEnabled = !state.autoGoldEnabled;
+      return {
+        ...state,
+        autoGoldEnabled: nextEnabled,
+        log: [
+          ...state.log,
+          `💰 ${nextEnabled ? "เปิด" : "ปิด"}ระบบแจกเงินอัตโนมัติ (MOBA Auto Gold)`,
+        ],
+      };
+    }
+
+    case "SET_AUTO_GOLD_SETTINGS": {
+      const autoGoldAmount = action.autoGoldAmount ?? state.autoGoldAmount;
+      const autoGoldInterval = action.autoGoldInterval ?? state.autoGoldInterval;
+      const autoGoldEnabled = action.autoGoldEnabled ?? state.autoGoldEnabled;
+      return {
+        ...state,
+        autoGoldAmount,
+        autoGoldInterval,
+        autoGoldEnabled,
+        log: [
+          ...state.log,
+          `⚙️ ปรับแต่ง MOBA Auto Gold: +${autoGoldAmount.toLocaleString()} Gold ทุกๆ ${autoGoldInterval} วินาที`,
+        ],
+      };
+    }
+
+    case "TRIGGER_GOLD_RAIN": {
+      const bonus = 1000;
+      const players = state.players.map((p, idx) => {
+        if (!p.isAlive || p.hp <= 0) return p;
+        emitGoldGain({ targetIndex: idx, amount: bonus });
+        return { ...p, gold: p.gold + bonus };
+      });
+      return {
+        ...state,
+        players,
+        log: [...state.log, `🌧️ 💰 ฝนเงิน MOBA ตกลงมา! ทุกบ้านได้รับ +1,000 Gold ทันที!`],
+      };
+    }
+
     case "LOAD_SAVED_STATE": {
       return action.savedState;
     }
@@ -490,6 +633,36 @@ export default function Home() {
       }
     }
   }, [state, hasHydrated]);
+
+  // MOBA Passive Gold Interval Effect
+  useEffect(() => {
+    if (!hasHydrated || !state) return;
+    if (state.phase === "title" || state.phase === "setup" || state.phase === "initiative" || state.winner) {
+      return;
+    }
+    if (state.autoGoldEnabled === false) return;
+
+    const intervalMs = (state.autoGoldInterval || 3) * 1000;
+    const timer = setInterval(() => {
+      dispatch({ type: "PASSIVE_GOLD_TICK" });
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [hasHydrated, state?.phase, state?.winner, state?.autoGoldEnabled, state?.autoGoldInterval]);
+
+  // NPC Respawn Timer Ticker (Every 1 Second)
+  useEffect(() => {
+    if (!hasHydrated || !state) return;
+    if (state.phase === "title" || state.phase === "setup" || state.phase === "initiative" || state.winner) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      dispatch({ type: "TICK_SECOND" });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [hasHydrated, state?.phase, state?.winner]);
 
   const [isRolling, setIsRolling] = useState(false);
   const [tempDice, setTempDice] = useState(null);
@@ -650,6 +823,7 @@ export default function Home() {
             cellTeleport={state.cellTeleport}
             trapCells={state.trapCells}
             usedLadders={state.usedLadders}
+            npcs={state.npcs}
             currentPlayerIndex={state.currentPlayerIndex}
             phase={state.phase}
             isRolling={isRolling}
@@ -706,6 +880,12 @@ export default function Home() {
 
           {/* ── Top Floating Bar: Action Buttons + Admin + Game Title + BGM Controller ────────────── */}
           <div className="flex items-center justify-end w-full gap-2 pointer-events-auto">
+            {/* NPC Spawn Timer Widget */}
+            <NpcSpawnWidget state={state} />
+
+            {/* MOBA Auto Gold Widget */}
+            <MobaAutoGoldWidget state={state} onDispatch={dispatch} />
+
             {/* Background Music Player */}
             <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
 
@@ -855,6 +1035,7 @@ export default function Home() {
       {/* ── Pre-Game Setup via Admin Modal (Primary Equipment & Player Config) ── */}
       {(state.phase === "setup" || adminOpen) && (
         <AdminModal
+          state={state}
           players={state.players}
           onDispatch={dispatch}
           onClose={() => setAdminOpen(false)}
@@ -979,6 +1160,39 @@ export default function Home() {
         onConfirm={handleTrapConfirm}
         onCancel={handleTrapCancel}
       />
+
+
+
+      {/* ── NPC Doctor Modal ────────────────────────────────────── */}
+      {state.doctorModalData && (
+        <NpcDoctorModal
+          player={state.doctorModalData.player}
+          grantedPotions={state.doctorModalData.grantedPotions}
+          onClose={() => dispatch({ type: "CLOSE_DOCTOR_MODAL" })}
+        />
+      )}
+
+      {/* ── NPC Skill Swap Modal ───────────────────────────────── */}
+      {state.skillModalPlayer && (
+        <NpcSkillModal
+          player={state.skillModalPlayer}
+          onConfirmSwap={(oldSkillId, newSkill) => {
+            dispatch({ type: "SWAP_NPC_SKILL", oldSkillId, newSkill });
+          }}
+          onClose={() => dispatch({ type: "CLOSE_SKILL_MODAL" })}
+        />
+      )}
+
+      {/* ── NPC Pet Swap Modal ─────────────────────────────────── */}
+      {state.petModalPlayer && (
+        <NpcPetModal
+          player={state.petModalPlayer}
+          onConfirmChangePet={(newPet) => {
+            dispatch({ type: "CHANGE_NPC_PET", newPet });
+          }}
+          onClose={() => dispatch({ type: "CLOSE_PET_MODAL" })}
+        />
+      )}
 
       {/* ── Win Screen ─────────────────────────────────────────── */}
       {state.winner && (

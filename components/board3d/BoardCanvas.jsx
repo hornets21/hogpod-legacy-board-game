@@ -18,6 +18,7 @@ import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
 import PlaneMonster from "./PlaneMonster";
 import SkillFxLayer from "./SkillFxLayer";
+import NpcModels from "./NpcModels";
 import { MONSTER_MAP } from "@/lib/gameData";
 
 // ─── พิกัดประจำและค่าฟิสิกส์การกระเด้งของลูกเต๋า 3D ──────────
@@ -244,6 +245,7 @@ export default function BoardCanvas({
   cellTeleport,
   trapCells,
   usedLadders,
+  npcs,
   currentPlayerIndex,
   phase,
   isRolling,
@@ -290,6 +292,9 @@ export default function BoardCanvas({
             monsterMap={monsterMap}
             cellTeleport={cellTeleport}
           />
+          {/* NPC Models Layer — สุ่มเกิด 3D Billboard บนกระดาน */}
+          <NpcModels npcs={npcs} />
+
           {/* แสดงภาพมอนสเตอร์ 2D Plane สำหรับมอนสเตอร์ที่ยังไม่ถูกกำจัด */}
           {Array.from(monsterCells || []).map((cellNum) => {
             const c = Number(cellNum);
