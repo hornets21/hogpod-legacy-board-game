@@ -11,14 +11,25 @@ import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { cellToWorld } from "@/lib/boardLayout";
 
+// โหลด Texture พร้อมป้อน Fallback กรณีหาไฟล์รูปไม่พบ
+function useMonsterTexture(imagePath) {
+  const defaultPath = "/images/monsters/ชบ7000.webp";
+  const validPath = imagePath || defaultPath;
+  
+  try {
+    return useLoader(THREE.TextureLoader, validPath);
+  } catch (err) {
+    return useLoader(THREE.TextureLoader, defaultPath);
+  }
+}
+
 export default function PlaneMonster({ cell, imagePath, isBoss = false, isDefeated = false }) {
   const meshRef = useRef(null);
   const shadowRef = useRef(null);
   const opacityRef = useRef(1);
 
   // ป้องกัน Error กรณีรูปภาพไม่มีในเครื่อง ให้ Fallback ไปยังรูปที่มีแน่นอนเสมอ
-  const validPath = imagePath || "/images/monsters/ชบ7000.webp";
-  const texture = useLoader(THREE.TextureLoader, validPath);
+  const texture = useMonsterTexture(imagePath);
 
   // ปรับการตั้งค่า Texture ให้คมชัดสูง
   useMemo(() => {

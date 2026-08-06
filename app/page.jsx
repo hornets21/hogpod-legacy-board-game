@@ -87,6 +87,32 @@ function gameReducer(state, action) {
         revealedMonsters[player.position] = monster;
         next = { ...next, revealedMonsters };
 
+        // กรณีเป็นมอนสเตอร์สายรักษา (isHealer เช่น เทพธิดาเอวา) -> สุ่มรักษาเลือดผู้เล่น 30% - 100%
+        if (monster.isHealer) {
+          const healPct = Math.floor(Math.random() * 71) + 30; // สุ่ม 30 ถึง 100
+          const maxHp = player.maxHp || 100;
+          const healAmount = Math.round((maxHp * healPct) / 100);
+          const newHp = Math.min(maxHp, player.hp + healAmount);
+
+          const updatedPlayer = { ...player, hp: newHp };
+          const updatedPlayers = [...next.players];
+          updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
+
+          const updatedMonsterCells = new Set(next.monsterCells);
+          updatedMonsterCells.delete(player.position);
+
+          next = {
+            ...next,
+            players: updatedPlayers,
+            monsterCells: updatedMonsterCells,
+            log: [
+              ...next.log,
+              `✨ ${monster.name} มอบพรแห่งการรักษา! ฟื้นฟู HP ให้ ${player.name} ${healPct}% (+${healAmount} HP)`,
+            ],
+          };
+          return advanceTurn(next);
+        }
+
         // Check if player can dodge (Bank pet)
         const hasDodge = player.pet?.effect === "dodge_once" && !player.dodgeUsed;
 

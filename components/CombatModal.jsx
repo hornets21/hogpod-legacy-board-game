@@ -153,11 +153,15 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
 
             {/* Monster Image Frame */}
             <div className="w-32 h-32 my-2 rounded-2xl border-2 border-red-400/60 overflow-hidden bg-black/80 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.3)]">
-              {monsterIdleImg ? (
-                <img src={monsterIdleImg} alt={monster.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-5xl">{monster.emoji || "VS"}</span>
-              )}
+              <img
+                src={monster.image || "/images/monsters/ชบ7000.webp"}
+                alt={monster.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "/images/monsters/ชบ7000.webp";
+                }}
+              />
             </div>
 
             <h3 className="font-black text-white text-xl">{monster.name}</h3>
