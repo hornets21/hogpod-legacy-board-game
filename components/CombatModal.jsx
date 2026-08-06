@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import WheelOfFate from "@/components/WheelOfFate";
 import { getTotalDmg } from "@/lib/gameEngine";
 
 export default function CombatModal({ combatState, player, onResolveCombat, onUseSkill, onFlee }) {
   const [introState, setIntroState] = useState("intro"); // "intro" | "ready"
+  const [hitStop, setHitStop] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -34,6 +36,17 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
     <div className="fixed inset-0 z-50 flex items-center justify-center select-none overflow-hidden animate-fade-in">
       {/* Background Dim & Red Vignette */}
       <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+
+      {/* Hit-stop yellow tint (flash) เมื่อ resolve */}
+      {hitStop && (
+        <motion.div
+          initial={{ opacity: 0.55 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="absolute inset-0 z-30 bg-yellow-200 pointer-events-none mix-blend-screen"
+          onAnimationComplete={() => setHitStop(false)}
+        />
+      )}
 
       {/* Top Warning Danger Banner */}
       <div className="absolute top-8 left-0 right-0 py-2 bg-red-950/80 border-y border-red-500/40 flex items-center justify-center gap-6 overflow-hidden transform -skew-y-1 z-20">
@@ -86,7 +99,12 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
                 <span className="text-emerald-400 font-black">{Math.max(0, player.hp)} / {player.maxHp}</span>
               </div>
               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${playerHpPct}%` }} />
+                <motion.div
+                  className="h-full bg-emerald-500 rounded-full"
+                  initial={false}
+                  animate={{ width: `${playerHpPct}%` }}
+                  transition={{ type: "spring", stiffness: 200, damping: 22 }}
+                />
               </div>
               <div className="flex justify-between font-bold text-white/80 pt-1 border-t border-white/10">
                 <span>ATTACK POWER</span>
@@ -117,7 +135,10 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
               <WheelOfFate
                 monster={monster}
                 player={player}
-                onSpinComplete={(outcome) => onResolveCombat(outcome)}
+                onSpinComplete={(outcome) => {
+                  setHitStop(true);
+                  setTimeout(() => onResolveCombat(outcome), 80);
+                }}
               />
             </div>
           )}
@@ -147,9 +168,14 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
                 <span>HP</span>
                 <span className="text-red-400 font-black">{Math.max(0, monster.currentHp)} / {monster.hp}</span>
               </div>
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-red-500 transition-all duration-300" style={{ width: `${hpPct}%` }} />
-              </div>
+<div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-red-500 rounded-full"
+                initial={false}
+                animate={{ width: `${hpPct}%` }}
+                transition={{ type: "spring", stiffness: 200, damping: 22 }}
+              />
+            </div>
               <div className="flex justify-between font-bold text-white/80 pt-1 border-t border-white/10">
                 <span>MONSTER DAMAGE</span>
                 <span className="text-red-400 font-black">{monster.dmg}</span>

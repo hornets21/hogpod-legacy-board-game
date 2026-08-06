@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* ─── Custom Font Setup (HarryP-MVZ6w.woff2) ──────────── */
+@font-face {
+  font-family: "HarryP";
+  src: url("/fonts/HarryP-MVZ6w.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ─── Design Tokens ──────────────────────────────────────── */
 :root {
   color-scheme: dark;
@@ -21,7 +30,8 @@
 
   --house-color: #ffffff;
 
-  --font: "Inter", system-ui, sans-serif;
+  --font-harry: "HarryP", sans-serif;
+  --font: "HarryP", "Inter", system-ui, sans-serif;
 }
 
 /* ─── Reset ──────────────────────────────────────────────── */

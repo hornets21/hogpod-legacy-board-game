@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { SKILLS, POTIONS } from "@/lib/gameData";
 import { getTotalDmg } from "@/lib/gameEngine";
+import {
+  emitSkillCast,
+  emitDamageDealt,
+  emitHeal,
+} from "@/lib/skillFxBus";
+import SkillButton from "@/components/fx/SkillButton";
 
 export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
   const [selectedSkills, setSelectedSkills] = useState({});
@@ -70,6 +76,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
           const healAmt = 30;
           playerObj.hp = Math.min(playerObj.maxHp, playerObj.hp + healAmt);
           logEntries.push(`🧪 ${playerObj.name} ดื่ม Heal Potion (+30 HP)!`);
+          emitHeal({ targetIndex: p.playerIndex, amount: healAmt });
         } else if (potId === "damage") {
           potionBonusDmg += 100;
           logEntries.push(`⚡ ${playerObj.name} ดื่ม Damage Potion (+100 DMG)!`);
@@ -84,6 +91,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
         const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? cdBase - 1 : cdBase;
         playerObj.skillCooldowns = { ...(playerObj.skillCooldowns || {}), [skId]: cdActual };
         logEntries.push(`✨ ${playerObj.name} ปลดปล่อยคาถา "${sk.nameTh || sk.name}"!`);
+        emitSkillCast({ playerId: p.playerIndex, skillId: skId, skillData: sk });
 
         if (sk.dmg) skillBonusDmg += sk.dmg;
       }
@@ -135,6 +143,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       } else if (totalDamageTaken > 0) {
         playerObj.hp = Math.max(0, playerObj.hp - totalDamageTaken);
         logEntries.push(`💥 ${p.name} ได้รับความเสียหาย ${totalDamageTaken} DMG (HP เหลือ ${playerObj.hp})`);
+        emitDamageDealt({ targetIndex: p.playerIndex, amount: totalDamageTaken, type: "pvp" });
       }
 
       updatedPlayers[p.playerIndex] = playerObj;
@@ -445,35 +454,17 @@ function RenderFighterCard({
                 const isReady = cd === 0;
 
                 return (
-                  <button
+                  <SkillButton
                     key={skId}
+                    skillId={skId}
+                    playerIndex={player.playerIndex}
+                    playerId={player.playerIndex}
+                    cooldown={cd}
+                    onUse={(id) => isReady && !clashResult && onToggleSkill(hId, id)}
+                    size="md"
+                    selected={isSelected}
                     disabled={!isReady || !!clashResult}
-                    onClick={() => onToggleSkill(hId, skId)}
-                    className={`w-full p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between ${
-                      isSelected
-                        ? "bg-amber-500/25 border-amber-400 text-amber-200 ring-2 ring-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-                        : isReady
-                        ? "bg-slate-800/90 border-white/15 text-white hover:bg-slate-700/90"
-                        : "bg-slate-950/60 border-white/5 text-white/30 cursor-not-allowed"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg border border-white/15 bg-black/50 flex items-center justify-center overflow-hidden shrink-0">
-                        <img src={`/images/skills/${sk.id}_skill.webp`} alt={sk.name} className="w-full h-full object-contain p-0.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-bold truncate">{sk.nameTh || sk.name}</div>
-                        <div className="text-[9px] text-white/50 truncate">{sk.description}</div>
-                      </div>
-                    </div>
-                    {isReady ? (
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isSelected ? "bg-amber-400 text-black" : "bg-emerald-500/20 text-emerald-300"}`}>
-                        {isSelected ? "ใช้" : "เลือก"}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-red-400 font-bold">CD: {cd}T</span>
-                    )}
-                  </button>
+                  />
                 );
               })
             ) : (

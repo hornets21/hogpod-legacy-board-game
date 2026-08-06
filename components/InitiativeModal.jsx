@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function InitiativeModal({ initiativeRolls, onStartPlay }) {
+export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAdmin }) {
   const [isRevealed, setIsRevealed] = useState(false);
 
   useEffect(() => {
@@ -83,14 +83,27 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay }) {
           </div>
         )}
 
-        {/* Action Button */}
-        <button
-          onClick={onStartPlay}
-          className="w-full py-4 px-8 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-200 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
-        >
-          <span>🎮</span>
-          <span>เข้าสู่การแข่งขัน (START TURN 1)</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+          {onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border-2 border-amber-500/50 text-amber-300 font-black text-sm flex items-center justify-center gap-2 transition-all hover:scale-105"
+              title="เปิด Admin Panel เพื่อจัดอุปกรณ์ เงิน และสถานะก่อนเริ่มกระดาน"
+            >
+              <span>👑</span>
+              <span>ตั้งค่า Admin (Pay To Win)</span>
+            </button>
+          )}
+
+          <button
+            onClick={onStartPlay}
+            className="flex-1 w-full py-4 px-8 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-200 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+          >
+            <span>🎮</span>
+            <span>เข้าสู่การแข่งขัน (START TURN 1)</span>
+          </button>
+        </div>
 
       </div>
     </div>

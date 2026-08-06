@@ -13,6 +13,7 @@
     "@react-three/fiber": "^9.7.0",
     "@react-three/postprocessing": "^3.0.4",
     "@tailwindcss/postcss": "^4.1.0",
+    "motion": "^13.0.0",
     "next": "^15.5.19",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

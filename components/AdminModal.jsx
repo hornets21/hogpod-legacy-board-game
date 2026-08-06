@@ -14,9 +14,19 @@ import {
 } from "@/lib/gameData";
 import { getTotalDmg } from "@/lib/gameEngine";
 
-export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, onToggleBgm }) {
+import { setSfxVolume, getSfxVolume } from "@/lib/sfx";
+
+export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, onToggleBgm, onConfirmSetup }) {
   const [selectedHouseIdx, setSelectedHouseIdx] = useState(0);
   const [activeCategory, setActiveCategory] = useState("gold"); // gold | wand | armor | amulet | potion | skill | pet
+  const [sfxVol, setSfxVolState] = useState(() => (typeof window !== "undefined" ? getSfxVolume() : 0.8));
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleSfxChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setSfxVolState(val);
+    setSfxVolume(val);
+  };
 
   if (!players || players.length === 0) return null;
 
@@ -25,9 +35,49 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in pointer-events-auto"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in pointer-events-auto"
       onClick={onClose}
     >
+      {/* ── HOGPOD STYLED RESET CONFIRMATION MODAL ───────────────── */}
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="max-w-md w-full bg-slate-950 border-2 border-red-500/80 rounded-3xl p-6 shadow-[0_0_50px_rgba(239,68,68,0.4)] text-center text-white flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-red-950/80 border-2 border-red-500 flex items-center justify-center text-[#e51b4b] font-black text-xl tracking-wider shadow-lg">
+              ATTENTION
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-red-400 uppercase tracking-wide">
+                RESET GAME CONFIRMATION
+              </h3>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed font-semibold">
+                Are you sure you want to reset the current game session? All player progression, inventory, and board status will be completely reset.
+              </p>
+            </div>
+
+            <div className="w-full flex items-center gap-3 mt-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs border border-white/10 transition-all hover:scale-105"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  onClose();
+                  onDispatch({ type: "RESET" });
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs shadow-[0_0_20px_rgba(229,27,75,0.4)] border border-red-400 transition-all hover:scale-105"
+              >
+                CONFIRM RESET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className="relative w-full max-w-5xl bg-slate-950/95 border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.25)] flex flex-col max-h-[92vh] text-white overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -35,14 +85,14 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
         {/* Top Header Bar */}
         <div className="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl shadow-inner">
-              👑
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-sm font-black text-amber-400 shadow-inner">
+              ADM
             </div>
             <div>
               <h2 className="font-black text-amber-400 text-lg sm:text-xl tracking-tight flex items-center gap-2">
                 เมนูควบคุมแอดมิน (PAY TO WIN GOD MODE)
                 <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold">
-                  ⚡ ADMIN POWER
+                  ADMIN POWER
                 </span>
               </h2>
               <p className="text-xs text-white/50 font-semibold">
@@ -50,7 +100,20 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 px-3 py-1 rounded-xl text-xs">
+              <span className="text-amber-400 font-bold">🔊 SFX Vol:</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={sfxVol}
+                onChange={handleSfxChange}
+                className="w-20 accent-amber-400 cursor-pointer"
+                title={`SFX Volume: ${Math.round(sfxVol * 100)}%`}
+              />
+            </div>
             {onToggleBgm && (
               <button
                 onClick={onToggleBgm}
@@ -608,19 +671,27 @@ export default function AdminModal({ players, onDispatch, onClose, isBgmMuted, o
             {/* Bottom Footer Actions */}
             <div className="pt-3 border-t border-white/10 mt-3 flex items-center justify-between flex-shrink-0">
               <button
-                onClick={() => {
-                  if (confirm("ยืนยันรีเซ็ตเกมกลับสู่จุดเริ่มต้น?")) {
-                    onClose();
-                    onDispatch({ type: "RESET" });
-                  }
-                }}
+                onClick={() => setShowResetConfirm(true)}
                 className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-black text-xs transition-all flex items-center gap-2"
               >
-                <span>🔄</span> Reset เกมใหม่
+                RESET GAME
               </button>
-              <div className="text-[11px] text-white/50 font-semibold">
-                แอดมินสายเปย์ Pay To Win System Active 👑
-              </div>
+              
+              {onConfirmSetup ? (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onConfirmSetup();
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all hover:scale-105"
+                >
+                  ยืนยันการตั้งค่า & สุ่มทอยเต๋าจัดลำดับ -&gt;
+                </button>
+              ) : (
+                <div className="text-[11px] text-white/50 font-semibold">
+                  แอดมินสายเปย์ Pay To Win System Active
+                </div>
+              )}
             </div>
           </div>
         </div>

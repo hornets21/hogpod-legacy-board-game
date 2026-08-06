@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { attachSfxListeners, setSfxMuted } from "@/lib/sfx";
 
 export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
   const audioRef = useRef(null);
@@ -13,8 +14,12 @@ export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
   useEffect(() => {
     const audio = new Audio(soundPath);
     audio.loop = true;
-    audio.volume = 0.15; // เสียงเบาๆ 15% ไม่รบกวนผู้เล่น
+    audio.volume = 0.5; // เสียงหลัก 50% ให้ได้ยินชัด
     audioRef.current = audio;
+
+    // ── เปิด SFX listener (Web Audio synthesized) ──
+    const detachSfx = attachSfxListeners();
+    setSfxMuted(isMuted);
 
     // ตรวจจับเวลาเล่น หากถึงจุดจบเนื้อเพลงหรือใกล้ออกขอบไฟล์ ให้รีเซตกลับไปเริ่มทันทีโดยไม่ติดช่วงเงียบ
     const handleTimeUpdate = () => {
@@ -70,6 +75,7 @@ export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      detachSfx();
     };
   }, []);
 
@@ -80,6 +86,8 @@ export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
     if (!isMuted && audioRef.current.paused) {
       audioRef.current.play().catch(() => {});
     }
+    // Sync sfx mute ด้วย
+    setSfxMuted(isMuted);
   }, [isMuted]);
 
   if (hideFloatingButton) return null;

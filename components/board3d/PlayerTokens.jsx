@@ -3,6 +3,7 @@
 // ============================================================
 // PlayerTokens — ตัวหมากผู้เล่น 3D (คริสตัลเรืองแสงสีบ้าน)
 // เดินทีละช่องตามแต้มเต๋า / เทเลพอร์ตเมื่อขึ้นบันได-ลงงู/เกิดใหม่
+// Phase 2: เพิ่ม state "hit" (สั่น + แดง) และ "cast" (เรืองแสง)
 // ============================================================
 
 import { Suspense, useEffect, useRef } from "react";
@@ -10,6 +11,7 @@ import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { cellToWorld, TOKEN_OFFSETS } from "@/lib/boardLayout";
 import { getEmojiTexture } from "./textures";
+import { on, FX_EVENTS } from "@/lib/skillFxBus";
 
 const WALK_SPEED = 6.5; // เพิ่มความเร็วเดินเพื่อก้าวทันครบ 6 ช่องสมบูรณ์
 const TELEPORT_SPEED = 5.0;
@@ -33,6 +35,9 @@ function Token({ player, index, isActive }) {
   const groupRef = useRef(null);
   const crystalRef = useRef(null);
   const beaconRef = useRef(null);
+  // Hit state (อ่านได้ทั้งใน useFrame และจาก event listener)
+  const hitState = useRef({ active: false, t: 0, duration: 0.6 });
+  const castState = useRef({ active: false, t: 0, duration: 0.8, color: "#a855f7" });
 
   const anim = useRef({
     mode: "idle", // "idle" | "walk" | "teleportOut" | "teleportIn"
@@ -83,6 +88,33 @@ function Token({ player, index, isActive }) {
       a.mode = "teleportOut";
     }
   }, [player.position]);
+
+  // Subscribe skill_fx events สำหรับ token ตัวนี้ (โดนดาเมจ / ตัวเองร่าย)
+  useEffect(() => {
+    const unsubDamage = on(FX_EVENTS.DAMAGE_DEALT, (payload) => {
+      if (payload.targetIndex === index) {
+        hitState.current.active = true;
+        hitState.current.t = 0;
+      }
+    });
+    const unsubCast = on(FX_EVENTS.SKILL_CAST, (payload) => {
+      if (payload.playerId === index && payload.skillData) {
+        // เลือกสีตาม effect
+        const effect = payload.skillData.effect;
+        const color =
+          effect === "invincible" ? "#3b82f6" :
+          effect === "lock_dice"  ? "#22c55e" :
+          effect === "shuffle_positions" ? "#a855f7" :
+          payload.skillData.dmg ? "#ef4444" :
+          "#a855f7";
+        castState.current = { active: true, t: 0, duration: 0.8, color };
+      }
+    });
+    return () => {
+      unsubDamage();
+      unsubCast();
+    };
+  }, [index]);
 
   const isDead = player.hp <= 0;
 
@@ -158,9 +190,56 @@ function Token({ player, index, isActive }) {
       g.position.y = Math.sin(t * 2 + index * 1.7) * 0.045 + 0.03;
     }
 
-    // คริสตัลหมุนช้าๆ
+    // ── Hit Feedback: token สั่น + เรืองแสงแดง ──
+    let shakeX = 0, shakeZ = 0;
+    let hitEmissiveBoost = 0;
+    let hitColorMix = null;
+    if (hitState.current.active) {
+      hitState.current.t += delta;
+      const h = hitState.current;
+      if (h.t < h.duration) {
+        const k = 1 - h.t / h.duration;
+        shakeX = (Math.sin(h.t * 60) * 0.08) * k;
+        shakeZ = (Math.cos(h.t * 55) * 0.06) * k;
+        hitEmissiveBoost = k * 4;
+        hitColorMix = new THREE.Color("#ef4444");
+      } else {
+        h.active = false;
+      }
+    }
+    g.position.x += shakeX;
+    g.position.z += shakeZ;
+
+    // ── Cast Feedback: token เรืองแสงตามสีสกิล ──
+    let castEmissiveBoost = 0;
+    let castColorMix = null;
+    if (castState.current.active) {
+      castState.current.t += delta;
+      const c = castState.current;
+      if (c.t < c.duration) {
+        const k = 1 - c.t / c.duration;
+        castEmissiveBoost = k * 3;
+        castColorMix = new THREE.Color(c.color);
+      } else {
+        c.active = false;
+      }
+    }
+
+    // คริสตัลหมุนช้าๆ + ปรับ emissive ตามสถานะ
     if (crystalRef.current) {
       crystalRef.current.rotation.y = t * 1.4 + index;
+      const mat = crystalRef.current.material;
+      if (mat) {
+        const baseIntensity = isDead ? 0.15 : 1.5;
+        mat.emissiveIntensity = baseIntensity + hitEmissiveBoost + castEmissiveBoost;
+        // รีเซ็ต emissive เป็นสีฐานก่อน แล้วค่อยผสมกับ hit/cast ทุกเฟรม (กันการสะสม)
+        mat.emissive.set(color);
+        if (castColorMix) {
+          mat.emissive.lerp(castColorMix, 0.5);
+        } else if (hitColorMix) {
+          mat.emissive.lerp(hitColorMix, 0.5);
+        }
+      }
     }
 
     // วงแหวนผู้เล่นตาปัจจุบัน: ขยาย-หด

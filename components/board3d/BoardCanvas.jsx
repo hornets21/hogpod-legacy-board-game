@@ -17,6 +17,7 @@ import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
 import PlaneMonster from "./PlaneMonster";
+import SkillFxLayer from "./SkillFxLayer";
 import { MONSTER_MAP } from "@/lib/gameData";
 
 // ─── พิกัดประจำและค่าฟิสิกส์การกระเด้งของลูกเต๋า 3D ──────────
@@ -280,6 +281,7 @@ export default function BoardCanvas({
             usedLadders={usedLadders}
             monsterMap={monsterMap}
             cellTeleport={cellTeleport}
+            trapCells={trapCells}
             onHoverCell={setHoverInfo}
           />
           <CellMarkers
@@ -309,6 +311,11 @@ export default function BoardCanvas({
             players={players}
             currentPlayerIndex={currentPlayerIndex}
             phase={phase}
+          />
+          {/* Skill VFX Layer — spawn 3D effect ตอนร่ายสกิล / โดนดาเมจ */}
+          <SkillFxLayer
+            players={players}
+            currentPlayerIndex={currentPlayerIndex}
           />
           {/* 3D Dice Model บนกระดาน (คลิกเพื่อทอยได้) */}
           <Animated3DDice

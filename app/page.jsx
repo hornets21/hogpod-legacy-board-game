@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState, Suspense } from "react";
 import dynamic from "next/dynamic";
+import { motion, useAnimation } from "motion/react";
 import PlayerCard from "@/components/PlayerCard";
 import TitleScreen from "@/components/TitleScreen";
 import SetupModal from "@/components/SetupModal";
@@ -12,6 +13,9 @@ import PvpCombatModal from "@/components/PvpCombatModal";
 import BgmPlayer from "@/components/BgmPlayer";
 import GameLog from "@/components/GameLog";
 import AdminModal from "@/components/AdminModal";
+import SkillTargetPicker from "@/components/SkillTargetPicker";
+import TrapCellPicker from "@/components/TrapCellPicker";
+import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy } from "@/lib/skillFxBus";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
 const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
@@ -42,6 +46,12 @@ import {
 
 import { MONSTER_MAP, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS } from "@/lib/gameData";
 
+// Skill metadata helper to determine if a picker is needed
+function skillNeedsTarget(skillId) {
+  const sk = SKILLS[skillId];
+  return sk?.requiresTarget === "player" || sk?.requiresTarget === "monster";
+}
+
 // ─── Reducer ─────────────────────────────────────────────────
 function gameReducer(state, action) {
   switch (action.type) {
@@ -51,18 +61,18 @@ function gameReducer(state, action) {
       // Resolve destination effects only after the 3D token has finished walking.
       // ROLL_DICE must only update the destination so the token can animate there.
       if (state.trapCells?.[player.position]) {
-        const trapOwner = state.trapCells[player.position].houseId;
-        if (trapOwner !== player.houseId) {
-          const p = { ...player, hp: 0 };
-          const players = [...state.players];
-          players[state.currentPlayerIndex] = p;
-          let next = handlePlayerDeath({ ...state, players }, state.currentPlayerIndex);
-          next = {
-            ...next,
-            log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
-          };
-          return advanceTurn(next);
-        }
+        // กับดักยาพิษ — ใครเหยียบก็ตาย รวมถึงเจ้าของด้วย (ตามคำอธิบายยา) และกับดัก single-use
+        const p = { ...player, hp: 0 };
+        const players = [...state.players];
+        players[state.currentPlayerIndex] = p;
+        const trapCells = { ...state.trapCells };
+        delete trapCells[player.position];
+        let next = handlePlayerDeath({ ...state, players, trapCells }, state.currentPlayerIndex);
+        next = {
+          ...next,
+          log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
+        };
+        return advanceTurn(next);
       }
 
       let next = checkWin(state);
@@ -158,16 +168,21 @@ function gameReducer(state, action) {
 
     case "USE_SKILL": {
       const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
-      return useSkill(state, pIdx, action.skillId, action.targetIndex);
+      return useSkill(state, pIdx, action.skillId, action.targetIndex, action.monsterCell);
     }
 
     case "USE_POTION": {
       const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
-      return usePotion(state, pIdx, action.potionId);
+      return usePotion(state, pIdx, action.potionId, action.targetCell);
     }
 
     case "BUY_ITEM": {
       return buyItem(state, state.currentPlayerIndex, action.itemType, action.itemId);
+    }
+
+    case "RESPAWN_PLAYER": {
+      const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      return handlePlayerDeath(state, pIdx);
     }
 
     case "END_TURN": {
@@ -233,8 +248,9 @@ function gameReducer(state, action) {
 
     case "START_NEW_GAME": {
       clearSavedGameState();
+      const initState = createInitialGameState();
       return {
-        ...createInitialGameState(),
+        ...initState,
         phase: "setup",
       };
     }
@@ -431,8 +447,9 @@ export default function Home() {
 
   useEffect(() => {
     const saved = loadGameState();
-    if (saved && (saved.phase === "play" || saved.phase === "combat")) {
+    if (saved && (saved.phase === "play" || saved.phase === "combat" || saved.phase === "setup" || saved.phase === "initiative")) {
       setHasSavedGame(true);
+      dispatch({ type: "LOAD_SAVED_STATE", savedState: saved });
     }
     setHasHydrated(true);
   }, []);
@@ -455,14 +472,87 @@ export default function Home() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(false);
   const [resetDiceKey, setResetDiceKey] = useState(0);
+  const [pendingSkill, setPendingSkill] = useState(null); // { playerIndex, skillId }
+  const [pendingTrap, setPendingTrap] = useState(null); // { playerIndex } — ยาพิชี้ช่องวางกับดัก
+
+  // Always confirm skills through the picker first. If a skill does not require
+  // a target, the picker still acts as a confirmation dialog.
+  function handleSkillRequest(playerIndex, skillId) {
+    setPendingSkill({ playerIndex, skillId });
+  }
+
+  function handleSkillConfirm({ targetIndex, monsterCell }) {
+    if (!pendingSkill) return;
+    const { playerIndex, skillId } = pendingSkill;
+    // monsterCell is used by skills that target a board cell (e.g. skunk_blast)
+    dispatch({
+      type: "USE_SKILL",
+      skillId,
+      playerIndex,
+      targetIndex,
+      monsterCell,
+    });
+    setPendingSkill(null);
+  }
+
+  function handleSkillCancel() {
+    setPendingSkill(null);
+  }
+
+  // ยาพิษ — แยกการ dispatch ออกจากยาอื่นเพราะต้องเลือกช่องก่อนวางกับดัก
+  function handlePotionRequest(playerIndex, potionId) {
+    if (potionId === "poison") {
+      setPendingTrap({ playerIndex });
+      return;
+    }
+    dispatch({ type: "USE_POTION", potionId, playerIndex });
+  }
+
+  function handleTrapConfirm({ targetCell }) {
+    if (!pendingTrap) return;
+    dispatch({
+      type: "USE_POTION",
+      potionId: "poison",
+      playerIndex: pendingTrap.playerIndex,
+      targetCell,
+    });
+    setPendingTrap(null);
+  }
+
+  function handleTrapCancel() {
+    setPendingTrap(null);
+  }
+
+  // ── Screen Shake controller (เล็กน้อย) ──
+  const shakeControls = useAnimation();
+  useEffect(() => {
+    const u1 = on(FX_EVENTS.DAMAGE_DEALT, (p) => {
+      // shear shake เล็กน้อยเมื่อโดนดาเมจ
+      shakeControls.start({
+        x: [0, -3, 2, -2, 0],
+        y: [0, 2, -2, 1, 0],
+        transition: { duration: 0.18, ease: "easeOut" },
+      });
+    });
+    const u2 = on(FX_EVENTS.SKILL_CAST, () => {
+      // shake นิดหน่อยสำหรับ cast (สั้นกว่า)
+      shakeControls.start({
+        x: [0, -2, 2, 0],
+        transition: { duration: 0.1, ease: "easeOut" },
+      });
+    });
+    return () => { u1(); u2(); };
+  }, [shakeControls]);
 
   const currentPlayer = getCurrentPlayer(state);
-  const canRoll = state.phase === "play" && !state.shopOpen && !state.combatState && !state.winner && !isRolling;
+  const isCurrentPlayerDead = currentPlayer && (currentPlayer.hp <= 0 || !currentPlayer.isAlive);
+  const canRoll = state.phase === "play" && !state.shopOpen && !state.combatState && !state.winner && !isRolling && !isCurrentPlayerDead;
 
   function handleRoll() {
     if (!canRoll) return;
 
     setIsRolling(true);
+    emitDiceRoll();
     const player = state.players[state.currentPlayerIndex];
     let rolledVal = Math.floor(Math.random() * 6) + 1;
     if (player?.nextRollOverride) {
@@ -476,6 +566,7 @@ export default function Home() {
     setTimeout(() => {
       // ย้ายตำแหน่งตัวหมากบนกระดานตาม rolledVal ที่ออกจริง
       dispatch({ type: "ROLL_DICE", dice: rolledVal });
+      emitStepMove();
 
       // หน่วงเวลา 1.5 วินาทีให้หมากก้าวเดิน 3D บนกระดานตามแต้ม rolledVal
       setTimeout(() => {
@@ -495,8 +586,22 @@ export default function Home() {
   const displayDiceVal = isRolling ? tempDice : state.diceResult;
   const diceFace = displayDiceVal ? DICE_FACES[displayDiceVal] : "🎲";
 
+  if (!hasHydrated) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050407] text-white select-none">
+        <div className="w-12 h-12 mb-4 rounded-full border-4 border-amber-400/30 border-t-amber-400 animate-spin shadow-[0_0_30px_rgba(245,158,11,0.4)]" />
+        <h2 className="text-xl font-black text-amber-400 tracking-wider mb-2">
+          Loading...
+        </h2>
+      </div>
+    );
+  }
+
   return (
-    <div className="game-shell relative w-screen h-screen overflow-hidden bg-[#070912]">
+    <motion.div
+      animate={shakeControls}
+      className="game-shell relative w-screen h-screen overflow-hidden bg-[#070912]"
+    >
 
       {/* ── 3D Canvas (Full Screen Viewport) ───────────────────── */}
       {state.phase !== "title" && (
@@ -683,8 +788,8 @@ export default function Home() {
                       player={p}
                       playerIndex={i}
                       isActive={i === state.currentPlayerIndex && state.phase === "play"}
-                      onUseSkill={(skillId, pIdx) => dispatch({ type: "USE_SKILL", skillId, playerIndex: pIdx })}
-                      onUsePotion={(potionId, pIdx) => dispatch({ type: "USE_POTION", potionId, playerIndex: pIdx })}
+                      onUseSkill={(skillId, pIdx) => handleSkillRequest(pIdx !== undefined ? pIdx : i, skillId)}
+                      onUsePotion={(potionId, pIdx) => handlePotionRequest(pIdx !== undefined ? pIdx : i, potionId)}
                     />
                   ))}
                 </div>
@@ -704,40 +809,26 @@ export default function Home() {
       </div>
       )}
 
-      {/* Admin Modal Popover */}
-      {adminOpen && (
+      {/* ── Title Screen (Intro Splash Screen) ──────────────────── */}
+      {state.phase === "title" && (
+        <TitleScreen
+          onStartNewGame={() => dispatch({ type: "START_NEW_GAME" })}
+        />
+      )}
+
+      {/* ── Pre-Game Setup via Admin Modal (Primary Equipment & Player Config) ── */}
+      {(state.phase === "setup" || adminOpen) && (
         <AdminModal
           players={state.players}
           onDispatch={dispatch}
           onClose={() => setAdminOpen(false)}
           isBgmMuted={bgmMuted}
           onToggleBgm={() => setBgmMuted((m) => !m)}
-        />
-      )}
-
-      {/* ── Title Screen (Intro Splash Screen) ──────────────────── */}
-      {state.phase === "title" && (
-        <TitleScreen
-          onStartNewGame={() => dispatch({ type: "START_NEW_GAME" })}
-          hasSavedGame={hasSavedGame}
-          onContinueGame={() => {
-            const saved = loadGameState();
-            if (saved) {
-              dispatch({ type: "LOAD_SAVED_STATE", savedState: saved });
-            } else {
-              dispatch({ type: "START_NEW_GAME" });
-            }
-          }}
-        />
-      )}
-
-      {/* ── Pre-Game Setup Modal ───────────────────────────────── */}
-      {state.phase === "setup" && (
-        <SetupModal
-          players={state.players}
-          onCompleteSetup={(updatedPlayers) => {
-            dispatch({ type: "COMPLETE_SETUP", players: updatedPlayers });
-          }}
+          onConfirmSetup={
+            state.phase === "setup"
+              ? () => dispatch({ type: "COMPLETE_SETUP", players: state.players })
+              : null
+          }
         />
       )}
 
@@ -746,6 +837,7 @@ export default function Home() {
         <InitiativeModal
           initiativeRolls={state.initiativeRolls}
           onStartPlay={() => dispatch({ type: "START_PLAY" })}
+          onOpenAdmin={() => setAdminOpen(true)}
         />
       )}
 
@@ -754,10 +846,56 @@ export default function Home() {
         <ShopModal
           player={currentPlayer}
           onBuy={(itemType, itemId) => {
+            emitShopBuy();
             dispatch({ type: "BUY_ITEM", itemType, itemId });
           }}
           onClose={() => dispatch({ type: "CLOSE_SHOP" })}
         />
+      )}
+
+      {/* ── Player Death Notice Modal ──────────────────────────── */}
+      {state.phase === "play" && isCurrentPlayerDead && !state.shopOpen && !state.combatState && (
+        <div className="modal-overlay z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="modal-box max-w-md w-full bg-slate-950 border-2 border-red-500/80 rounded-3xl p-6 shadow-[0_0_50px_rgba(239,68,68,0.4)] text-center text-white flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-red-950/80 border-2 border-red-500 flex items-center justify-center text-3xl animate-bounce shadow-lg">
+              💀
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-red-400">
+                บ้าน {currentPlayer.name} เสียชีวิตอยู่!
+              </h3>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                ไม่สามารถทอยลูกเต๋าเดินได้ในขณะนี้ กรุณาใช้ <span className="text-emerald-400 font-bold">ยาชุบชีวิต (Revive Potion)</span> หรือเปิดร้านค้าเพื่อซื้อยาชุบชีวิตก่อน
+              </p>
+            </div>
+
+            <div className="w-full flex flex-col gap-2.5 mt-2">
+              {currentPlayer.potions?.includes("revive") ? (
+                <button
+                  onClick={() => dispatch({ type: "USE_POTION", potionId: "revive", playerIndex: state.currentPlayerIndex })}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 hover:from-emerald-500 hover:to-green-400 text-slate-950 font-black text-sm shadow-[0_0_20px_rgba(34,197,94,0.4)] border border-green-300 transition-all hover:scale-105"
+                >
+                  💊 กดใช้ยาชุบชีวิตทันที (+50 HP)
+                </button>
+              ) : (
+                <button
+                  onClick={() => dispatch({ type: "OPEN_SHOP" })}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-yellow-400 text-slate-950 font-black text-sm shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-200 transition-all hover:scale-105"
+                >
+                  🏪 ไปร้านค้าเพื่อซื้อยาชุบชีวิต (300 Gold)
+                </button>
+              )}
+
+              <button
+                onClick={() => dispatch({ type: "RESPAWN_PLAYER", playerIndex: state.currentPlayerIndex })}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs border border-white/10 transition-all hover:scale-102 flex items-center justify-center gap-1.5"
+              >
+                <span>🏠</span>
+                <span>ยอมรับความพ่ายแพ้ ย้อนกลับจุดเริ่มต้น (ช่อง 1)</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── PvP Encounter Modal ───────────────────────────────── */}
@@ -775,7 +913,7 @@ export default function Home() {
           combatState={state.combatState}
           player={currentPlayer}
           onResolveCombat={(combatResult) => dispatch({ type: "COMBAT_RESOLVE", combatResult })}
-          onUseSkill={(skillId) => dispatch({ type: "USE_SKILL", skillId })}
+          onUseSkill={(skillId) => handleSkillRequest(state.currentPlayerIndex, skillId)}
           onFlee={
             currentPlayer.pet?.effect === "dodge_once" && !currentPlayer.dodgeUsed
               ? () => dispatch({ type: "FLEE_COMBAT" })
@@ -783,6 +921,28 @@ export default function Home() {
           }
         />
       )}
+
+      {/* ── Skill Target Picker / Confirm Dialog ──────────────── */}
+      <SkillTargetPicker
+        open={!!pendingSkill}
+        skillId={pendingSkill?.skillId}
+        casterIndex={pendingSkill?.playerIndex}
+        players={state.players}
+        monsterCells={state.monsterCells}
+        onConfirm={handleSkillConfirm}
+        onCancel={handleSkillCancel}
+      />
+
+      {/* ── Trap Cell Picker (ยาพิษ) ─────────────────────────── */}
+      <TrapCellPicker
+        open={!!pendingTrap}
+        casterIndex={pendingTrap?.playerIndex}
+        players={state.players}
+        trapCells={state.trapCells}
+        monsterCells={state.monsterCells}
+        onConfirm={handleTrapConfirm}
+        onCancel={handleTrapCancel}
+      />
 
       {/* ── Win Screen ─────────────────────────────────────────── */}
       {state.winner && (
@@ -799,6 +959,6 @@ export default function Home() {
           </button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

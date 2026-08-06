@@ -28,6 +28,7 @@ const TILE_STYLES = {
   hidden:  { bg: "#141926", border: "rgba(255,255,255,0.05)",  emissive: "#000000", ei: 0 },
   healer:  { bg: "#0e3b2e", border: "rgba(52,211,153,0.55)",   emissive: "#34d399", ei: 0.32 },
   win:     { bg: "#4a3a10", border: "rgba(240,184,91,0.95)",   emissive: "#f0b85b", ei: 0.5 },
+  trap:    { bg: "#1a0d2e", border: "rgba(217,70,239,0.65)",   emissive: "#d946ef", ei: 0.45 },
 };
 
 const TILE_HEIGHT = 0.34;
@@ -51,13 +52,14 @@ function getShared() {
 
 // material หน้าบนของแต่ละช่อง
 const topMatCache = new Map();
-function getTopMaterial(cell, type, imageTexture) {
-  const style = TILE_STYLES[type] || TILE_STYLES.normal;
-  const key = `${cell}|${type}`;
+function getTopMaterial(cell, type, imageTexture, hasTrap) {
+  const trapStyle = hasTrap ? TILE_STYLES.trap : null;
+  const style = trapStyle || TILE_STYLES[type] || TILE_STYLES.normal;
+  const key = `${cell}|${type}|${hasTrap ? 1 : 0}`;
   if (!topMatCache.has(key)) {
     const mat = new THREE.MeshStandardMaterial({
       map: imageTexture || getTileTopTexture(cell, style.bg, style.border),
-      color: "#ffffff", // ใช้สีขาวบริสุทธิ์เพื่อยึดภาพ Texture ทั้งหมดตามต้นฉบับ ไม่ย้อมสีพื้นหลัง
+      color: hasTrap ? "#c4b5fd" : "#ffffff", // ย้อมม่วงจาง ๆ สำหรับช่องกับดัก
       emissive: new THREE.Color(style.emissive),
       emissiveIntensity: style.ei,
       roughness: 0.72,
@@ -68,7 +70,7 @@ function getTopMaterial(cell, type, imageTexture) {
   return topMatCache.get(key);
 }
 
-export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, cellTeleport, onHoverCell }) {
+export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, cellTeleport, trapCells, onHoverCell }) {
   const grid = useMemo(() => buildGrid(), []);
   const [hoveredCell, setHoveredCell] = useState(null);
   const highlightRef = useRef(null);
@@ -119,7 +121,8 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
           const [x, , z] = cellToWorld(cell);
           const isOdd = cell % 2 !== 0;
           const bgTex = isOdd ? textures.odd : textures.even;
-          const top = getTopMaterial(cell, type, bgTex);
+          const hasTrap = !!trapCells?.[cell];
+          const top = getTopMaterial(cell, type, bgTex, hasTrap);
           const mats = [shared.side, shared.side, top, shared.bottom, shared.side, shared.side];
           const isBoss = type === "boss";
           const yScale = isBoss ? 1.5 : type === "win" ? 1.35 : 1;
@@ -138,9 +141,10 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
               />
               {/* เลขช่อง 3D ลอยอยู่บนหน้าแผ่นหิน */}
               <Text
+                font="/fonts/HarryP-MVZ6w.ttf"
                 position={[x, topY + 0.01, z]}
                 rotation={[-Math.PI / 2, 0, 0]}
-                fontSize={0.48}
+                fontSize={0.55}
                 color="#ffffff"
                 anchorX="center"
                 anchorY="middle"

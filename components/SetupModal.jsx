@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
 
-export default function SetupModal({ players, onCompleteSetup }) {
+export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
   const [currentHouseIndex, setCurrentHouseIndex] = useState(0);
   const [setupPlayers, setSetupPlayers] = useState([...players]);
   const [activeTab, setActiveTab] = useState("wands"); // wands | pets | skills
@@ -269,11 +269,23 @@ export default function SetupModal({ players, onCompleteSetup }) {
             )}
           </div>
 
-          {/* Footer Next Button */}
+          {/* Footer Next Button & Admin Access */}
           <div className="flex justify-between items-center pt-2 border-t border-white/5">
-            <span className="text-xs text-white/40 font-bold">
-              {currentHouseIndex + 1} จาก {setupPlayers.length} บ้าน
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-white/40 font-bold">
+                {currentHouseIndex + 1} จาก {setupPlayers.length} บ้าน
+              </span>
+              {onOpenAdmin && (
+                <button
+                  onClick={onOpenAdmin}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105"
+                  title="เปิด Admin Panel เพื่อกำหนดไอเทม เงิน และสถานะเริ่มต้นแบบอิสระ"
+                >
+                  <span>👑</span>
+                  <span>ตั้งค่า Admin (Pay To Win)</span>
+                </button>
+              )}
+            </div>
             <button
               onClick={handleNextHouse}
               className="btn-primary text-sm px-8 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition-transform"

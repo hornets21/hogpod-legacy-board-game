@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { getTotalDmg } from "@/lib/gameEngine";
-import { SKILLS, POTIONS } from "@/lib/gameData";
+import { POTIONS } from "@/lib/gameData";
+import SkillButton from "@/components/fx/SkillButton";
+import BuffBadges from "@/components/fx/BuffBadges";
+import DamagePopup from "@/components/fx/DamagePopup";
 
 export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, onUsePotion }) {
   const [isExpanded, setIsExpanded] = useState(isActive);
@@ -42,13 +45,21 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
         boxShadow: isActive ? `0 0 25px ${player.color || "rgba(240,184,91,0.4)"}` : undefined,
       }}
     >
-      {/* Active Turn Pulsing Badge */}
-      {isActive && (
+      {/* Damage/Heal popup overlay (DOM based, listens to fx bus) */}
+      <DamagePopup playerIndex={playerIndex} />
+
+      {/* Active Turn / Dead Pulsing Badge */}
+      {player.hp <= 0 || !player.isAlive ? (
+        <div className="absolute -top-3 left-4 z-20 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-wider shadow-lg animate-pulse border border-red-300">
+          <span>💀</span>
+          <span>เสียชีวิต</span>
+        </div>
+      ) : isActive ? (
         <div className="absolute -top-3 left-4 z-20 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-lg animate-pulse border border-yellow-200">
           <span>🎯</span>
           <span>ถึงตาเดินแล้ว</span>
         </div>
-      )}
+      ) : null}
 
       {/* Header: Crest, Name, Position & Expand Toggle */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 mb-2">
@@ -69,7 +80,6 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Expand/Collapse Button */}
           <button
             onClick={() => setIsExpanded((e) => !e)}
             className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-xs text-amber-300 font-bold transition-all"
@@ -91,6 +101,9 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
             }}
           />
         </div>
+
+        {/* Buff State Indicators — โชว์ invincible / +dmg / lock_dice / bank */}
+        <BuffBadges player={player} />
 
         {/* Compact stats line if collapsed */}
         {!isExpanded && (
@@ -206,38 +219,17 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
               {!isActive && <span className="text-[8px] text-amber-400 font-bold">⚡ สกิลตอบโต้</span>}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {skillSlots.map((skillId, idx) => {
-                const skill = skillId ? SKILLS[skillId] : null;
-                const cd = skillId ? player.skillCooldowns?.[skillId] || 0 : 0;
-                const canUse = skillId && cd === 0;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => canUse && onUseSkill && onUseSkill(skillId, playerIndex)}
-                    disabled={!canUse}
-                    className={`h-9 px-2 rounded-lg border flex items-center gap-1.5 text-left text-xs font-bold transition-all ${
-                      skill
-                        ? cd > 0
-                          ? "border-white/10 bg-black/50 text-white/30 cursor-not-allowed"
-                          : "border-purple-500/50 bg-purple-950/40 text-purple-200 hover:border-purple-300 hover:bg-purple-900/60 shadow-md cursor-pointer"
-                        : "border-white/5 bg-black/30 text-white/10 cursor-not-allowed"
-                    }`}
-                    title={skill ? `${skill.nameTh || skill.name}: ${skill.description}` : "ยังไม่ได้รับการฝึกคาถา"}
-                  >
-                    <div className="w-6 h-6 rounded shrink-0 flex items-center justify-center overflow-hidden bg-black/40">
-                    {skill ? (
-                      <img src={`/images/skills/${skill.id}_skill.webp`} alt={skill.name} className="w-full h-full object-contain" />
-                    ) : (
-                      <span className="text-sm">🔮</span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-black truncate">{skill ? (skill.nameTh || skill.name) : "ว่าง"}</div>
-                  </div>
-                    {cd > 0 && <span className="text-[8px] bg-red-950 text-red-400 border border-red-500/30 px-1 rounded font-black">{cd}T</span>}
-                  </button>
-                );
-              })}
+              {skillSlots.map((skillId, idx) => (
+                <SkillButton
+                  key={idx}
+                  skillId={skillId}
+                  playerIndex={playerIndex}
+                  playerId={playerIndex}
+                  cooldown={skillId ? player.skillCooldowns?.[skillId] || 0 : 0}
+                  onUse={onUseSkill}
+                  size="sm"
+                />
+              ))}
             </div>
           </div>
         </div>
