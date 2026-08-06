@@ -92,7 +92,7 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
   const handleHover = (cell) => (e) => {
     e.stopPropagation();
     setHoveredCell(cell);
-    document.body.style.cursor = "pointer";
+    document.body.style.cursor = 'url("/images/system/click_cursor.cur"), pointer';
     if (onHoverCell) {
       const type = getCellType(cell, usedLadders, monsterMap, cellTeleport);
       onHoverCell({
@@ -107,7 +107,7 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
 
   const handleOut = () => {
     setHoveredCell(null);
-    document.body.style.cursor = "default";
+    document.body.style.cursor = 'url("/images/system/main_cursor.cur"), auto';
     if (onHoverCell) onHoverCell(null);
   };
 

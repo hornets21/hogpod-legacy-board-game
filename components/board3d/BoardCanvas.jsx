@@ -136,11 +136,13 @@ function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }
 
   const handlePointerOver = (e) => {
     e.stopPropagation();
-    document.body.style.cursor = canRoll ? "pointer" : "default";
+    document.body.style.cursor = canRoll
+      ? 'url("/images/system/click_cursor.cur"), pointer'
+      : 'url("/images/system/main_cursor.cur"), auto';
   };
 
   const handlePointerOut = () => {
-    document.body.style.cursor = "default";
+    document.body.style.cursor = 'url("/images/system/main_cursor.cur"), auto';
   };
 
   // ขนาด Scale 18.0 ตามคำสั่งอย่างแม่นยำ

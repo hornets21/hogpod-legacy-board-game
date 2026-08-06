@@ -34,14 +34,15 @@
   --font: "HarryP", "Inter", system-ui, sans-serif;
 }
 
-/* ─── Reset ──────────────────────────────────────────────── */
+/* ─── Reset & Custom Cursor ───────────────────────────────── */
 * { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: #fff;
-  font-family: var(--font);
-  overflow-x: hidden;
+html, body {
+  cursor: url("/images/system/main_cursor.cur"), auto;
+}
+
+/* Custom pointer cursor for interactive elements */
+a, button, [role="button"], input[type="button"], input[type="submit"], .cursor-pointer, .hud-chip-btn, .panel-collapse-btn, .game-log-collapsed, .players-collapse-toggle, .skill-btn-ready, .potion-btn, .close-btn, .shop-item-active, .btn-attack, .btn-skill:not(.btn-skill-cd), .btn-flee, .btn-primary, .btn-secondary {
+  cursor: url("/images/system/click_cursor.cur"), pointer;
 }
 
 /* ─── Background ─────────────────────────────────────────── */
