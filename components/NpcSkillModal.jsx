@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { NPCS, SKILL_LIST } from "@/lib/gameData";
+import { NPCS, SKILLS, SKILL_LIST } from "@/lib/gameData";
 
 export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
   const npc = NPCS.skill_trainer;
   
+  // Helper to extract skill ID
+  const getSkillId = (s) => (typeof s === "string" ? s : s?.id);
+
   // Pick a random new skill that player doesn't have
-  const ownedIds = new Set(player?.skills?.map((s) => s.id) || []);
+  const ownedIds = new Set(player?.skills?.map(getSkillId).filter(Boolean) || []);
   const unownedSkills = SKILL_LIST.filter((s) => !ownedIds.has(s.id));
   
   const [newSkill] = useState(() => {
@@ -18,7 +21,7 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
     return SKILL_LIST[0];
   });
 
-  const [selectedOldSkillId, setSelectedOldSkillId] = useState(player?.skills?.[0]?.id || "");
+  const [selectedOldSkillId, setSelectedOldSkillId] = useState(getSkillId(player?.skills?.[0]) || "");
 
   if (!player) return null;
 
@@ -67,12 +70,15 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
             เลือกสกิลเดิม 1 สกิลที่จะถูกแทนที่:
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {player.skills.map((skill) => {
-              const isSelected = selectedOldSkillId === skill.id;
+            {player.skills.map((rawSkill) => {
+              const skillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
+              const skill = SKILLS[skillId] || (typeof rawSkill === "object" ? rawSkill : null);
+              if (!skill) return null;
+              const isSelected = selectedOldSkillId === skillId;
               return (
                 <div
-                  key={skill.id}
-                  onClick={() => setSelectedOldSkillId(skill.id)}
+                  key={skillId}
+                  onClick={() => setSelectedOldSkillId(skillId)}
                   className={`cursor-pointer p-3.5 rounded-xl border transition-all duration-200 flex flex-col justify-between ${
                     isSelected
                       ? "bg-blue-600/30 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.4)] scale-[1.02]"

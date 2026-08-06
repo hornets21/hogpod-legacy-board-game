@@ -6,7 +6,7 @@
 // ขับเคลื่อนด้วย event bus, AnimatePresence ทำ lifecycle
 // ============================================================
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { on, FX_EVENTS } from "@/lib/skillFxBus";
 
@@ -15,6 +15,7 @@ let _popupId = 0;
 export default function DamagePopup({ playerIndex }) {
   // array ของ popup { id, amount, type, color }
   const [popups, setPopups] = useState([]);
+  const lastEventRef = useRef({});
 
   // Helper สำหรับ get color ตามประเภท
   const colorFor = useCallback((type) => {
@@ -34,12 +35,21 @@ export default function DamagePopup({ playerIndex }) {
   const pushPopup = useCallback((payload) => {
     if (payload.targetIndex !== playerIndex) return;
 
+    // Deduplicate identical events received within 300ms (e.g. from Strict Mode or double renders)
+    const type = payload.type || "skill_player";
+    const key = `${type}_${payload.targetIndex}_${payload.amount}`;
+    const now = Date.now();
+    if (lastEventRef.current[key] && now - lastEventRef.current[key] < 300) {
+      return;
+    }
+    lastEventRef.current[key] = now;
+
     // ถ้า amount = 0 ไม่ต้องโชว์
     if (payload.amount !== undefined && payload.amount !== 0) {
       const id = ++_popupId;
       setPopups((prev) => [
         ...prev.slice(-4), // cap 5 popups
-        { id, amount: payload.amount, type: payload.type || "skill_player" },
+        { id, amount: payload.amount, type },
       ]);
       setTimeout(() => {
         setPopups((prev) => prev.filter((p) => p.id !== id));

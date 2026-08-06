@@ -20,7 +20,7 @@ import NpcSpawnWidget from "@/components/NpcSpawnWidget";
 import NpcSkillModal from "@/components/NpcSkillModal";
 import NpcPetModal from "@/components/NpcPetModal";
 import NpcDoctorModal from "@/components/NpcDoctorModal";
-import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain } from "@/lib/skillFxBus";
+import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain, emitHeal } from "@/lib/skillFxBus";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
 const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
@@ -284,6 +284,10 @@ function gameReducer(state, action) {
       return spawnNpc(state, action.npcId);
     }
 
+    case "DESPAWN_NPC": {
+      return despawnNpc(state, action.npcId);
+    }
+
     case "SPAWN_ALL_NPCS": {
       return spawnAllNpcs(state);
     }
@@ -534,7 +538,30 @@ function gameReducer(state, action) {
     }
 
     case "TICK_SECOND": {
-      return tickNpcCooldowns(state, 1);
+      let nextState = tickNpcCooldowns(state, 1);
+      const hpSec = (nextState.hpRecoveryTickCount || 0) + 1;
+
+      // HP Recovery: +3 HP every 10 seconds for living players below maxHp
+      if (hpSec % 10 === 0 && nextState.players) {
+        const updatedPlayers = nextState.players.map((p, idx) => {
+          if (!p.isAlive || p.hp <= 0 || p.hp >= p.maxHp) return p;
+          const healAmount = Math.min(3, p.maxHp - p.hp);
+          if (healAmount > 0) {
+            emitHeal({ targetIndex: idx, amount: healAmount });
+            return { ...p, hp: p.hp + healAmount };
+          }
+          return p;
+        });
+        nextState = {
+          ...nextState,
+          players: updatedPlayers,
+        };
+      }
+
+      return {
+        ...nextState,
+        hpRecoveryTickCount: hpSec,
+      };
     }
 
     case "PASSIVE_GOLD_TICK": {
@@ -1099,7 +1126,7 @@ export default function Home() {
                   onClick={() => dispatch({ type: "OPEN_SHOP" })}
                   className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-yellow-400 text-slate-950 font-black text-sm shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-200 transition-all hover:scale-105"
                 >
-                  🏪 ไปร้านค้าเพื่อซื้อยาชุบชีวิต (300 Gold)
+                  🏪 ไปร้านค้าเพื่อซื้อยาชุบชีวิต ({POTIONS.revive?.price?.toLocaleString() || "2,000"} Gold)
                 </button>
               )}
 

@@ -24,24 +24,25 @@ export default function SkillButton({
   selected = false,   // สถานะถูกเลือกไว้ (สำหรับ PvpCombatModal)
   disabled = false,
 }) {
-  const skill = skillId ? SKILLS[skillId] : null;
+  const actualSkillId = typeof skillId === "object" ? skillId?.id : skillId;
+  const skill = actualSkillId ? SKILLS[actualSkillId] : null;
   const [castFlash, setCastFlash] = useState(0); // key สำหรับ trigger flash
 
-  const cd = skillId ? cooldown || 0 : 0;
+  const cd = actualSkillId ? cooldown || 0 : 0;
   const maxCd = skill?.cooldown || 1;
   const cooldownRatio = cd > 0 ? cd / maxCd : 0;
-  const canUse = !!skillId && cd === 0 && !disabled;
+  const canUse = !!actualSkillId && cd === 0 && !disabled;
 
   // Listen skill_cast event เพื่อ trigger flash
   useEffect(() => {
-    if (!skillId) return;
+    if (!actualSkillId) return;
     const unsub = on(FX_EVENTS.SKILL_CAST, (payload) => {
-      if (payload.skillId === skillId && payload.playerId === playerIndex) {
+      if (payload.skillId === actualSkillId && payload.playerId === playerIndex) {
         setCastFlash((k) => k + 1);
       }
     });
     return unsub;
-  }, [skillId, playerIndex]);
+  }, [actualSkillId, playerIndex]);
 
   const sizeCls = size === "sm"
     ? "h-9 px-2 text-xs"
@@ -49,7 +50,7 @@ export default function SkillButton({
 
   return (
     <motion.button
-      onClick={() => canUse && onUse && onUse(skillId)}
+      onClick={() => canUse && onUse && onUse(actualSkillId)}
       disabled={!canUse}
       whileTap={canUse ? { scale: 0.88 } : undefined}
       whileHover={canUse ? { scale: 1.06, boxShadow: "0 0 18px rgba(168,85,247,0.6)" } : undefined}

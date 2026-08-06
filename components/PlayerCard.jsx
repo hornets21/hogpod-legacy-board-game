@@ -30,7 +30,10 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
   const potionSlots = Array.from({ length: 5 }, (_, i) => player.potions[i] || null);
 
   // Skill inventory slots (2 slots)
-  const skillSlots = Array.from({ length: 2 }, (_, i) => player.skills[i] || null);
+  const skillSlots = Array.from({ length: 2 }, (_, i) => {
+    const s = player.skills[i];
+    return typeof s === "object" ? s?.id : s;
+  });
 
   return (
     <div
