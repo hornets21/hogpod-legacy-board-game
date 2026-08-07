@@ -15,221 +15,203 @@ export default function ShopModal({ player, onBuy, onClose }) {
   const vipWandImg = player.vipWandImg || houseData.vipWandImg;
 
   return (
-    <div className="modal-overlay z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-md" onClick={onClose}>
-      {/* WOODEN TAVERN / SHOPKEEPER STORE CONTAINER */}
+    <div className="fixed inset-0 z-50 flex justify-end select-none overflow-hidden animate-fade-in pointer-events-auto">
+      {/* Dynamic Dark Vignette Backdrop (คลิกปิดได้) */}
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] transition-opacity" onClick={onClose} />
+
+      {/* SLIDE-IN RIGHT DRAWER SHOP PANEL */}
       <div
-        className="modal-box shop-modal max-w-5xl w-full bg-[#2a1b14] border-4 border-[#7a4c28] rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.95)] flex flex-col max-h-[92vh] relative text-white"
+        className="relative z-10 w-full max-w-lg h-full bg-slate-950/95 backdrop-blur-2xl border-l border-amber-500/30 shadow-[-15px_0_50px_rgba(0,0,0,0.8)] flex flex-col justify-between text-white animate-slide-in-right overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* TOP CURRENCY & TITLE BAR */}
-        <div className="bg-[#1c120d] border-b-2 border-[#5c371d] px-6 py-3 flex items-center justify-between shadow-md">
+        <div className="bg-slate-900/90 border-b border-white/10 px-5 py-4 flex items-center justify-between shadow-md shrink-0">
           <div className="flex items-center gap-3">
-            <span className="text-amber-400 font-black text-xs tracking-wider uppercase">🏪 ร้านค้าฮอกปด (MYSTERY BAZAAR)</span>
-            <span className="text-white/40 text-xs">|</span>
-            <span className="text-xs font-bold text-white/70">บ้าน: {player.name}</span>
+            <span className="text-xl animate-pulse">🏪</span>
+            <div>
+              <h2 className="text-amber-400 font-black text-sm tracking-widest uppercase">
+                MYSTERY BAZAAR — ร้านค้าเวทมนตร์
+              </h2>
+              <p className="text-[11px] text-white/50 font-bold">ผู้เล่น: {player.name}</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="bg-[#3a2519] border border-amber-500/50 px-4 py-1.5 rounded-xl flex items-center gap-2 shadow-inner">
-              <span className="text-xs text-amber-400 font-bold">GOLD</span>
-              <span className="text-base font-black text-amber-400">💰 {player.gold.toLocaleString()}</span>
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-950/60 border border-amber-500/40 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-inner">
+              <span className="text-xs text-amber-400 font-bold">💰</span>
+              <span className="text-sm font-black text-amber-400">{player.gold.toLocaleString()}</span>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-red-950/80 border border-red-500/50 text-red-400 hover:bg-red-900 font-black flex items-center justify-center text-base transition-transform hover:scale-110"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-red-600/80 border border-white/20 text-white font-black flex items-center justify-center text-sm transition-all hover:scale-110"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* MAIN STORE CONTENT AREA: LEFT NAV, CENTER SHELVES, RIGHT SHOPKEEPER */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[140px_1fr_260px] overflow-hidden bg-[#241710]">
+        {/* MAIN STORE CONTENT AREA: TOP CATEGORY BAR + SCROLLABLE SHELF */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/60">
           
-          {/* LEFT CATEGORY TAB NAVIGATION (VERTICAL BAR) */}
-          <div className="bg-[#180f0a] border-r-2 border-[#472b17] p-2 flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto">
+          {/* CATEGORY TABS (HORIZONTAL CONTAINER) */}
+          <div className="bg-slate-900/80 border-b border-white/10 p-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar shrink-0">
             <CategoryTab active={activeCategory === "wands"} icon="🪄" label="ไม้กายสิทธิ์" onClick={() => setActiveCategory("wands")} />
             <CategoryTab active={activeCategory === "armor"} icon="🛡️" label="เสื้อเกราะ" onClick={() => setActiveCategory("armor")} />
             <CategoryTab active={activeCategory === "amulets"} icon="📿" label="เครื่องราง" onClick={() => setActiveCategory("amulets")} />
-            <CategoryTab active={activeCategory === "potions"} icon="🧪" label="น้ำยาปรุงยา" onClick={() => setActiveCategory("potions")} />
-            <CategoryTab active={activeCategory === "skills"} icon="✨" label="คาถาประจำบ้าน" onClick={() => setActiveCategory("skills")} />
+            <CategoryTab active={activeCategory === "potions"} icon="🧪" label="ยาปรุง" onClick={() => setActiveCategory("potions")} />
+            <CategoryTab active={activeCategory === "skills"} icon="✨" label="คาถาบ้าน" onClick={() => setActiveCategory("skills")} />
             <CategoryTab active={activeCategory === "pets"} icon="🐾" label="สัตว์วิเศษ" onClick={() => setActiveCategory("pets")} />
           </div>
 
-          {/* CENTER WOODEN DISPLAY SHELVES */}
-          <div className="p-6 overflow-y-auto bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#362319] via-[#241710] to-[#150d09] flex flex-col justify-between">
-            <div>
-              <div className="mb-4 flex items-center justify-between border-b border-[#5c371d] pb-2">
-                <h3 className="text-lg font-black text-amber-400 flex items-center gap-2">
-                  <span>ชั้นวางสินค้า</span>
-                  <span className="text-xs font-normal text-white/50">({getCategoryTitle(activeCategory)})</span>
-                </h3>
-              </div>
+          {/* DISPLAY SHELVES CONTENT AREA */}
+          <div className="p-4 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                <span>ชั้นวางสินค้า</span>
+                <span className="text-white/40 text-[10px]">({getCategoryTitle(activeCategory)})</span>
+              </h3>
+            </div>
 
-              {/* ITEM CARDS GRID ON WOODEN DISPLAY SHELVES */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {activeCategory === "wands" && (
-                  <>
-                    <ShopShelfCard
-                      title={`ไม้ทั่วไป: ${commonWandName}`}
-                      sub={`ไม้ประจำบ้าน ${player.name} (+20 DMG)`}
-                      price={1290}
-                      gold={player.gold}
-                      icon="🪄"
-                      img={commonWandImg}
-                      owned={player.wand?.type === "common"}
-                      onBuy={() => onBuy("wand", "common")}
-                    />
-                    <ShopShelfCard
-                      title={`ไม้ VIP: ${vipWandName}`}
-                      sub={`ไม้ระดับสูงประจำบ้าน ${player.name} (+35 DMG)`}
-                      price={2200}
-                      gold={player.gold}
-                      icon="✨"
-                      img={vipWandImg}
-                      owned={player.wand?.type === "vip"}
-                      onBuy={() => onBuy("wand", "vip")}
-                    />
-                  </>
-                )}
-
-                {activeCategory === "armor" && (
+            {/* ITEM CARDS GRID */}
+            <div className="grid grid-cols-2 gap-3">
+              {activeCategory === "wands" && (
+                <>
                   <ShopShelfCard
-                    title="กล่องเกราะลึกลับ"
-                    sub="สุ่มรับเสื้อเกราะ (ผ้าขาวม้า, เสื้อกั๊ก)"
-                    price={800}
+                    title={`ไม้ทั่วไป: ${commonWandName}`}
+                    sub={`ไม้ประจำบ้าน ${player.name} (+20 DMG)`}
+                    price={1290}
                     gold={player.gold}
-                    icon="🎲"
-                    img="/images/items/armor_chest.png"
-                    owned={!!player.armor}
-                    onBuy={() => onBuy("armor", "random")}
+                    icon="🪄"
+                    img={commonWandImg}
+                    owned={player.wand?.type === "common"}
+                    onBuy={() => onBuy("wand", "common")}
                   />
-                )}
-
-                {activeCategory === "amulets" && (
                   <ShopShelfCard
-                    title="หีบเครื่องราง"
-                    sub="สุ่มรับเครื่องรางศักดิ์สิทธิ์"
-                    price={1000}
+                    title={`ไม้ VIP: ${vipWandName}`}
+                    sub={`ไม้ระดับสูงประจำบ้าน ${player.name} (+35 DMG)`}
+                    price={2200}
                     gold={player.gold}
-                    icon="📦"
-                    img="/images/items/amulet_chest.png"
-                    owned={!!player.amulet}
-                    onBuy={() => onBuy("amulet", "random")}
+                    icon="✨"
+                    img={vipWandImg}
+                    owned={player.wand?.type === "vip"}
+                    onBuy={() => onBuy("wand", "vip")}
                   />
-                )}
+                </>
+              )}
 
-                {activeCategory === "potions" &&
-                  Object.entries(POTIONS)
-                    .filter(([id]) => id !== "damage")
-                    .map(([id, pot]) => (
-                      <ShopShelfCard
-                        key={id}
-                        title={pot.name}
-                        sub={pot.description}
-                        price={pot.price}
-                        gold={player.gold}
-                        icon={null}
-                        img={pot.image}
-                        disabled={player.potions.length >= 5}
-                        onBuy={() => onBuy("potion", id)}
-                      />
-                    ))}
+              {activeCategory === "armor" && (
+                <ShopShelfCard
+                  title="กล่องเกราะลึกลับ"
+                  sub="สุ่มรับเสื้อเกราะ (ผ้าขาวม้า, เสื้อกั๊ก)"
+                  price={800}
+                  gold={player.gold}
+                  icon="🎲"
+                  img="/images/items/armor_chest.png"
+                  owned={!!player.armor}
+                  onBuy={() => onBuy("armor", "random")}
+                />
+              )}
 
-                {activeCategory === "skills" &&
-                  SKILL_LIST.map((skill) => {
-                    const owned = player.skills.includes(skill.id);
-                    return (
-                      <ShopShelfCard
-                        key={skill.id}
-                        title={skill.name}
-                        sub={skill.description}
-                        price={2000}
-                        gold={player.gold}
-                        icon={null}
-                        img={`/images/skills/${skill.id}_skill.webp`}
-                        owned={owned}
-                        disabled={!owned && player.skills.length >= 2}
-                        onBuy={() => onBuy("skill", skill.id)}
-                      />
-                    );
-                  })}
+              {activeCategory === "amulets" && (
+                <ShopShelfCard
+                  title="หีบเครื่องราง"
+                  sub="สุ่มรับเครื่องรางศักดิ์สิทธิ์"
+                  price={1000}
+                  gold={player.gold}
+                  icon="📦"
+                  img="/images/items/amulet_chest.png"
+                  owned={!!player.amulet}
+                  onBuy={() => onBuy("amulet", "random")}
+                />
+              )}
 
-                {activeCategory === "pets" &&
-                  PET_LIST.map((pet) => (
+              {activeCategory === "potions" &&
+                Object.entries(POTIONS)
+                  .filter(([id]) => id !== "damage")
+                  .map(([id, pot]) => (
                     <ShopShelfCard
-                      key={pet.id}
-                      title={pet.name}
-                      sub={pet.description}
-                      price={pet.price}
+                      key={id}
+                      title={pot.name}
+                      sub={pot.description}
+                      price={pot.price}
                       gold={player.gold}
-                      icon={pet.emoji}
-                      img={`/images/pets/${pet.id}.png`}
-                      owned={player.pet?.id === pet.id}
-                      disabled={!!player.pet && player.pet.id !== pet.id}
-                      onBuy={() => onBuy("pet", pet.id)}
+                      icon={null}
+                      img={pot.image}
+                      disabled={player.potions.length >= 5}
+                      onBuy={() => onBuy("potion", id)}
                     />
                   ))}
-              </div>
-            </div>
 
-            {/* WOODEN SHELF FOOTER DECORATION */}
-            <div className="mt-6 pt-3 border-t border-[#5c371d] flex items-center justify-between text-xs text-amber-200/60 font-semibold">
-              <span>🪵 สินค้าทั้งหมดในร้านส่งตรงจากโรงเรียนไสยศาสตร์ฮอกปด</span>
-              <span>💰 ยอดคงเหลือ: {player.gold.toLocaleString()} Gold</span>
+              {activeCategory === "skills" &&
+                SKILL_LIST.map((skill) => {
+                  const owned = player.skills.includes(skill.id);
+                  return (
+                    <ShopShelfCard
+                      key={skill.id}
+                      title={skill.name}
+                      sub={skill.description}
+                      price={2000}
+                      gold={player.gold}
+                      icon={null}
+                      img={`/images/skills/${skill.id}_skill.webp`}
+                      owned={owned}
+                      disabled={!owned && player.skills.length >= 2}
+                      onBuy={() => onBuy("skill", skill.id)}
+                    />
+                  );
+                })}
+
+              {activeCategory === "pets" &&
+                PET_LIST.map((pet) => (
+                  <ShopShelfCard
+                    key={pet.id}
+                    title={pet.name}
+                    sub={pet.description}
+                    price={pet.price}
+                    gold={player.gold}
+                    icon={pet.emoji}
+                    img={`/images/pets/${pet.id}.png`}
+                    owned={player.pet?.id === pet.id}
+                    disabled={!!player.pet && player.pet.id !== pet.id}
+                    onBuy={() => onBuy("pet", pet.id)}
+                  />
+                ))}
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM INVENTORY STATUS & SHOPKEEPER FOOTER */}
+        <div className="bg-slate-900/90 border-t border-white/10 p-4 shrink-0 space-y-3">
+          <div className="flex items-center gap-3 bg-slate-950/60 p-2.5 rounded-xl border border-white/5">
+            <div className="w-10 h-10 rounded-lg border border-amber-500/30 overflow-hidden bg-black flex items-center justify-center shrink-0">
+              <img
+                src="/images/npc/พ่อค้าลึกลับ.webp"
+                alt="Shopkeeper"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  e.currentTarget.nextElementSibling.style.display = "flex";
+                }}
+              />
+              <span className="hidden text-xl">👨‍🌾</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-amber-300">พ่อค้าลึกลับแห่งฮอกปด</div>
+              <div className="text-[10px] text-white/50 truncate">"ต้องการสั่งซื้อสินค้าชิ้นไหน เลิกดูแล้วกดซื้อได้เลย!"</div>
             </div>
           </div>
 
-          {/* RIGHT SIDE: FRIENDLY SHOPKEEPER NPC CHARACTER STAGE */}
-          <div className="bg-[#1a120d] border-l-2 border-[#472b17] p-5 flex flex-col items-center justify-between relative overflow-hidden shadow-inner">
-            
-            {/* SHOPKEEPER AVATAR DISPLAY FRAME */}
-            <div className="flex flex-col items-center text-center mt-2 z-10 w-full">
-              <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30 mb-3">
-                MASTER SHOPKEEPER
-              </span>
-              
-              {/* NPC SHOPKEEPER CHARACTER PORTRAIT FRAME */}
-              <div className="w-36 h-48 rounded-2xl border-4 border-[#7a4c28] bg-black/80 shadow-[0_0_25px_rgba(0,0,0,0.8)] overflow-hidden relative flex items-center justify-center group mb-3">
-                <img
-                  src="/images/npc/พ่อค้าลึกลับ.webp"
-                  alt="Shopkeeper"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  onError={(e) => {
-                    // Fallback to Merchant emoji if custom image not provided yet
-                    e.currentTarget.style.display = "none";
-                    e.currentTarget.nextElementSibling.style.display = "flex";
-                  }}
-                />
-                <div className="hidden w-full h-full items-center justify-center text-6xl">
-                  👨‍🌾
-                </div>
-              </div>
-
-              <h4 className="font-black text-amber-300 text-base">พ่อค้าลึกลับแห่งฮอกปด</h4>
-              <p className="text-[10px] text-white/50 mt-1 leading-relaxed px-2 font-semibold">
-                "ยินดีต้อนรับสู่ร้านค้าลึกลับ! ต้องการเลือกซื้อไม้กายสิทธิ์ เสื้อเกราะ หรือสัตว์วิเศษชิ้นไหน บอกข้าได้เลย!"
-              </p>
+          <div className="grid grid-cols-3 gap-1.5 text-[10px] text-white/70 font-semibold text-center">
+            <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
+              🧪 ยา: <span className="text-amber-400 font-bold">{player.potions.length}/5</span>
             </div>
-
-            {/* SHOPPING BAG / SUMMARY DISPLAY */}
-            <div className="w-full bg-[#2c1d14] border border-[#5c371d] rounded-2xl p-3.5 mt-4 z-10 text-xs space-y-1.5 shadow-md">
-              <div className="flex justify-between font-bold text-white/70">
-                <span>🎒 กระเป๋ายา</span>
-                <span className="text-amber-400 font-black">{player.potions.length} / 5 ขวด</span>
-              </div>
-              <div className="flex justify-between font-bold text-white/70">
-                <span>✨ คาถาประจำบ้าน</span>
-                <span className="text-purple-400 font-black">{player.skills.length} / 2 สกิล</span>
-              </div>
-              <div className="flex justify-between font-bold text-white/70 pt-1 border-t border-white/10">
-                <span>🐾 สัตว์วิเศษ</span>
-                <span className="text-emerald-400 font-black">{player.pet ? player.pet.name : "ไม่มี"}</span>
-              </div>
+            <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
+              ✨ คาถา: <span className="text-purple-400 font-bold">{player.skills.length}/2</span>
             </div>
-
+            <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
+              🐾 สัตว์: <span className="text-emerald-400 font-bold">{player.pet ? player.pet.name : "ไม่มี"}</span>
+            </div>
           </div>
-
         </div>
 
       </div>
@@ -241,14 +223,14 @@ function CategoryTab({ active, icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2.5 p-3 rounded-xl text-xs font-black transition-all w-full text-left ${
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
         active
-          ? "bg-amber-600 text-black shadow-lg scale-105 font-black border border-amber-300"
-          : "bg-[#281a12] text-white/60 hover:bg-[#38251a] hover:text-white border border-transparent"
+          ? "bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-lg scale-105 border border-amber-300"
+          : "bg-slate-800/80 text-white/60 hover:bg-slate-700 hover:text-white border border-white/5"
       }`}
     >
-      <span className="text-base">{icon}</span>
-      <span className="truncate">{label}</span>
+      <span className="text-sm">{icon}</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -260,44 +242,46 @@ function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disa
   return (
     <div
       onClick={!isDisabled && !owned ? onBuy : undefined}
-      className={`group flex flex-col items-center text-center p-3.5 rounded-2xl border-2 transition-all relative overflow-hidden ${
+      className={`group flex flex-col justify-between p-3 rounded-2xl border transition-all relative overflow-hidden ${
         owned
-          ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300"
+          ? "border-emerald-500/60 bg-emerald-950/30 text-emerald-300"
           : isDisabled
-          ? "border-white/5 bg-black/50 text-white/30 opacity-40 cursor-not-allowed"
-          : "border-[#694226] bg-[#2d1c13] hover:border-amber-400 hover:bg-[#3d271a] cursor-pointer shadow-lg hover:scale-105"
+          ? "border-white/5 bg-slate-950/50 text-white/30 opacity-40 cursor-not-allowed"
+          : "border-white/10 bg-slate-900/80 hover:border-amber-400/80 hover:bg-slate-800/90 cursor-pointer shadow-lg hover:scale-102"
       }`}
     >
-      {/* DISPLAY SHELF ART ITEM FRAME */}
-      <div className="w-20 h-20 rounded-2xl border-2 border-[#5c371d] bg-black/60 flex items-center justify-center mb-2 overflow-hidden shadow-inner relative">
-        {img ? (
-          <img
-            src={img}
-            alt={title}
-            className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-300"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-              e.currentTarget.nextElementSibling.style.display = "flex";
-            }}
-          />
-        ) : null}
-        <div className={`hidden w-full h-full items-center justify-center text-4xl ${img ? "" : "!flex"}`}>
-          {icon}
+      <div className="flex flex-col items-center text-center">
+        {/* DISPLAY SHELF ART ITEM FRAME */}
+        <div className="w-16 h-16 rounded-xl border border-white/10 bg-black/60 flex items-center justify-center mb-2 overflow-hidden shadow-inner relative">
+          {img ? (
+            <img
+              src={img}
+              alt={title}
+              className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-300"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+                e.currentTarget.nextElementSibling.style.display = "flex";
+              }}
+            />
+          ) : null}
+          <div className={`hidden w-full h-full items-center justify-center text-3xl ${img ? "" : "!flex"}`}>
+            {icon}
+          </div>
         </div>
+
+        <h4 className="font-black text-xs text-white truncate w-full mb-0.5">{title}</h4>
+        <p className="text-[10px] text-white/50 line-clamp-2 h-7 leading-tight mb-2">{sub}</p>
       </div>
 
-      <h4 className="font-black text-xs text-white truncate w-full mb-0.5">{title}</h4>
-      <p className="text-[10px] text-white/50 line-clamp-2 h-7 leading-tight mb-2">{sub}</p>
-
       {/* PRICE / PURCHASE BUTTON */}
-      <div className="mt-auto w-full">
+      <div className="w-full mt-1">
         {owned ? (
-          <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-lg border border-emerald-500/40 block">
+          <span className="text-[10px] font-black text-emerald-400 bg-emerald-950/60 py-1 rounded-lg border border-emerald-500/40 block text-center">
             ✅ ครอบครองแล้ว
           </span>
         ) : (
           <span
-            className={`text-[11px] font-black px-3 py-1 rounded-lg border block ${
+            className={`text-[10px] font-black py-1 rounded-lg border block text-center ${
               canAfford
                 ? "bg-amber-500 text-black border-amber-300 shadow-md group-hover:bg-amber-400"
                 : "bg-white/5 text-white/30 border-white/10"

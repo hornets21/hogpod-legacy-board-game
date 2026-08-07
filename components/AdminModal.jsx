@@ -81,7 +81,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
         </div>
       )}
       <div
-        className="relative w-full max-w-5xl bg-slate-950/95 border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.25)] flex flex-col max-h-[92vh] text-white overflow-hidden"
+        className="relative w-full max-w-5xl bg-slate-950/90 backdrop-blur-2xl border border-amber-500/20 rounded-3xl p-4 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.15)] flex flex-col max-h-[92vh] text-white overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Bar */}

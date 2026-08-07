@@ -6,8 +6,9 @@
 // Phase 2: เพิ่ม state "hit" (สั่น + แดง) และ "cast" (เรืองแสง)
 // ============================================================
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useMemo } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { cellToWorld, TOKEN_OFFSETS } from "@/lib/boardLayout";
 import { getEmojiTexture } from "./textures";
@@ -158,8 +159,15 @@ function Token({ player, index, isActive }) {
         }
       } else {
         // ก้าวเดินทีละช่องตามพิกัด XZ จริงของกระดาน
-        g.position.x += (dx / dist) * step;
-        g.position.z += (dz / dist) * step;
+        const dirX = dx / dist;
+        const dirZ = dz / dist;
+        g.position.x += dirX * step;
+        g.position.z += dirZ * step;
+
+        // ปรับทิศทางการหันหน้าของตัวหมาก 3D ตามทิศทางเวกเตอร์ก้าวเดินจริง
+        const targetAngle = Math.atan2(dirX, dirZ);
+        g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, targetAngle, delta * 10);
+
         a.segmentProgress = THREE.MathUtils.clamp(
           1 - dist / a.segmentDistance,
           0,
@@ -170,7 +178,6 @@ function Token({ player, index, isActive }) {
         const hop = Math.sin(a.segmentProgress * Math.PI);
         g.position.y = 0.04 + hop * 0.5;
         g.rotation.x = Math.sin(a.segmentProgress * Math.PI * 2) * 0.12;
-        g.rotation.z = Math.cos(a.segmentProgress * Math.PI) * 0.1;
       }
     } else if (a.mode === "teleportOut") {
       a.scale = Math.max(0.01, a.scale - TELEPORT_SPEED * delta);
@@ -186,11 +193,14 @@ function Token({ player, index, isActive }) {
       g.scale.setScalar(a.scale);
       if (a.scale >= 1) a.mode = "idle";
     } else {
-      // idle: ลอยเบาๆ
+      // idle: ลอยเบาๆ + หันหน้าไปตามทิศทางแนวงูกระดาน (ขวา = 90 deg, ซ้าย = -90 deg)
       g.position.y = Math.sin(t * 2 + index * 1.7) * 0.045 + 0.03;
+      const rowFromBottom = Math.floor((player.position - 1) / 10);
+      const idleFacingAngle = rowFromBottom % 2 === 0 ? Math.PI / 2 : -Math.PI / 2;
+      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, idleFacingAngle, delta * 6);
     }
 
-    // ── Hit Feedback: token สั่น + เรืองแสงแดง ──
+    // ── Hit Feedback: token สั่น + เรืองแสงแดง + กระเด้งถอยหลัง ──
     let shakeX = 0, shakeZ = 0;
     let hitEmissiveBoost = 0;
     let hitColorMix = null;
@@ -199,10 +209,13 @@ function Token({ player, index, isActive }) {
       const h = hitState.current;
       if (h.t < h.duration) {
         const k = 1 - h.t / h.duration;
-        shakeX = (Math.sin(h.t * 60) * 0.08) * k;
-        shakeZ = (Math.cos(h.t * 55) * 0.06) * k;
-        hitEmissiveBoost = k * 4;
+        shakeX = (Math.sin(h.t * 60) * 0.15) * k;
+        shakeZ = (Math.cos(h.t * 55) * 0.12) * k;
+        hitEmissiveBoost = k * 5;
         hitColorMix = new THREE.Color("#ef4444");
+        // อนิเมชันกระโดดสะท้อนกระแทกเมื่อโดนโจมตี
+        g.position.y += Math.sin(h.t * Math.PI * 4) * 0.2 * k;
+        g.rotation.z = Math.sin(h.t * 30) * 0.3 * k;
       } else {
         h.active = false;
       }
@@ -210,7 +223,7 @@ function Token({ player, index, isActive }) {
     g.position.x += shakeX;
     g.position.z += shakeZ;
 
-    // ── Cast Feedback: token เรืองแสงตามสีสกิล ──
+    // ── Cast Feedback: token หมุนคริสตัล + พุ่งร่ายเวท ──
     let castEmissiveBoost = 0;
     let castColorMix = null;
     if (castState.current.active) {
@@ -218,8 +231,11 @@ function Token({ player, index, isActive }) {
       const c = castState.current;
       if (c.t < c.duration) {
         const k = 1 - c.t / c.duration;
-        castEmissiveBoost = k * 3;
+        castEmissiveBoost = k * 4;
         castColorMix = new THREE.Color(c.color);
+        // อนิเมชันหมากหมุนลอยตัวร่ายเวทมนตร์
+        g.rotation.y += delta * 12 * k;
+        g.position.y += Math.sin(c.t * Math.PI * 3) * 0.25 * k;
       } else {
         c.active = false;
       }
@@ -261,41 +277,27 @@ function Token({ player, index, isActive }) {
           <meshStandardMaterial color="#1a2030" roughness={0.85} />
         </mesh>
 
-        {/* คริสตัลสีบ้าน */}
-        <mesh ref={crystalRef} position={[0, 0.68, 0]} castShadow>
-          <octahedronGeometry args={[0.21]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={isDead ? 0.15 : 1.5}
-            roughness={0.25}
-            metalness={0.1}
-          />
-        </mesh>
-
-        {/* ตราบ้านลอยเหนือคริสตัล (ใช้รูปจริง ถ้าโหลดไม่ได้ใช้ emoji) */}
-        {player.image ? (
-          <Suspense
-            fallback={
-              <sprite position={[0, 1.14, 0]} scale={[0.46, 0.46, 0.46]}>
-                <spriteMaterial
-                  map={getEmojiTexture(player.emoji)}
-                  transparent
-                  depthWrite={false}
-                />
-              </sprite>
-            }
-          >
-            <CrestSprite url={player.image} />
+        {/* โมเดล 3D จริงสำหรับทุกบ้าน (wartaurus, podfindor, analyze, sraraff) */}
+        {HOUSE_MODELS[player.houseId] ? (
+          <Suspense fallback={
+            <mesh ref={crystalRef} position={[0, 0.68, 0]} castShadow>
+              <octahedronGeometry args={[0.21]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} />
+            </mesh>
+          }>
+            <HouseModel modelPath={HOUSE_MODELS[player.houseId]} position={[0, 0.46, 0]} scale={[0.22, 0.22, 0.22]} />
           </Suspense>
         ) : (
-          <sprite position={[0, 1.14, 0]} scale={[0.46, 0.46, 0.46]}>
-            <spriteMaterial
-              map={getEmojiTexture(player.emoji)}
-              transparent
-              depthWrite={false}
+          <mesh ref={crystalRef} position={[0, 0.68, 0]} castShadow>
+            <octahedronGeometry args={[0.21]} />
+            <meshStandardMaterial
+              color={color}
+              emissive={color}
+              emissiveIntensity={isDead ? 0.15 : 1.5}
+              roughness={0.25}
+              metalness={0.1}
             />
-          </sprite>
+          </mesh>
         )}
       </group>
 
@@ -321,6 +323,13 @@ function Token({ player, index, isActive }) {
   );
 }
 
+const HOUSE_MODELS = {
+  watrat: "/models/wartaurus.glb",
+  plodfindr: "/models/podfindor.glb",
+  anal: "/models/analyze.glb",
+  slarf: "/models/sraraff.glb",
+};
+
 function CrestSprite({ url }) {
   const tex = useLoader(THREE.TextureLoader, url);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -330,3 +339,23 @@ function CrestSprite({ url }) {
     </sprite>
   );
 }
+
+function HouseModel({ modelPath, ...props }) {
+  const { scene } = useGLTF(modelPath);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone();
+    const box = new THREE.Box3().setFromObject(clone);
+    const center = box.getCenter(new THREE.Vector3());
+    // จัดศูนย์กลาง XZ และขยับฐานล่างสุด (min.y) มาวางแตะพื้น Y=0 พอดี
+    clone.position.set(-center.x, -box.min.y, -center.z);
+    return clone;
+  }, [scene]);
+
+  return (
+    <group {...props} dispose={null}>
+      <primitive object={clonedScene} />
+    </group>
+  );
+}
+
+Object.values(HOUSE_MODELS).forEach((path) => useGLTF.preload(path));

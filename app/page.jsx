@@ -54,6 +54,8 @@ import {
   spawnNpc,
   spawnAllNpcs,
   tickNpcCooldowns,
+  equipArmorToPlayer,
+  equipAmuletToPlayer,
 } from "@/lib/gameEngine";
 
 import { MONSTER_MAP, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS } from "@/lib/gameData";
@@ -269,15 +271,15 @@ function gameReducer(state, action) {
     }
 
     case "CLOSE_DOCTOR_MODAL": {
-      return { ...state, doctorModalData: null };
+      return advanceTurn({ ...state, doctorModalData: null });
     }
 
     case "CLOSE_SKILL_MODAL": {
-      return despawnNpc({ ...state, skillModalPlayer: null }, "skill_trainer");
+      return advanceTurn(despawnNpc({ ...state, skillModalPlayer: null }, "skill_trainer"));
     }
 
     case "CLOSE_PET_MODAL": {
-      return despawnNpc({ ...state, petModalPlayer: null }, "pet_trainer");
+      return advanceTurn(despawnNpc({ ...state, petModalPlayer: null }, "pet_trainer"));
     }
 
     case "FORCE_SPAWN_NPC": {
@@ -439,13 +441,13 @@ function gameReducer(state, action) {
       } else if (itemType === "armor") {
         const armor = itemData || ARMOR_POOL.find((a) => a.id === itemId);
         if (armor) {
-          p.armor = armor;
+          equipArmorToPlayer(p, armor);
           itemLogName = armor.name;
         }
       } else if (itemType === "amulet") {
         const amulet = itemData || AMULET_POOL.find((a) => a.id === itemId);
         if (amulet) {
-          p.amulet = amulet;
+          equipAmuletToPlayer(p, amulet);
           itemLogName = amulet.name;
         }
       } else if (itemType === "potion") {
@@ -858,6 +860,8 @@ export default function Home() {
             onRoll={handleRoll}
             canRoll={canRoll}
             resetDiceKey={resetDiceKey}
+            focusCell={state.combatState?.monster?.cell || state.pvpEncounter?.cell || null}
+            isCombatActive={state.phase === "combat" || !!state.pvpEncounter}
           />
         </div>
       )}

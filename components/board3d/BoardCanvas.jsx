@@ -17,9 +17,11 @@ import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
 import PlaneMonster from "./PlaneMonster";
+import { AnimatedPlaneMonster } from "./AnimatedMonster";
 import SkillFxLayer from "./SkillFxLayer";
 import NpcModels from "./NpcModels";
 import { MONSTER_MAP } from "@/lib/gameData";
+import { cellToWorld } from "@/lib/boardLayout";
 
 // ─── พิกัดประจำและค่าฟิสิกส์การกระเด้งของลูกเต๋า 3D ──────────
 const BOARD_DICE_POS = [0, 1.8, 4.2];
@@ -165,14 +167,33 @@ function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }
   );
 }
 
-// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์เล็กน้อย
-function CameraRig() {
+// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์ + Dynamic 3D Combat Camera Zoom Focus
+function CameraRig({ focusCell = null, isCombatActive = false }) {
   useFrame(({ camera, pointer }, dt) => {
-    const k = Math.min(1, dt * 2.2);
-    camera.position.x += (pointer.x * 1.1 - camera.position.x) * k;
-    camera.position.y += (11 + pointer.y * 0.7 - camera.position.y) * k;
-    camera.position.z += (10.8 - camera.position.z) * k;
-    camera.lookAt(0, 0, 0.3);
+    const k = Math.min(1, dt * 3.5); // ความเร็วนุ่มนวลในการเคลื่อนที่กล้อง
+
+    if (isCombatActive && focusCell) {
+      const [targetX, , targetZ] = cellToWorld(focusCell);
+      // โหมดประลองยุทธ์: ซูมกล้องลงไปประชิดพิกัดช่องต่อสู้ 3D
+      const destX = targetX + pointer.x * 0.4;
+      const destY = 4.2 + pointer.y * 0.3;
+      const destZ = targetZ + 3.8;
+
+      camera.position.x += (destX - camera.position.x) * k;
+      camera.position.y += (destY - camera.position.y) * k;
+      camera.position.z += (destZ - camera.position.z) * k;
+      camera.lookAt(targetX, 0.5, targetZ);
+    } else {
+      // โหมดเดินบนกระดานปกติ: กล้องมุมมองกว้าง
+      const destX = pointer.x * 1.1;
+      const destY = 11 + pointer.y * 0.7;
+      const destZ = 10.8;
+
+      camera.position.x += (destX - camera.position.x) * k;
+      camera.position.y += (destY - camera.position.y) * k;
+      camera.position.z += (destZ - camera.position.z) * k;
+      camera.lookAt(0, 0, 0.3);
+    }
   });
   return null;
 }
@@ -253,6 +274,8 @@ export default function BoardCanvas({
   onRoll,
   canRoll,
   resetDiceKey,
+  focusCell = null,
+  isCombatActive = false,
 }) {
   const [hoverInfo, setHoverInfo] = useState(null);
   const hoverLines = describeHover(hoverInfo);
@@ -261,19 +284,13 @@ export default function BoardCanvas({
     <div className="board3d-wrap">
       <Canvas
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, 1.5]} // ปรับ Resolution สเกลอัตโนมัติ ช่วยลื่นไหลมากบนคอมพิวเตอร์สเปกต่ำ
-        performance={{ min: 0.5 }} // ปรับลดสเตตัสเอฟเฟกต์อัตโนมัติเมื่อ FPS ตก
+        dpr={[1, 1.5]}
+        performance={{ min: 0.5 }}
         camera={{ position: [0, 11, 10.8], fov: 40, near: 0.1, far: 80 }}
-        gl={{
-          antialias: true,
-          alpha: true, // เปิดความโปร่งใสเพื่อให้มองเห็นภาพพื้นหลัง CSS ชัดเจน
-          powerPreference: "high-performance",
-          precision: "mediump", // โหมดการประมวลผลการ์ดจอความเร็วสูง เหมาะสำหรับคอมสเปกต่ำ
-          failIfMajorPerformanceCaveat: false,
-        }}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
       >
         <SceneLights />
-        <CameraRig />
+        <CameraRig focusCell={focusCell} isCombatActive={isCombatActive} />
 
         <Suspense fallback={null}>
           <Atmosphere />
@@ -295,12 +312,25 @@ export default function BoardCanvas({
           {/* NPC Models Layer — สุ่มเกิด 3D Billboard บนกระดาน */}
           <NpcModels npcs={npcs} />
 
-          {/* แสดงภาพมอนสเตอร์ 2D Plane สำหรับมอนสเตอร์ที่ยังไม่ถูกกำจัด */}
+          {/* แสดงภาพมอนสเตอร์ 2D Plane สำหรับมอนสเตอร์ที่ยังไม่ถูกกำจัด (รองรับทั้งแบบภาพนิ่ง และ Sprite Frames) */}
           {Array.from(monsterCells || []).map((cellNum) => {
             const c = Number(cellNum);
             const monster = (monsterMap || MONSTER_MAP)[c];
             const imgPath = monster?.image || "/images/monsters/ชบ7000.webp";
             const isBoss = monster?.isBoss || c === 90;
+
+            if (monster?.frames && monster.frames.length > 0) {
+              return (
+                <AnimatedPlaneMonster
+                  key={`plane-mon-${c}`}
+                  cell={c}
+                  frames={monster.frames}
+                  fps={monster.fps || 8}
+                  fallbackImage={imgPath}
+                  isBoss={isBoss}
+                />
+              );
+            }
 
             return (
               <PlaneMonster

@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
-/* ─── Custom Font Setup (HarryP-MVZ6w.woff2) ──────────── */
+/* ─── Custom Font Setup (HarryP-MVZ6w.woff2 & ttf) ─────── */
 @font-face {
   font-family: "HarryP";
-  src: url("/fonts/HarryP-MVZ6w.woff2") format("woff2");
+  src: url("/fonts/HarryP-MVZ6w.woff2") format("woff2"),
+       url("/fonts/HarryP-MVZ6w.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -30,13 +31,14 @@
 
   --house-color: #ffffff;
 
-  --font-harry: "HarryP", sans-serif;
-  --font: "HarryP", "Inter", system-ui, sans-serif;
+  --font-harry: "HarryP", "Kanit", sans-serif;
+  --font: "HarryP", "Kanit", "Inter", system-ui, sans-serif;
 }
 
 /* ─── Reset & Custom Cursor ───────────────────────────────── */
 * { box-sizing: border-box; }
 html, body {
+  font-family: var(--font);
   cursor: url("/images/system/main_cursor.cur"), auto;
 }
 

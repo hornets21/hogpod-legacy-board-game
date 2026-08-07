@@ -67,7 +67,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
 
   return (
     <div className="modal-overlay z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
-      <div className="modal-box max-w-4xl w-full bg-[#0d1017] border-2 border-amber-500/40 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.9)] flex flex-col max-h-[95vh]">
+      <div className="modal-box max-w-4xl w-full bg-slate-950/90 backdrop-blur-2xl border border-amber-500/20 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col max-h-[95vh]">
         
         {/* TOP HUD STAT BAR (Health, Attack, Armor, Magic) */}
         <div className="bg-[#161a23] border-b border-white/10 px-6 py-3 flex items-center justify-between shadow-md">

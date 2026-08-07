@@ -25,19 +25,42 @@ export default function SkillFxLayer({ players, currentPlayerIndex }) {
   const [effects, setEffects] = useState([]);
 
   useEffect(() => {
-    const unsub = on(FX_EVENTS.SKILL_CAST, (payload) => {
+    // 1. ดักจับการร่ายสกิล (Skill Cast)
+    const unsubSkill = on(FX_EVENTS.SKILL_CAST, (payload) => {
       const id = ++_fxId;
       const fx = buildEffect(id, payload, players);
       if (!fx) return;
 
-      setEffects((prev) => [...prev.slice(-6), fx]);
+      setEffects((prev) => [...prev.slice(-8), fx]);
 
-      // Auto-cleanup หลัง fx.duration
       setTimeout(() => {
         setEffects((prev) => prev.filter((e) => e.id !== id));
       }, fx.duration * 1000 + 100);
     });
-    return unsub;
+
+    // 2. ดักจับความเสียหาย (Damage Dealt / PvP Clash Shockwave)
+    const unsubDmg = on(FX_EVENTS.DAMAGE_DEALT, (payload) => {
+      const id = ++_fxId;
+      const targetPos = getPlayerWorldPos(payload.targetIndex, players);
+      const fx = {
+        id,
+        type: "shockwave",
+        position: targetPos,
+        color: payload.type === "pvp" ? "#ef4444" : "#f59e0b",
+        duration: 0.8,
+      };
+
+      setEffects((prev) => [...prev.slice(-8), fx]);
+
+      setTimeout(() => {
+        setEffects((prev) => prev.filter((e) => e.id !== id));
+      }, fx.duration * 1000 + 100);
+    });
+
+    return () => {
+      unsubSkill();
+      unsubDmg();
+    };
   }, [players]);
 
   return (
@@ -187,6 +210,12 @@ function EffectInstance({ fx }) {
         if (g.material) g.material.opacity = (1 - k) * 0.9;
         break;
       }
+      case "shockwave": {
+        const s = 0.5 + k * 2.8;
+        g.scale.set(s, s, s);
+        if (g.material) g.material.opacity = (1 - k) * 0.9;
+        break;
+      }
       default:
         break;
     }
@@ -198,6 +227,20 @@ function EffectInstance({ fx }) {
 // ─── Render mesh ตาม fx.type ─────────────────────────────
 function renderFxMesh(fx, ref) {
   switch (fx.type) {
+    case "shockwave":
+      return (
+        <mesh ref={ref} position={fx.position} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.3, 0.6, 32]} />
+          <meshBasicMaterial
+            color={fx.color}
+            transparent
+            opacity={0.9}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      );
     case "shield":
       return (
         <mesh ref={ref} position={fx.position}>

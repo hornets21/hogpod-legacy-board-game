@@ -16,7 +16,7 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 select-none overflow-y-auto bg-slate-950/90 backdrop-blur-xl animate-fade-in">
-      <div className="max-w-2xl w-full flex flex-col items-center text-center p-6 md:p-8 rounded-3xl bg-slate-900/95 border-2 border-amber-500/50 shadow-[0_0_60px_rgba(245,158,11,0.3)]">
+      <div className="max-w-2xl w-full flex flex-col items-center text-center p-6 md:p-8 rounded-3xl bg-slate-950/90 backdrop-blur-2xl border border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.15)] overflow-hidden">
         
         {/* Header Icon */}
         <div className="w-20 h-20 mb-4 rounded-2xl bg-gradient-to-br from-amber-500/30 to-purple-900/40 border-2 border-amber-400/60 flex items-center justify-center shadow-lg animate-bounce">
