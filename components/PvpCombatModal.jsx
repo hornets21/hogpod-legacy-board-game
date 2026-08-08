@@ -10,16 +10,24 @@ import Pvp3dBattleStage from "@/components/board3d/Pvp3dBattleStage";
 export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
   const [selectedSkills, setSelectedSkills] = useState({}); // { houseId: skillId }
   const [selectedPotions, setSelectedPotions] = useState({}); // { houseId: potionId }
+  const [selectedTargets, setSelectedTargets] = useState({}); // { houseId: targetPlayerIndex }
   const [selectedAlliances, setSelectedAlliances] = useState({}); // { houseId: alliedHouseId }
   const [clashResult, setClashResult] = useState(null);
 
   if (!pvpEncounter) return null;
 
   const cell = pvpEncounter.cell || 1;
-  const participants = pvpEncounter.participants || 
+  const participants = (pvpEncounter.participants ||
     (pvpEncounter.participantIndices
-      ? pvpEncounter.participantIndices.map((idx) => players[idx]).filter(Boolean)
-      : []);
+      ? pvpEncounter.participantIndices.map((idx) => ({ ...players[idx], playerIndex: idx }))
+      : [])
+  )
+    .map((p) => {
+      if (!p) return null;
+      const playerIndex = p.playerIndex ?? players.findIndex((player) => player.houseId === p.houseId);
+      return playerIndex >= 0 ? { ...p, playerIndex } : null;
+    })
+    .filter(Boolean);
 
   if (participants.length === 0) return null;
 
@@ -47,11 +55,17 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
     }));
   };
 
+  const handleSelectTarget = (houseId, targetIndex) => {
+    setSelectedTargets((prev) => ({ ...prev, [houseId]: Number(targetIndex) }));
+  };
+
   // ─── START PVP CLASH CALCULATION ──────────────────────────────
   const handleStartClash = () => {
     let updatedPlayers = [...players];
     let logEntries = [];
     let houseClashData = {};
+    const directAttacks = [];
+    let extraTurnGranted = false;
 
     logEntries.push(`⚔️ ศึกลานประลองยุทธ์หลากบ้านอุบัติขึ้น ณ ช่อง #${cell}!`);
 
@@ -62,17 +76,85 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       let skillBonusDmg = 0;
       let potionBonusDmg = 0;
 
+      if (!playerObj || !playerObj.houseId) return;
+
+      const potionId = selectedPotions[hId];
+      const potion = potionId ? POTIONS[potionId] : null;
+      const potionIndex = potionId ? playerObj.potions?.indexOf(potionId) : -1;
+      if (potion && !potion.isTrap && potionId !== "revive" && potionIndex >= 0) {
+        playerObj.potions = playerObj.potions.filter((_, index) => index !== potionIndex);
+        if (potionId === "heal") {
+          const amount = potion.healAmount || 30;
+          playerObj.hp = Math.min(playerObj.maxHp, playerObj.hp + amount);
+          logEntries.push("🧪 " + playerObj.name + " ใช้ยาเพิ่มเลือด +" + amount + " HP");
+          emitHeal({ targetIndex: p.playerIndex, amount });
+        } else if (potionId === "cooldown") {
+          const cooldowns = { ...(playerObj.skillCooldowns || {}) };
+          Object.keys(cooldowns).forEach((skillId) => {
+            cooldowns[skillId] = Math.max(0, cooldowns[skillId] - (potion.cdReduce || 2));
+          });
+          playerObj.skillCooldowns = cooldowns;
+          logEntries.push("⏱️ " + playerObj.name + " ลดคูลดาวน์สกิลลง " + (potion.cdReduce || 2) + " เทิร์น");
+        } else if (potionId === "damage") {
+          potionBonusDmg = potion.dmgBonus || 100;
+          logEntries.push("⚡ " + playerObj.name + " ใช้ยาเพิ่มดาเมจ +" + potionBonusDmg);
+        }
+      }
+
       // สกิลประจำบ้าน
       const skId = selectedSkills[hId];
-      if (skId && SKILLS[skId]) {
-        const sk = SKILLS[skId];
+      const sk = skId ? SKILLS[skId] : null;
+      const skillReady = sk && playerObj.skills?.includes(skId) && (playerObj.skillCooldowns?.[skId] || 0) <= 0;
+      const targetIndex = selectedTargets[hId];
+      const targetIsParticipant = participants.some((participant) => participant.playerIndex === targetIndex);
+      if (skillReady && sk.requiresTarget === "player" && (!targetIsParticipant || targetIndex === p.playerIndex)) {
+        logEntries.push("🎯 " + playerObj.name + " ยังไม่ได้เลือกเป้าหมาย Skill");
+      } else if (skillReady && sk.requiresTarget !== "monster") {
         const cdBase = sk.cooldown || 3;
-        const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? cdBase - 1 : cdBase;
+        const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? Math.max(1, cdBase - 1) : cdBase;
         playerObj.skillCooldowns = { ...(playerObj.skillCooldowns || {}), [skId]: cdActual };
         logEntries.push(`✨ ${playerObj.name} ร่ายเวทมนตร์ประจำบ้าน "${sk.nameTh || sk.name}"!`);
         emitSkillCast({ playerId: p.playerIndex, skillId: skId, skillData: sk });
 
-        if (sk.dmg) skillBonusDmg += sk.dmg;
+        if (sk.dmg && sk.target === "player") {
+          directAttacks.push({ targetIndex, amount: sk.dmg, skill: sk });
+        } else if (sk.dmg) {
+          skillBonusDmg += sk.dmg;
+        }
+
+        if (sk.effect === "invincible") {
+          playerObj.isInvincible = true;
+          playerObj.invincibleTurns = sk.duration || 2;
+        } else if (sk.effect === "lock_dice") {
+          playerObj.nextRollOverride = 6;
+        } else if (sk.effect === "steal_turn") {
+          extraTurnGranted = true;
+        } else if (sk.effect === "steal_potion") {
+          const target = updatedPlayers[targetIndex];
+          if (target?.potions?.length && playerObj.potions.length < 5) {
+            const stolenIndex = Math.floor(Math.random() * target.potions.length);
+            const stolenPotion = target.potions[stolenIndex];
+            updatedPlayers[targetIndex] = {
+              ...target,
+              potions: target.potions.filter((_, index) => index !== stolenIndex),
+            };
+            playerObj.potions = [...playerObj.potions, stolenPotion];
+            logEntries.push("🎭 " + playerObj.name + " ขโมยยา " + stolenPotion + " จาก " + target.name);
+          }
+        } else if (sk.effect === "shuffle_positions") {
+          const positions = participants.map((participant) => updatedPlayers[participant.playerIndex].position);
+          for (let i = positions.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+          }
+          participants.forEach((participant, index) => {
+            updatedPlayers[participant.playerIndex] = {
+              ...updatedPlayers[participant.playerIndex],
+              position: positions[index],
+            };
+          });
+          logEntries.push("🌀 " + playerObj.name + " สลับตำแหน่งผู้เข้าร่วม PvP");
+        }
       }
 
       const baseDmg = getTotalDmg(playerObj);
@@ -85,7 +167,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
         skillBonusDmg,
         totalPower,
         calcDmg,
-        isInvincible: skId === "stay_stupid",
+        isInvincible: Boolean(playerObj.isInvincible || (skillReady && sk?.effect === "invincible")),
         allianceWith: selectedAlliances[hId] || null,
         usedSkillId: skId,
       };
@@ -130,6 +212,16 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
     });
 
     // 3. สรุปผล ชนะ / เสมอ / จับมือพันธมิตร
+    directAttacks.forEach(({ targetIndex, amount, skill }) => {
+      const targetParticipant = participants.find((participant) => participant.playerIndex === targetIndex);
+      if (!targetParticipant || houseClashData[targetParticipant.houseId]?.isInvincible) return;
+      const target = { ...updatedPlayers[targetIndex] };
+      target.hp = Math.max(0, target.hp - amount);
+      updatedPlayers[targetIndex] = target;
+      logEntries.push("🔥 " + (skill.nameTh || skill.name) + " สร้างความเสียหาย " + amount + " ใส่ " + target.name);
+      emitDamageDealt({ targetIndex, amount, type: "pvp", sourceId: skill.id });
+    });
+
     const hasActiveAlliance = Object.values(selectedAlliances).some(Boolean);
     let highestDmg = -1;
     let winnerName = null;
@@ -168,6 +260,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       winnerName,
       isDraw,
       battleSummaryText,
+      extraTurnGranted,
     });
   };
 
@@ -177,6 +270,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       choice: "resolve",
       updatedPlayers: result.updatedPlayers,
       logEntries: result.logEntries,
+      extraTurn: result.extraTurnGranted,
     });
   };
 
@@ -273,7 +367,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
                             onUse={(id) => isReady && handleToggleSkill(hId, id)}
                             size="sm"
                             selected={isSelected}
-                            disabled={!isReady}
+                            disabled={!isReady || sk.requiresTarget === "monster"}
                           />
                         );
                       })
@@ -289,7 +383,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
                     </div>
                     {p.potions && p.potions.length > 0 ? (
                       <div className="space-y-1">
-                        {Array.from(new Set(p.potions)).map((potId) => {
+                        {Array.from(new Set(p.potions)).filter((potId) => !POTIONS[potId]?.isTrap && potId !== "revive").map((potId) => {
                           const pot = POTIONS[potId];
                           if (!pot) return null;
                           const isSelected = selectedPotions[hId] === potId;
@@ -318,6 +412,21 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
                   </div>
 
                   {/* 3. SELECT ALLIANCE (โหมดจับมือพันธมิตร) */}
+                  {selectedSkills[hId] && SKILLS[selectedSkills[hId]]?.requiresTarget === "player" && (
+                    <select
+                      value={selectedTargets[hId] ?? ""}
+                      onChange={(event) => handleSelectTarget(hId, event.target.value)}
+                      className="w-full rounded-lg border border-red-400/40 bg-slate-900 px-2 py-1 text-[10px] font-bold text-white"
+                    >
+                      <option value="">เลือกเป้าหมาย Skill</option>
+                      {participants
+                        .filter((other) => other.houseId !== hId)
+                        .map((other) => (
+                          <option key={other.playerIndex} value={other.playerIndex}>{other.name}</option>
+                        ))}
+                    </select>
+                  )}
+
                   {participants.length > 1 && (
                     <div>
                       <div className="text-[9px] font-black text-emerald-400 mb-1 uppercase tracking-wider">

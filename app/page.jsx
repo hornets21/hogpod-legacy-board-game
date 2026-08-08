@@ -348,6 +348,7 @@ function gameReducer(state, action) {
           ...state,
           players,
           pvpEncounter: null,
+          extraTurn: Boolean(action.extraTurn),
           log: [...state.log, ...(action.logEntries || [])],
         };
 
