@@ -1,93 +1,116 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
+import { Html, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { Html } from "@react-three/drei";
 import { cellToWorld } from "@/lib/boardLayout";
 import { NPCS } from "@/lib/gameData";
 
-function SingleNpcBillboard({ npcState, npcInfo }) {
-  const meshRef = useRef(null);
-  const shadowRef = useRef(null);
-  const ringRef = useRef(null);
+const NPC_MODELS = {
+  skill_trainer: "/models/npc_skills.glb",
+  pet_trainer: "/models/npc_animal.glb",
+  doctor: "/models/npc_docter.glb",
+};
 
-  const imagePath = npcInfo?.image || "/images/npc/npc_ผู้ฝึก_skills.webp";
+const FALLBACK_IMAGE = "/images/npc/npc_ผู้ฝึก_skills.webp";
 
-  let texture;
-  try {
-    texture = useLoader(THREE.TextureLoader, imagePath);
-  } catch (e) {
-    texture = useLoader(THREE.TextureLoader, "/images/npc/npc_ผู้ฝึก_skills.webp");
-  }
+function NpcModel({ modelPath }) {
+  const { scene } = useGLTF(modelPath);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone();
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const targetHeight = 0.95;
+    const modelScale = size.y > 0 ? targetHeight / size.y : 1;
+
+    // Normalize different source models so all NPCs stand at a similar size
+    // and touch the same board floor.
+    clone.scale.setScalar(modelScale);
+    clone.position.set(-center.x * modelScale, -box.min.y * modelScale, -center.z * modelScale);
+
+    clone.traverse((object) => {
+      if (object.isMesh) {
+        object.castShadow = false;
+        object.receiveShadow = false;
+      }
+    });
+
+    return clone;
+  }, [scene]);
+
+  return <primitive object={clonedScene} />;
+}
+
+function NpcImageFallback({ imagePath }) {
+  const texture = useLoader(THREE.TextureLoader, imagePath || FALLBACK_IMAGE);
 
   useMemo(() => {
-    if (texture) {
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-    }
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
   }, [texture]);
 
+  return (
+    <mesh position={[0, 0.63, 0]}>
+      <planeGeometry args={[0.75, 0.75]} />
+      <meshBasicMaterial map={texture} transparent alphaTest={0.05} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+function SingleNpc({ npcState, npcInfo }) {
+  const visualRef = useRef(null);
+  const shadowRef = useRef(null);
+  const ringRef = useRef(null);
   const [x, , z] = cellToWorld(npcState.cell);
-  const width = 0.75;
-  const height = 0.75;
-  const baseY = height / 2 + 0.25;
-
-  useFrame(({ clock, camera }) => {
-    const t = clock.elapsedTime;
-
-    if (meshRef.current) {
-      // Gentle floating animation
-      const hoverY = baseY + Math.sin(t * 2.5 + npcState.cell) * 0.08;
-      meshRef.current.position.y = hoverY;
-
-      // Face camera
-      meshRef.current.quaternion.copy(camera.quaternion);
-
-      // Shadow animation
-      if (shadowRef.current) {
-        const shadowScale = 0.5 - (hoverY - baseY) * 0.5;
-        shadowRef.current.scale.set(shadowScale, shadowScale, 1);
-      }
-    }
-
-    if (ringRef.current) {
-      ringRef.current.rotation.z = t * 0.8;
-    }
-  });
-
+  const modelPath = NPC_MODELS[npcState.id];
   const auraColor = npcInfo?.color || "#f0b85b";
+
+  useFrame(({ clock }, delta) => {
+    const t = clock.elapsedTime;
+    const hoverY = 0.2 + Math.sin(t * 2.5 + Number(npcState.cell)) * 0.06;
+
+    if (visualRef.current) {
+      visualRef.current.position.y = hoverY;
+      visualRef.current.rotation.y += delta * 0.25;
+    }
+
+    if (shadowRef.current) {
+      const shadowScale = 0.5 - (hoverY - 0.2) * 0.5;
+      shadowRef.current.scale.set(shadowScale, shadowScale, 1);
+    }
+
+    if (ringRef.current) ringRef.current.rotation.z = t * 0.8;
+  });
 
   return (
     <group position={[x, 0, z]}>
-      {/* 1. Shadow on ground */}
       <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.18, 0]}>
         <planeGeometry args={[0.8, 0.8]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.5} depthWrite={false} />
       </mesh>
 
-      {/* 2. Glowing Magic Ring on Tile Floor */}
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.19, 0]}>
         <ringGeometry args={[0.3, 0.42, 32]} />
         <meshBasicMaterial color={auraColor} transparent opacity={0.8} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* 3. 2D Billboard Image Mesh */}
-      <mesh ref={meshRef} position={[0, baseY, 0]}>
-        <planeGeometry args={[width, height]} />
-        <meshBasicMaterial map={texture} transparent alphaTest={0.05} side={THREE.DoubleSide} />
-      </mesh>
+      <group ref={visualRef}>
+        {modelPath ? (
+          <Suspense fallback={<NpcImageFallback imagePath={npcInfo?.image} />}>
+            <NpcModel modelPath={modelPath} />
+          </Suspense>
+        ) : (
+          <NpcImageFallback imagePath={npcInfo?.image} />
+        )}
+      </group>
 
-      {/* 4. HTML Floating Tag Header */}
-      <Html position={[0, height + 0.5, 0]} center distanceFactor={12} zIndexRange={[100, 0]}>
+      <Html position={[0, 1.55, 0]} center distanceFactor={12} zIndexRange={[100, 0]}>
         <div
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md pointer-events-none whitespace-nowrap animate-bounce"
-          style={{
-            backgroundColor: "rgba(13, 16, 23, 0.9)",
-            borderColor: auraColor,
-            color: auraColor,
-          }}
+          style={{ backgroundColor: "rgba(13, 16, 23, 0.9)", borderColor: auraColor, color: auraColor }}
         >
           <span>{npcInfo?.name}</span>
         </div>
@@ -99,15 +122,17 @@ function SingleNpcBillboard({ npcState, npcInfo }) {
 export default function NpcModels({ npcs }) {
   if (!npcs) return null;
 
-  const activeNpcs = Object.values(npcs).filter((n) => n && n.isSpawned && n.cell);
+  const activeNpcs = Object.values(npcs).filter((npc) => npc && npc.isSpawned && npc.cell);
 
   return (
     <group>
       {activeNpcs.map((npcState) => {
         const npcInfo = NPCS[npcState.id];
         if (!npcInfo) return null;
-        return <SingleNpcBillboard key={npcState.id} npcState={npcState} npcInfo={npcInfo} />;
+        return <SingleNpc key={npcState.id} npcState={npcState} npcInfo={npcInfo} />;
       })}
     </group>
   );
 }
+
+Object.values(NPC_MODELS).forEach((path) => useGLTF.preload(path));
