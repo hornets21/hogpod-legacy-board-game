@@ -89,7 +89,6 @@ function SingleNpcBillboard({ npcState, npcInfo }) {
             color: auraColor,
           }}
         >
-          <span className="text-sm">{npcInfo?.emoji}</span>
           <span>{npcInfo?.name}</span>
         </div>
       </Html>

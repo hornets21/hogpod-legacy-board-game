@@ -13,13 +13,11 @@ import * as THREE from "three";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import BoardTiles from "./BoardTiles";
 import PlayerTokens from "./PlayerTokens";
-import CellMarkers from "./CellMarkers";
 import Atmosphere from "./Atmosphere";
 import DiceModel from "./DiceModel";
-import PlaneMonster from "./PlaneMonster";
-import { AnimatedPlaneMonster } from "./AnimatedMonster";
 import SkillFxLayer from "./SkillFxLayer";
 import NpcModels from "./NpcModels";
+import GrandFinalBossModel from "./GrandFinalBossModel";
 import { MONSTER_MAP } from "@/lib/gameData";
 import { cellToWorld } from "@/lib/boardLayout";
 
@@ -231,7 +229,7 @@ function describeHover(info) {
     lines.push({ icon: "🏆", text: "แท่นชัยชนะ — เอาชนะบอสมหาเวทย์ที่นี่" });
   } else if (monster) {
     lines.push({ icon: monster.emoji || "👾", text: monster.name, strong: true });
-    lines.push({ icon: "❤️", text: `HP ${monster.hp}  ·  ⚔️ DMG ${monster.dmg}` });
+    lines.push({ icon: "❤️", text: `HP ${monster.hp}  ·  DMG ${monster.dmg}` });
   } else if (type === "boss") {
     lines.push({ icon: "👿", text: "รังของบอสมหาเวทย์!", strong: true });
   } else if (type === "elite") {
@@ -302,45 +300,11 @@ export default function BoardCanvas({
             trapCells={trapCells}
             onHoverCell={setHoverInfo}
           />
-          <CellMarkers
-            revealedMonsters={revealedMonsters}
-            trapCells={trapCells}
-            usedLadders={usedLadders}
-            monsterMap={monsterMap}
-            cellTeleport={cellTeleport}
-          />
           {/* NPC Models Layer — สุ่มเกิด 3D Billboard บนกระดาน */}
           <NpcModels npcs={npcs} />
-
-          {/* แสดงภาพมอนสเตอร์ 2D Plane สำหรับมอนสเตอร์ที่ยังไม่ถูกกำจัด (รองรับทั้งแบบภาพนิ่ง และ Sprite Frames) */}
-          {Array.from(monsterCells || []).map((cellNum) => {
-            const c = Number(cellNum);
-            const monster = (monsterMap || MONSTER_MAP)[c];
-            const imgPath = monster?.image || "/images/monsters/ชบ7000.webp";
-            const isBoss = monster?.isBoss || c === 90;
-
-            if (monster?.frames && monster.frames.length > 0) {
-              return (
-                <AnimatedPlaneMonster
-                  key={`plane-mon-${c}`}
-                  cell={c}
-                  frames={monster.frames}
-                  fps={monster.fps || 8}
-                  fallbackImage={imgPath}
-                  isBoss={isBoss}
-                />
-              );
-            }
-
-            return (
-              <PlaneMonster
-                key={`plane-mon-${c}`}
-                cell={c}
-                imagePath={imgPath}
-                isBoss={isBoss}
-              />
-            );
-          })}
+          {Array.from(monsterCells || []).some((cellNum) => Number(cellNum) === 90) && (
+            <GrandFinalBossModel cell={90} />
+          )}
           <PlayerTokens
             players={players}
             currentPlayerIndex={currentPlayerIndex}
@@ -378,7 +342,7 @@ export default function BoardCanvas({
           <div className="board3d-tooltip-cell">ช่อง #{hoverInfo.cell}</div>
           {hoverLines.map((l, i) => (
             <div key={i} className={l.strong ? "font-black text-white" : "text-white/70"}>
-              {l.icon} {l.text}
+              {l.text}
             </div>
           ))}
         </div>

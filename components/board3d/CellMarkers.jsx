@@ -36,9 +36,6 @@ export default function CellMarkers({ revealedMonsters, trapCells, usedLadders, 
           list.push({ key: `trap-${cell}`, cell, emoji: "☠️", opacity: 1, dy: 0.28 });
         }
 
-        if (cell === 90) {
-          list.push({ key: "win-90", cell, emoji: "🏆", opacity: 1, dy: 0.5, scale: 0.8 });
-        }
       }
     }
     return list;

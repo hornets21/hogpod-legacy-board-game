@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { motion } from "motion/react";
 import WheelOfFate from "@/components/WheelOfFate";
 import { getTotalDmg } from "@/lib/gameEngine";
 import { AnimatedUiMonster } from "@/components/board3d/AnimatedMonster";
+import GrandFinalBossModalModel from "@/components/board3d/GrandFinalBossModalModel";
 
 export default function CombatModal({ combatState, player, onResolveCombat, onUseSkill, onFlee }) {
   const [introState, setIntroState] = useState("intro"); // "intro" | "ready"
@@ -26,6 +27,7 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
 
   const playerIdleImg = player.image || null;
   const monsterIdleImg = monster.image || null;
+  const isGrandFinalBoss = monster.id === "grand_boss" || monster.cell === 90;
 
   const battleTypeLabel = monster.isBoss
     ? "BOSS BATTLE"
@@ -165,7 +167,11 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
 
             {/* Monster Avatar / Animation Large Display */}
             <div className="relative w-44 h-44 my-2 rounded-3xl border-2 border-red-500/40 overflow-hidden bg-slate-950 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.25)]">
-              {monster.frames && monster.frames.length > 0 ? (
+              {isGrandFinalBoss ? (
+                <Suspense fallback={<img src={monsterIdleImg} alt={monster.name} className="w-full h-full object-cover" />}>
+                  <GrandFinalBossModalModel />
+                </Suspense>
+              ) : monster.frames && monster.frames.length > 0 ? (
                 <AnimatedUiMonster
                   frames={monster.frames}
                   fps={monster.fps || 8}

@@ -18,17 +18,15 @@ export default function Pvp3dBattleStage({ participants, clashResult, selectedSk
       <Canvas
         dpr={[1, 1.5]}
         camera={{ position: [0, 2.5, 4.5], fov: 45 }}
+        shadows
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       >
-        <ambientLight intensity={1.2} />
-        <pointLight position={[0, 4, 2]} intensity={2} color="#fbbf24" />
-        <directionalLight position={[3, 5, 2]} intensity={1.5} />
+        <ambientLight intensity={0.75} />
+        <pointLight position={[0, 3.5, 1.5]} intensity={3} color="#fbbf24" castShadow />
+        <pointLight position={[-3, 1.5, -2]} intensity={2} color="#38bdf8" />
+        <directionalLight position={[3, 5, 2]} intensity={2} castShadow />
 
-        {/* BATTLE STAGE GROUND RING */}
-        <mesh position={[0, -0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.2, 1.8, 48]} />
-          <meshBasicMaterial color="#f59e0b" transparent opacity={0.3} side={THREE.DoubleSide} />
-        </mesh>
+        <ArenaPlatform />
 
         {/* RENDER 3D PLAYER TOKENS & SPELL BEAMS IN WORLD SPACE */}
         {participants.map((p, idx) => {
@@ -71,6 +69,58 @@ export default function Pvp3dBattleStage({ participants, clashResult, selectedSk
   );
 }
 
+function ArenaPlatform() {
+  const texture = useLoader(
+    THREE.TextureLoader,
+    "/images/textures/ancient-dark-stone-pedestal-slab.webp"
+  );
+
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // Tile the square artwork instead of stretching one giant sigil across the stage.
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  texture.offset.set(0, 0);
+
+  return (
+    <group position={[0, -0.12, 0]}>
+      {/* Square dark stone body keeps the supplied square texture undistorted. */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[3.9, 0.16, 3.9]} />
+        <meshStandardMaterial
+          color="#090d18"
+          roughness={0.48}
+          metalness={0.6}
+        />
+      </mesh>
+
+      {/* A thin gold trim gives the slab a readable silhouette against the arena backdrop. */}
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[3.92, 3.92]} />
+        <meshBasicMaterial color="#d99a32" transparent opacity={0.18} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Keep the magical slab texture undistorted and slightly luminous. */}
+      <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[3.78, 3.78]} />
+        <meshStandardMaterial
+          map={texture}
+          color="#c9b28a"
+          emissive="#24170a"
+          emissiveIntensity={0.22}
+          roughness={0.7}
+          metalness={0.28}
+        />
+      </mesh>
+
+      <mesh position={[0, 0.095, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.15, 1.18, 96]} />
+        <meshBasicMaterial color="#fbbf24" transparent opacity={0.55} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
 function Fighter3dMesh({ player, position, targetAngle, clashResult, isCasting, skillId }) {
   const groupRef = useRef(null);
   const crystalRef = useRef(null);
@@ -95,25 +145,19 @@ function Fighter3dMesh({ player, position, targetAngle, clashResult, isCasting, 
 
   return (
     <group ref={groupRef} position={position}>
-      {/* 3D BASE PEDESTAL */}
-      <mesh position={[0, 0, 0]}>
-        <cylinderGeometry args={[0.35, 0.42, 0.15, 24]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.5} metalness={0.8} />
-      </mesh>
-
       {/* 3D MODEL FOR ALL HOUSES (wartaurus, podfindor, analyze, sraraff) */}
       {HOUSE_MODELS[player.houseId] ? (
         <Suspense fallback={
-          <mesh ref={crystalRef} position={[0, 0.45, 0]}>
-            <octahedronGeometry args={[0.38]} />
+          <mesh ref={crystalRef} position={[0, 0.5, 0]}>
+            <octahedronGeometry args={[0.48]} />
             <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} />
           </mesh>
         }>
-          <HouseModel modelPath={HOUSE_MODELS[player.houseId]} position={[0, 0.35, 0]} scale={[0.32, 0.32, 0.32]} />
+          <HouseModel modelPath={HOUSE_MODELS[player.houseId]} position={[0, 0.05, 0]} scale={[0.5, 0.5, 0.5]} />
         </Suspense>
       ) : (
-        <mesh ref={crystalRef} position={[0, 0.45, 0]}>
-          <octahedronGeometry args={[0.38]} />
+        <mesh ref={crystalRef} position={[0, 0.5, 0]}>
+          <octahedronGeometry args={[0.48]} />
           <meshStandardMaterial
             color={color}
             emissive={color}

@@ -181,10 +181,14 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-3 md:p-5 text-white pointer-events-none">
-      {/* Dynamic Background Backdrop */}
-      <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_30%,_rgba(2,6,23,0.85)_100%)] pointer-events-none" />
+    <div
+      className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-3 md:p-5 text-white pointer-events-none bg-slate-950 bg-cover bg-center"
+      style={{ backgroundImage: "url('/images/system/arena_bg.jpg')" }}
+    >
+      {/* Arena backdrop: keep the room visible while preserving HUD contrast. */}
+      <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[1px] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(2,6,23,0.8)_0%,_rgba(2,6,23,0.18)_42%,_rgba(2,6,23,0.9)_100%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_18%,_rgba(2,6,23,0.72)_100%)] pointer-events-none" />
 
       {/* TOP HEADER HUD */}
       <div className="relative z-20 w-full max-w-4xl mx-auto flex items-center justify-between bg-slate-900/90 border border-amber-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md shadow-xl shrink-0 pointer-events-auto">

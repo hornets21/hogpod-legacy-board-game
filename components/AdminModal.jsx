@@ -228,6 +228,20 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
               </div>
             </div>
 
+            <button
+              onClick={() => onDispatch({ type: "ADMIN_TELEPORT_TO_BOSS", playerIndex: selectedHouseIdx })}
+              disabled={!state?.monsterCells?.has(90) || !player?.isAlive}
+              className={`w-full py-2.5 rounded-xl border font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                state?.monsterCells?.has(90) && player?.isAlive
+                  ? "bg-gradient-to-r from-red-700 via-rose-600 to-amber-600 hover:from-red-600 hover:to-amber-500 border-red-400/70 text-white shadow-[0_0_18px_rgba(239,68,68,0.35)]"
+                  : "bg-slate-800/50 border-slate-700 text-slate-500 cursor-not-allowed"
+              }`}
+              title="ย้ายผู้เล่นไปด่าน 90 และเริ่มต่อสู้กับบอส"
+            >
+              <span>👹</span>
+              <span>{state?.monsterCells?.has(90) ? "วาร์ปไปหาบอส ด่าน 90" : "บอสถูกปราบแล้ว"}</span>
+            </button>
+
             {/* Character Equipment Slots */}
             <div>
               <div className="text-[10px] font-black uppercase text-amber-400/80 mb-1.5 flex items-center justify-between">

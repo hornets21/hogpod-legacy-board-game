@@ -307,6 +307,33 @@ function gameReducer(state, action) {
       };
     }
 
+    case "ADMIN_TELEPORT_TO_BOSS": {
+      const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      const player = state.players[targetIdx];
+      const boss = state.monsterMap?.[90] || MONSTER_MAP[90];
+
+      // Do not revive or recreate the boss after it has already been defeated.
+      if (!player || !boss || !state.monsterCells?.has(90)) {
+        return {
+          ...state,
+          log: [...state.log, `⚠️ [แอดมิน] ไม่สามารถวาร์ป ${player?.name || "ผู้เล่น"} ไปหาบอสได้ เพราะบอสถูกปราบแล้ว`],
+        };
+      }
+
+      const players = [...state.players];
+      players[targetIdx] = { ...player, position: 90, hp: Math.max(1, player.hp), isAlive: true };
+      const next = {
+        ...state,
+        players,
+        phase: "play",
+        combatState: null,
+        winner: null,
+        log: [...state.log, `🌀 [แอดมิน] วาร์ป ${player.name} ไปยังด่าน 90 เพื่อพบ ${boss.name}!`],
+      };
+
+      return initCombat(next, targetIdx, boss);
+    }
+
     case "CLOSE_SHOP": {
       return { ...state, shopOpen: false };
     }
