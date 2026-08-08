@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Image from "next/image";
 import { NPCS, PET_LIST, NPC_CONFIG } from "@/lib/gameData";
+import NpcModelPreview from "@/components/board3d/NpcModelPreview";
 
 export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
   const npc = NPCS.pet_trainer;
   const fee = NPC_CONFIG.PET_CHANGE_FEE;
+  const [showRewards, setShowRewards] = useState(true);
   
   const currentPetId = player?.pet?.id;
   const availablePets = PET_LIST.filter((p) => p.id !== currentPetId);
@@ -17,20 +19,15 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
   const canAfford = player.gold >= fee;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      <div className="relative max-w-xl w-full bg-slate-900/95 border-2 border-emerald-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.3)] text-white flex flex-col gap-5 overflow-hidden">
+    <div className="npc-encounter-dock npc-encounter-dock--pet animate-fade-in">
+      <div className="npc-encounter-dock__panel">
         
-        {/* HEADER: NPC PET TRAINER */}
+        {/* NPC 3D ENCOUNTER PREVIEW */}
+        <NpcModelPreview npcId="pet_trainer" color={npc.color} />
         <div className="flex items-center justify-between border-b border-emerald-500/30 pb-4">
           <div className="flex items-center gap-4">
-            <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400 shrink-0 bg-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-              <Image src={npc.image} alt={npc.name} fill className="object-cover object-top" />
-            </div>
             <div>
-              <h2 className="text-xl font-black text-emerald-300 flex items-center gap-2 drop-shadow">
-                <span>{npc.emoji}</span>
-                <span>{npc.name}</span>
-              </h2>
+              <h2 className="text-xl font-black text-emerald-300 drop-shadow">{npc.name}</h2>
               <p className="text-xs text-emerald-200/80 mt-0.5">{npc.description}</p>
             </div>
           </div>
@@ -42,8 +39,18 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
           </div>
         </div>
 
+        {!showRewards && (
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-center">
+            <p className="text-sm font-bold text-emerald-100">ผู้ฝึกสัตว์กำลังเรียกเพื่อนตัวใหม่</p>
+            <p className="mt-1 text-xs text-emerald-200/70">สัตว์เลี้ยงพิเศษกำลังรอให้คุณเลือก</p>
+            <button onClick={() => setShowRewards(true)} className="mt-4 w-full rounded-xl border border-emerald-300/60 bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-black shadow-[0_0_25px_rgba(16,185,129,0.4)] transition hover:scale-[1.02]">
+              ดูสัตว์เลี้ยง
+            </button>
+          </div>
+        )}
+
         {/* CURRENT PET INFO */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+        {showRewards && <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-3xl">{player.pet?.emoji || "🐾"}</span>
             <div>
@@ -52,10 +59,10 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
               <p className="text-xs text-slate-300">{player.pet?.description}</p>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* CHOOSE NEW PET */}
-        <div className="flex flex-col gap-2.5">
+        {showRewards && <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">
             เลือกสัตว์เลี้ยงวิเศษตัวใหม่ที่ต้องการเปลี่ยน:
           </label>
@@ -86,16 +93,16 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
               );
             })}
           </div>
-        </div>
+        </div>}
 
-        {!canAfford && (
+        {showRewards && !canAfford && (
           <div className="bg-red-950/70 border border-red-500/40 rounded-xl p-2.5 text-xs text-red-300 font-semibold text-center">
             ⚠️ คุณมีทองไม่พอจ่ายค่าธรรมเนียม {fee} Gold (ต้องการเพิ่มอีก {fee - player.gold} Gold)
           </div>
         )}
 
         {/* ACTION BUTTONS */}
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+        {showRewards && <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
           <button
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition"
@@ -114,7 +121,7 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
             <span>🐾</span>
             <span>ยืนยันเปลี่ยนสัตว์เลี้ยง</span>
           </button>
-        </div>
+        </div>}
 
       </div>
     </div>

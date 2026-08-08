@@ -1,34 +1,41 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import { NPCS } from "@/lib/gameData";
+import NpcModelPreview from "@/components/board3d/NpcModelPreview";
 
 export default function NpcDoctorModal({ player, grantedPotions = [], onClose }) {
   const npc = NPCS.doctor;
+  const [showRewards, setShowRewards] = useState(true);
 
   if (!player) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      {/* CARD / CONTAINER SHOP PANEL */}
-      <div className="relative max-w-lg w-full bg-slate-900/95 border-2 border-pink-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(236,72,153,0.3)] text-white flex flex-col gap-5 overflow-hidden">
+    <div className="npc-encounter-dock npc-encounter-dock--doctor animate-fade-in">
+      <div className="npc-encounter-dock__panel">
         
-        {/* HEADER: NPC PORTRAIT & TITLE */}
+        {/* NPC 3D ENCOUNTER PREVIEW */}
+        <NpcModelPreview npcId="doctor" color={npc.color} />
         <div className="flex items-center gap-4 border-b border-pink-500/30 pb-4">
-          <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-pink-400 shrink-0 bg-slate-950 shadow-[0_0_15px_rgba(236,72,153,0.4)]">
-            <Image src={npc.image} alt={npc.name} fill className="object-cover object-top" />
-          </div>
           <div>
-            <h2 className="text-xl font-black text-pink-300 flex items-center gap-2 drop-shadow">
-              <span>{npc.emoji}</span>
-              <span>{npc.name}</span>
-            </h2>
+            <h2 className="text-xl font-black text-pink-300 drop-shadow">{npc.name}</h2>
             <p className="text-xs text-pink-200/80 mt-0.5">{npc.description}</p>
           </div>
         </div>
 
+        {!showRewards && (
+          <div className="rounded-2xl border border-pink-500/30 bg-pink-950/30 p-4 text-center">
+            <p className="text-sm font-bold text-pink-100">คุณพบหมอยาปริศนา</p>
+            <p className="mt-1 text-xs text-pink-200/70">เดินเข้ามาใกล้สิ แล้วรับของปรุงพิเศษจากข้า</p>
+            <button onClick={() => setShowRewards(true)} className="mt-4 w-full rounded-xl border border-pink-300/60 bg-gradient-to-r from-pink-600 to-purple-600 py-3 text-sm font-black shadow-[0_0_25px_rgba(236,72,153,0.4)] transition hover:scale-[1.02]">
+              ดูของรางวัล
+            </button>
+          </div>
+        )}
+
         {/* DIALOGUE & GRANTED POTIONS SHOWCASE */}
-        <div className="bg-pink-950/30 border border-pink-500/30 rounded-2xl p-4 flex flex-col gap-3">
+        {showRewards && <div className="bg-pink-950/30 border border-pink-500/30 rounded-2xl p-4 flex flex-col gap-3">
           <span className="text-sm font-bold text-pink-200 flex items-center gap-2">
             <span>✨</span>
             <span>ยินดีด้วย! {player.name} ตกช่องหมอยา! ได้รับยาปรุงพิเศษฟรี 2 ขวด:</span>
@@ -57,16 +64,16 @@ export default function NpcDoctorModal({ player, grantedPotions = [], onClose })
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* CONFIRM BUTTON */}
-        <button
+        {showRewards && <button
           onClick={onClose}
           className="w-full py-3.5 rounded-xl text-sm font-black tracking-wider uppercase text-white bg-gradient-to-r from-pink-600 via-purple-600 to-pink-600 hover:from-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(236,72,153,0.5)] border border-pink-300/60 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
         >
           <span>🧪</span>
           <span>รับยาและเก็บใส่กระเป๋า (ตกลง)</span>
-        </button>
+        </button>}
 
       </div>
     </div>
