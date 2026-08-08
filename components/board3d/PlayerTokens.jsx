@@ -285,7 +285,11 @@ function Token({ player, index, isActive }) {
               <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} />
             </mesh>
           }>
-            <HouseModel modelPath={HOUSE_MODELS[player.houseId]} position={[0, 0.46, 0]} scale={[0.22, 0.22, 0.22]} />
+            <HouseModel
+              modelPath={HOUSE_MODELS[player.houseId]}
+              position={[0, 0.46, 0]}
+              scale={player.houseId === "anal" || player.houseId === "plodfindr" ? LARGE_MODEL_SCALE : HOUSE_MODEL_SCALE}
+            />
           </Suspense>
         ) : (
           <mesh ref={crystalRef} position={[0, 0.68, 0]} castShadow>
@@ -329,6 +333,9 @@ const HOUSE_MODELS = {
   anal: "/models/analyze.glb",
   slarf: "/models/sraraff.glb",
 };
+
+const HOUSE_MODEL_SCALE = [0.65, 0.65, 0.65];
+const LARGE_MODEL_SCALE = [0.9, 0.9, 0.9];
 
 function CrestSprite({ url }) {
   const tex = useLoader(THREE.TextureLoader, url);

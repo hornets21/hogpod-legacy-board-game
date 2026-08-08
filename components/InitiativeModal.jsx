@@ -1,6 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
+import * as THREE from "three";
+
+const HOUSE_MODELS = {
+  watrat: "/models/wartaurus.glb",
+  plodfindr: "/models/podfindor.glb",
+  anal: "/models/analyze.glb",
+  slarf: "/models/sraraff.glb",
+};
+
+const HOUSE_PREVIEW_SCALES = {
+  watrat: 0.95,
+  plodfindr: 1.25,
+  anal: 1.5,
+  slarf: 0.95,
+};
+
+function HouseModelPreview({ houseId }) {
+  const modelPath = HOUSE_MODELS[houseId];
+  if (!modelPath) return null;
+
+  return (
+    <Canvas camera={{ position: [0, 1, 4.5], fov: 48 }} dpr={[1, 2]}>
+      <ambientLight intensity={2.2} />
+      <directionalLight position={[2, 4, 3]} intensity={3.2} color="#fff4d6" />
+      <directionalLight position={[-3, 2, 2]} intensity={1.4} color="#8ab4ff" />
+      <pointLight position={[0, 1.5, 1]} intensity={1.5} color="#f59e0b" />
+      <Suspense fallback={null}>
+        <HouseModel modelPath={modelPath} scale={HOUSE_PREVIEW_SCALES[houseId] || 0.95} />
+      </Suspense>
+    </Canvas>
+  );
+}
+
+function HouseModel({ modelPath, scale }) {
+  const { scene } = useGLTF(modelPath);
+  const groupRef = useRef(null);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone();
+    const box = new THREE.Box3().setFromObject(clone);
+    const center = box.getCenter(new THREE.Vector3());
+    clone.position.set(-center.x, -box.min.y, -center.z);
+    return clone;
+  }, [scene]);
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      groupRef.current.position.y = -0.95 + Math.sin(clock.elapsedTime * 1.2) * 0.035;
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[0, -0.95, 0]} rotation={[0, 0.18, 0]}>
+      <primitive object={clonedScene} scale={[scale, scale, scale]} />
+    </group>
+  );
+}
 
 export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAdmin }) {
   const [isRevealed, setIsRevealed] = useState(false);
@@ -15,24 +73,34 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
   if (!initiativeRolls || initiativeRolls.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 select-none overflow-y-auto bg-slate-950/90 backdrop-blur-xl animate-fade-in">
-      <div className="max-w-2xl w-full flex flex-col items-center text-center p-6 md:p-8 rounded-3xl bg-slate-950/90 backdrop-blur-2xl border border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.15)] overflow-hidden">
+    <div className="fixed inset-0 z-50 min-h-screen select-none overflow-y-auto bg-[#050711] text-white animate-fade-in">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(111,78,170,0.42),transparent_42%),radial-gradient(circle_at_8%_70%,rgba(19,104,123,0.18),transparent_30%)]" />
+      <div className="pointer-events-none fixed inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] [background-size:56px_56px]" />
+      <div className="relative min-h-full w-full flex flex-col items-center text-center px-5 py-8 md:px-10 md:py-12 lg:px-16">
         
-        {/* Header Icon */}
-        <div className="w-20 h-20 mb-4 rounded-2xl bg-gradient-to-br from-amber-500/30 to-purple-900/40 border-2 border-amber-400/60 flex items-center justify-center shadow-lg animate-bounce">
-          <span className="text-4xl">🎲</span>
-        </div>
-
         {/* Title */}
-        <h2 className="text-2xl md:text-3xl font-black text-amber-300 uppercase tracking-wider mb-1">
+        <div className="hidden mb-3 text-[10px] md:text-xs font-black uppercase tracking-[0.45em] text-cyan-200/60">
+          The Houses · The Initiative Ritual
+        </div>
+        <div className="w-full max-w-5xl mb-10">
+          <div className="mb-4 text-[0px] font-black uppercase tracking-[0.55em] text-cyan-200/60">
+            <span className="text-[11px]">TURN ORDER</span>
+            Initiative Phase · Turn Order
+          </div>
+          <h1 className="text-4xl md:text-7xl font-black uppercase tracking-[0.12em] leading-none text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 drop-shadow-[0_0_24px_rgba(245,158,11,0.35)]">
+            First Move
+          </h1>
+          <div className="mx-auto mt-5 h-px w-32 bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+        </div>
+        <h2 className="hidden text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 uppercase tracking-[0.08em] mb-3 drop-shadow-[0_0_22px_rgba(245,158,11,0.35)]">
           สุ่มทอยเต๋าจัดลำดับการเดิน!
         </h2>
-        <p className="text-xs text-white/60 font-bold mb-6">
+        <p className="hidden max-w-xl text-sm text-slate-300/70 font-bold mb-10">
           ผู้ที่ทอยเต๋าได้คะแนนสูงที่สุด จะได้รับสิทธิ์เดินกระดานเป็นคนแรก
         </p>
 
         {/* Rolls Cards Grid */}
-        <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <div className="w-full max-w-[1500px] grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 mb-10">
           {initiativeRolls.map((item, rank) => {
             const p = item.player;
             const isWinner = rank === 0;
@@ -40,33 +108,38 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
             return (
               <div
                 key={p.houseId}
-                className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all duration-500 ${
+                className={`relative min-h-[430px] p-4 flex flex-col items-stretch justify-between gap-5 overflow-hidden transition-all duration-500 ${
                   isWinner && isRevealed
-                    ? "bg-amber-500/20 border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.4)] scale-105"
-                    : "bg-slate-800/80 border-white/10"
+                    ? "bg-amber-400/[0.04] shadow-[0_0_80px_rgba(245,158,11,0.18)] scale-[1.02]"
+                    : "bg-white/[0.015] hover:bg-white/[0.04]"
                 }`}
-                style={{ borderColor: isWinner && isRevealed ? "#f59e0b" : p.color || "#ffffff30" }}
               >
-                <div className="flex items-center gap-3">
-                  <div className="text-xl font-black text-amber-400 w-6 text-center">
+                {isWinner && isRevealed && (
+                  <>
+                    <div className="pointer-events-none absolute -inset-8 -z-10 rounded-[3rem] bg-[conic-gradient(from_180deg,transparent_0deg,#ef4444_70deg,#f59e0b_140deg,transparent_220deg,#f97316_300deg,transparent_360deg)] opacity-80 blur-2xl animate-[spin_7s_linear_infinite]" />
+                    <div className="pointer-events-none absolute inset-x-8 bottom-2 -z-10 h-16 rounded-full bg-orange-500/70 blur-2xl animate-pulse" />
+                    <div className="pointer-events-none absolute left-[18%] bottom-3 -z-10 h-20 w-8 rotate-[-12deg] rounded-full bg-gradient-to-t from-red-600 via-orange-400 to-yellow-200 blur-md animate-bounce" />
+                    <div className="pointer-events-none absolute left-[45%] bottom-1 -z-10 h-28 w-10 rotate-[4deg] rounded-full bg-gradient-to-t from-red-600 via-orange-400 to-yellow-100 blur-md animate-pulse" />
+                    <div className="pointer-events-none absolute right-[18%] bottom-3 -z-10 h-20 w-8 rotate-[14deg] rounded-full bg-gradient-to-t from-red-600 via-orange-400 to-yellow-200 blur-md animate-bounce" />
+                  </>
+                )}
+                <div className="w-full flex items-start justify-between">
+                  <div className="text-left">
+                    <div className="font-black text-white text-xl tracking-wide">{p.name}</div>
+                    <div className="mt-1 text-xs text-amber-200/60 font-bold uppercase tracking-[0.2em]">{p.house}</div>
+                  </div>
+                  <div className="h-9 min-w-9 px-2 flex items-center justify-center text-sm font-black text-amber-300">
                     #{rank + 1}
                   </div>
-                  <div className="w-12 h-12 rounded-xl border border-white/20 bg-black flex items-center justify-center overflow-hidden">
-                    {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-2xl">{p.emoji}</span>
-                    )}
-                  </div>
-                  <div className="text-left">
-                    <div className="font-black text-white text-sm">{p.name}</div>
-                    <div className="text-[10px] text-white/50 font-bold">{p.house}</div>
-                  </div>
                 </div>
+                  <div className="w-full h-64 bg-[radial-gradient(ellipse_at_center,rgba(104,80,161,0.34),transparent_68%)] overflow-hidden drop-shadow-[0_0_35px_rgba(104,80,161,0.35)]">
+                    <HouseModelPreview houseId={p.houseId} />
+                  </div>
 
-                <div className="text-right">
+                <div className="flex items-end justify-between pt-3 text-[0px]">
+                  <div className="text-[10px] text-white/50 uppercase tracking-[0.35em] font-black">ROLL</div>
                   <div className="text-[10px] text-white/50 uppercase font-black">คะแนนเต๋า</div>
-                  <div className={`text-2xl font-black ${isWinner && isRevealed ? "text-amber-300 animate-pulse" : "text-emerald-400"}`}>
+                  <div className={`text-5xl font-black tabular-nums ${isWinner && isRevealed ? "text-amber-200 animate-pulse drop-shadow-[0_0_15px_rgba(245,158,11,0.8)]" : "text-cyan-200"}`}>
                     {isRevealed ? item.score : "..."}
                   </div>
                 </div>
@@ -75,22 +148,23 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
           })}
         </div>
 
-        {/* Winner Banner */}
-        {isRevealed && (
-          <div className="w-full p-3 rounded-2xl bg-amber-500/20 border border-amber-400/50 mb-6 text-amber-200 font-black text-sm flex items-center justify-center gap-2 animate-fade-in">
+        {/* Winner is highlighted directly on the winning house card. */}
+        {false && (
+          <div className="w-full max-w-7xl p-4 bg-[linear-gradient(90deg,transparent,rgba(245,158,11,0.1),rgba(34,211,238,0.08),rgba(245,158,11,0.1),transparent)] mb-8 text-amber-100 font-black text-base flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(245,158,11,0.12)] animate-fade-in">
             <span>🏆</span>
             <span>{initiativeRolls[0].player.name} ได้คะแนนสูงสุด ({initiativeRolls[0].score} แต้ม) เริ่มเดินเป็นคนแรก!</span>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+        <div className="w-full max-w-7xl flex flex-col items-center gap-4">
           {onOpenAdmin && (
             <button
               onClick={onOpenAdmin}
-              className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border-2 border-amber-500/50 text-amber-300 font-black text-sm flex items-center justify-center gap-2 transition-all hover:scale-105"
+              className="order-2 w-full max-w-md py-3 px-6 bg-white/[0.04] hover:bg-white/[0.1] text-[0px] text-amber-200/80 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all hover:-translate-y-0.5"
               title="เปิด Admin Panel เพื่อจัดอุปกรณ์ เงิน และสถานะก่อนเริ่มกระดาน"
             >
+              <span className="text-xs">ADMIN SETTINGS</span>
               <span>👑</span>
               <span>ตั้งค่า Admin (Pay To Win)</span>
             </button>
@@ -98,8 +172,9 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
 
           <button
             onClick={onStartPlay}
-            className="flex-1 w-full py-4 px-8 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-200 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+            className="order-1 w-full max-w-md py-4 px-8 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-amber-200 hover:via-yellow-300 hover:to-amber-400 text-[0px] text-slate-950 font-black tracking-wide shadow-[0_0_35px_rgba(245,158,11,0.42)] transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2"
           >
+            <span className="text-base">START TURN 1</span>
             <span>🎮</span>
             <span>เข้าสู่การแข่งขัน (START TURN 1)</span>
           </button>

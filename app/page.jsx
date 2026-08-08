@@ -842,7 +842,7 @@ export default function Home() {
       </video>
 
       {/* ── 3D Canvas (Full Screen Viewport) ───────────────────── */}
-      {state.phase !== "title" && (
+      {state.phase !== "title" && state.phase !== "initiative" && (
         <div className="absolute inset-0 z-0">
           <BoardCanvas
             players={state.players}
