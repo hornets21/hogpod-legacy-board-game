@@ -5,7 +5,7 @@
 // ไฟเทียนกะพริบ (ธีม Hogwarts Legacy)
 // ============================================================
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, memo } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { BOARD_COLS, BOARD_ROWS, TILE_GAP } from "@/lib/boardLayout";
@@ -14,7 +14,7 @@ import { getGlowTexture } from "./textures";
 const BOARD_W = BOARD_COLS * TILE_GAP;
 const BOARD_D = BOARD_ROWS * TILE_GAP;
 
-export default function Atmosphere() {
+export default memo(function Atmosphere() {
   const pedestalTexture = useLoader(THREE.TextureLoader, "/images/textures/ancient-dark-stone-pedestal-slab.webp");
 
   useMemo(() => {
@@ -43,10 +43,10 @@ export default function Atmosphere() {
       <FlickeringLights />
     </group>
   );
-}
+});
 
 // ─── เทียนลอยสองข้างกระดาน ──────────────────────────────────
-function FloatingCandles() {
+const FloatingCandles = memo(function FloatingCandles() {
   const groupRef = useRef(null);
 
   const candles = useMemo(() => {
@@ -81,14 +81,14 @@ function FloatingCandles() {
     <group ref={groupRef}>
       {candles.map((c, i) => (
         <group key={i} position={[c.x, c.y, c.z]}>
-          {/* ตัวเทียน */}
-          <mesh castShadow>
-            <cylinderGeometry args={[0.05, 0.06, 0.42, 10]} />
+          {/* ตัวเทียน (ปิด castShadow บนเครื่องสเปกต่ำเพื่อประหยัด Draw Call) */}
+          <mesh>
+            <cylinderGeometry args={[0.05, 0.06, 0.42, 8]} />
             <meshStandardMaterial color="#e8dfc8" roughness={0.6} />
           </mesh>
           {/* เปลวไฟ */}
           <mesh position={[0, 0.3, 0]}>
-            <sphereGeometry args={[0.055, 10, 10]} />
+            <sphereGeometry args={[0.055, 8, 8]} />
             <meshStandardMaterial
               color="#ff9d3c"
               emissive="#ff9d3c"
@@ -113,12 +113,12 @@ function FloatingCandles() {
       ))}
     </group>
   );
-}
+});
 
 // ─── ฝุ่นเวทมนตร์ลอยช้าๆ ────────────────────────────────────
-function DustMotes() {
+const DustMotes = memo(function DustMotes() {
   const pointsRef = useRef(null);
-  const COUNT = 260;
+  const COUNT = 140;
 
   const positions = useMemo(() => {
     const arr = new Float32Array(COUNT * 3);
@@ -159,10 +159,10 @@ function DustMotes() {
       />
     </points>
   );
-}
+});
 
 // ─── ไฟเทียนสีทองกะพริบ 2 จุด ───────────────────────────────
-function FlickeringLights() {
+const FlickeringLights = memo(function FlickeringLights() {
   const l1 = useRef(null);
   const l2 = useRef(null);
 
@@ -198,4 +198,4 @@ function FlickeringLights() {
       />
     </group>
   );
-}
+});

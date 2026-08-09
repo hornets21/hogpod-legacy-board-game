@@ -4,9 +4,9 @@
 // BoardTiles — แผ่นหิน 90 ช่องของกระดาน 3D
 // ============================================================
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, memo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useTexture, Text, Html } from "@react-three/drei";
+import { useTexture, Text } from "@react-three/drei";
 import * as THREE from "three";
 import {
   buildGrid,
@@ -70,7 +70,7 @@ function getTopMaterial(cell, type, imageTexture, hasTrap) {
   return topMatCache.get(key);
 }
 
-export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, cellTeleport, trapCells, onHoverCell }) {
+export default memo(function BoardTiles({ revealedMonsters, usedLadders, monsterMap, cellTeleport, trapCells, onHoverCell }) {
   const grid = useMemo(() => buildGrid(), []);
   const [hoveredCell, setHoveredCell] = useState(null);
   const highlightRef = useRef(null);
@@ -129,51 +129,20 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
           const topY = TILE_HEIGHT * yScale - 0.01;
 
           return (
-            <group key={cell}>
-              <mesh
-                geometry={shared.box}
-                material={mats}
-                position={[x, (TILE_HEIGHT * yScale) / 2 - 0.02, z]}
-                scale={[1, yScale, 1]}
-                receiveShadow
-                onPointerOver={handleHover(cell)}
-                onPointerOut={handleOut}
-              />
-              {/* เลขช่อง 3D ลอยอยู่บนหน้าแผ่นหิน */}
-              <Text
-                font="/fonts/HarryP-MVZ6w.ttf"
-                position={[x, topY + 0.01, z]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                fontSize={0.55}
-                color="#ffffff"
-                anchorX="center"
-                anchorY="middle"
-                outlineWidth={0.04}
-                outlineColor="#000000"
-              >
-                {cell}
-              </Text>
-
-              {/* ป้ายสัญลักษณ์เวทมนตร์กรณีมอนสเตอร์บาดเจ็บ: ลอยแบบป้าย NPC ด้วย Html Component */}
-              {revealedMonsters?.[cell] && typeof revealedMonsters[cell].currentHp === "number" && revealedMonsters[cell].currentHp < revealedMonsters[cell].hp && (
-                <Html position={[x, 1.25, z]} center distanceFactor={12} zIndexRange={[100, 0]}>
-                  <div
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-black shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md transition-all duration-300 pointer-events-none whitespace-nowrap ${
-                      hoveredCell === cell
-                        ? "bg-red-950/95 border-rose-400 text-rose-200 scale-110 shadow-rose-500/60 ring-2 ring-rose-400/40"
-                        : "bg-slate-950/85 border-red-500/40 text-red-400 opacity-90"
-                    }`}
-                  >
-                    <span className="text-xs">❤️</span>
-                    {hoveredCell === cell ? (
-                      <span>{revealedMonsters[cell].currentHp} / {revealedMonsters[cell].hp}</span>
-                    ) : (
-                      <span className="text-[10px] font-bold opacity-90">{revealedMonsters[cell].currentHp}</span>
-                    )}
-                  </div>
-                </Html>
-              )}
-            </group>
+            <SingleTile
+              key={cell}
+              cell={cell}
+              type={type}
+              x={x}
+              z={z}
+              mats={mats}
+              shared={shared}
+              topY={topY}
+              yScale={yScale}
+              onHover={handleHover(cell)}
+              onOut={handleOut}
+              isHovered={hoveredCell === cell}
+            />
           );
         })
       )}
@@ -204,7 +173,46 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
       <WinBeacon />
     </group>
   );
-}
+});
+
+const SingleTile = memo(function SingleTile({
+  cell, type, x, z, mats, shared, topY, yScale, onHover, onOut, isHovered
+}) {
+  return (
+    <group>
+      <mesh
+        geometry={shared.box}
+        material={mats}
+        position={[x, (TILE_HEIGHT * yScale) / 2 - 0.02, z]}
+        scale={[1, yScale, 1]}
+        receiveShadow
+        onPointerOver={onHover}
+        onPointerOut={onOut}
+      />
+      {/* เลขช่อง 3D ลอยอยู่บนหน้าแผ่นหิน */}
+      <Text
+        font="/fonts/HarryP-MVZ6w.ttf"
+        position={[x, topY + 0.01, z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.55}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.04}
+        outlineColor="#000000"
+      >
+        {cell}
+      </Text>
+
+    </group>
+  );
+}, (prev, next) => {
+  return (
+    prev.isHovered === next.isHovered &&
+    prev.type === next.type &&
+    prev.cell === next.cell
+  );
+});
 
 function WinBeacon() {
   const beamRef = useRef(null);

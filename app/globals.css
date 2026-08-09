@@ -123,10 +123,7 @@ a, button, [role="button"], input[type="button"], input[type="submit"], .cursor-
 .board3d-wrap {
   position: absolute;
   inset: 0;
-  background-image: url("/images/system/ห้องแห่งความลับ-bg.webp");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background: transparent;
 }
 .board3d-wrap canvas {
   display: block;

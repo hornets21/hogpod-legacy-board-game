@@ -129,16 +129,18 @@ function NpcMagicLinkBeam({ startPos, targetPos, color }) {
   const meshRef = useRef(null);
   const orbRef = useRef(null);
 
-  const start = new THREE.Vector3(startPos[0], startPos[1], startPos[2]);
-  const target = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]);
-  const dir = new THREE.Vector3().subVectors(target, start);
-  const dist = dir.length();
-  const midPoint = new THREE.Vector3().addVectors(start, target).multiplyScalar(0.5);
-
-  const quat = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0),
-    dir.clone().normalize()
-  );
+  const { start, target, dist, midPoint, quat } = useMemo(() => {
+    const s = new THREE.Vector3(startPos[0], startPos[1], startPos[2]);
+    const t = new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]);
+    const d = new THREE.Vector3().subVectors(t, s);
+    const distance = d.length();
+    const mid = new THREE.Vector3().addVectors(s, t).multiplyScalar(0.5);
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      d.clone().normalize()
+    );
+    return { start: s, target: t, dist: distance, midPoint: mid, quat: q };
+  }, [startPos[0], startPos[1], startPos[2], targetPos[0], targetPos[1], targetPos[2]]);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;

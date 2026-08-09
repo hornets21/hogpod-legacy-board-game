@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef, memo } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { Html, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -61,7 +61,7 @@ function NpcImageFallback({ imagePath }) {
   );
 }
 
-function SingleNpc({ npcState, npcInfo }) {
+const SingleNpc = memo(function SingleNpc({ npcState, npcInfo }) {
   const visualRef = useRef(null);
   const shadowRef = useRef(null);
   const ringRef = useRef(null);
@@ -108,19 +108,19 @@ function SingleNpc({ npcState, npcInfo }) {
         )}
       </group>
 
-      <Html position={[0, 1.55, 0]} center distanceFactor={12} zIndexRange={[100, 0]}>
+      <Html position={[0, 1.55, 0]} center distanceFactor={12} zIndexRange={[100, 0]} prepend>
         <div
-          className="flex items-center px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md pointer-events-none whitespace-nowrap animate-bounce"
-          style={{ backgroundColor: "rgba(13, 16, 23, 0.9)", borderColor: auraColor, color: auraColor }}
+          className="flex items-center px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border pointer-events-none whitespace-nowrap"
+          style={{ backgroundColor: "rgba(10, 15, 30, 0.92)", borderColor: auraColor, color: auraColor }}
         >
           <span>{npcInfo?.nameEn || npcInfo?.name}</span>
         </div>
       </Html>
     </group>
   );
-}
+});
 
-export default function NpcModels({ npcs }) {
+const NpcModels = memo(function NpcModels({ npcs }) {
   if (!npcs) return null;
 
   const activeNpcs = Object.values(npcs).filter((npc) => npc && npc.isSpawned && npc.cell);
@@ -134,6 +134,8 @@ export default function NpcModels({ npcs }) {
       })}
     </group>
   );
-}
+});
+
+export default NpcModels;
 
 Object.values(NPC_MODELS).forEach((path) => useGLTF.preload(path));

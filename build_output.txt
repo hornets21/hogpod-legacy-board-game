@@ -1,0 +1,24 @@
+
+> pod-party-card@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.19
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 29.8s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/5) ...
+   Generating static pages (1/5) 
+   Generating static pages (2/5) 
+   Generating static pages (3/5) 
+ ✓ Generating static pages (5/5)
+
+> Build error occurred
+[Error: ENOENT: no such file or directory, rename 'C:\project\podBoardGame\.next\export\500.html' -> 'C:\project\podBoardGame\.next\server\pages\500.html'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'rename',
+  path: 'C:\\project\\podBoardGame\\.next\\export\\500.html',
+  dest: 'C:\\project\\podBoardGame\\.next\\server\\pages\\500.html'
+}

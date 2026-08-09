@@ -6,7 +6,7 @@
 // หมอก, ฝุ่นเวทมนตร์, Bloom
 // ============================================================
 
-import { Suspense, useState, useRef } from "react";
+import { Suspense, useState, useRef, memo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -35,7 +35,7 @@ const DICE_FACE_ROTATIONS = {
   6: [Math.PI / 2, 0, 0],
 };
 
-function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }) {
+const Animated3DDice = memo(function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }) {
   const diceGroupRef = useRef(null);
 
   const phys = useRef({
@@ -163,16 +163,23 @@ function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }
       <DiceModel />
     </group>
   );
-}
+});
 
-// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์ + Dynamic 3D Combat Camera Zoom Focus (Fast Crisp Glide Return)
+// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์ + Dynamic 3D Combat Camera Zoom Focus (Smooth Glide)
 function CameraRig({ focusCell = null, isCombatActive = false }) {
   const currentCamPos = useRef(new THREE.Vector3(0, 11, 10.8));
   const currentLookAt = useRef(new THREE.Vector3(0, 0.5, 0.3));
   const wasCombat = useRef(false);
+  // แคช focusCell ล่าสุดเพื่อป้องกัน destXYZ กระตุกเมื่อ focusCell เปลี่ยนอ้างอิงแต่ค่าเท่าเดิม
+  const cachedFocusCell = useRef(focusCell);
 
   useFrame(({ camera, pointer }, dt) => {
     const delta = Math.min(dt, 0.033);
+
+    // อัพเดต cache เฉพาะเมื่อ focusCell เปลี่ยนค่าจริงๆ (ไม่ใช่แค่ reference ใหม่)
+    if (focusCell !== cachedFocusCell.current) {
+      cachedFocusCell.current = focusCell;
+    }
 
     let destX = 0;
     let destY = 11;
@@ -182,8 +189,8 @@ function CameraRig({ focusCell = null, isCombatActive = false }) {
     let lookY = 0.5;
     let lookZ = 0.3;
 
-    if (isCombatActive && focusCell) {
-      const [wx, , wz] = cellToWorld(focusCell);
+    if (isCombatActive && cachedFocusCell.current) {
+      const [wx, , wz] = cellToWorld(cachedFocusCell.current);
       destX = wx + pointer.x * 0.3;
       destY = 4.2 + pointer.y * 0.2;
       destZ = wz + 3.8;
@@ -203,8 +210,11 @@ function CameraRig({ focusCell = null, isCombatActive = false }) {
       lookZ = 0.3;
     }
 
-    // เมื่อพึ่งจบการต่อสู้ (wasCombat == true) ให้ใช้สปีดดึงกล้องกลับอย่างรวดเร็วและกระชับ (0.2s) ป้องกันกล้องยืดลากกระตุก
-    const k = wasCombat.current && !isCombatActive ? Math.min(1, delta * 14.0) : Math.min(1, delta * 7.0);
+    // ซูมเข้าช้ากว่าซูมออก (เข้า: 5.0, ออก: 4.5) เพื่อความ smooth ทั้งสองทิศทาง
+    // ลดจาก 14.0 เดิมที่ทำให้กล้องกระตุกเหมือนกระโดดทันที
+    const kIn = Math.min(1, delta * 5.0);
+    const kOut = Math.min(1, delta * 4.5);
+    const k = (wasCombat.current && !isCombatActive) ? kOut : kIn;
 
     currentCamPos.current.x += (destX - currentCamPos.current.x) * k;
     currentCamPos.current.y += (destY - currentCamPos.current.y) * k;
@@ -221,7 +231,7 @@ function CameraRig({ focusCell = null, isCombatActive = false }) {
         currentCamPos.current.y - destY,
         currentCamPos.current.z - destZ
       );
-      if (dist < 0.1) {
+      if (dist < 0.08) {
         wasCombat.current = false;
       }
     }
@@ -233,7 +243,7 @@ function CameraRig({ focusCell = null, isCombatActive = false }) {
   return null;
 }
 
-function SceneLights() {
+const SceneLights = memo(function SceneLights() {
   return (
     <group>
       {/* แสงรอบทิศเย็นๆ */}
@@ -255,7 +265,7 @@ function SceneLights() {
       />
     </group>
   );
-}
+});
 
 function describeHover(info) {
   if (!info) return null;
@@ -295,6 +305,19 @@ function describeHover(info) {
   return lines;
 }
 
+const BoardPostProcessing = memo(function BoardPostProcessing() {
+  return (
+    <EffectComposer disableNormalPass multisampling={0}>
+      <Bloom
+        intensity={0.6}
+        luminanceThreshold={0.5}
+        luminanceSmoothing={0.3}
+      />
+      <Vignette eskil={false} offset={0.22} darkness={0.72} />
+    </EffectComposer>
+  );
+});
+
 export default function BoardCanvas({
   players,
   revealedMonsters,
@@ -320,11 +343,16 @@ export default function BoardCanvas({
   return (
     <div className="board3d-wrap">
       <Canvas
-        shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, 1.5]}
-        performance={{ min: 0.5 }}
+        shadows={{ type: THREE.PCFShadowMap }}
+        dpr={[0.8, 1.25]}
+        performance={{ min: 0.5, max: 1, debounce: 200 }}
         camera={{ position: [0, 11, 10.8], fov: 40, near: 0.1, far: 80 }}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          powerPreference: "high-performance",
+          precision: "mediump",
+          preserveDrawingBuffer: false,
+        }}
       >
         <SceneLights />
         <CameraRig focusCell={focusCell} isCombatActive={isCombatActive} />
@@ -364,15 +392,7 @@ export default function BoardCanvas({
           />
         </Suspense>
 
-        <EffectComposer>
-          <Bloom
-            mipmapBlur
-            intensity={0.85}
-            luminanceThreshold={0.32}
-            luminanceSmoothing={0.25}
-          />
-          <Vignette eskil={false} offset={0.22} darkness={0.72} />
-        </EffectComposer>
+        <BoardPostProcessing />
       </Canvas>
 
       {/* Tooltip ข้อมูลช่อง (HTML overlay) */}

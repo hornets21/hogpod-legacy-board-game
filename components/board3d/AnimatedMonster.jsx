@@ -51,20 +51,21 @@ export function AnimatedPlaneMonster({
     return list;
   }, [textures]);
 
-  const [currentFrame, setCurrentFrame] = useState(0);
-
   const [x, , z] = cellToWorld(cell);
   const width = isBoss ? 1.0 : 0.75;
   const height = isBoss ? 1.0 : 0.75;
   const baseY = height / 2 + 0.15;
+
+  const matRef = useRef(null);
 
   useFrame(({ clock, camera }, dt) => {
     // 1. Sprite Frame Animation Loop
     if (textureList.length > 1) {
       frameIndexRef.current = (frameIndexRef.current + dt * fps) % textureList.length;
       const nextIndex = Math.floor(frameIndexRef.current);
-      if (nextIndex !== currentFrame) {
-        setCurrentFrame(nextIndex);
+      if (matRef.current && textureList[nextIndex]) {
+        matRef.current.map = textureList[nextIndex];
+        matRef.current.needsUpdate = true;
       }
     }
 
@@ -98,8 +99,6 @@ export function AnimatedPlaneMonster({
     }
   });
 
-  const activeTexture = textureList[currentFrame] || textureList[0];
-
   return (
     <group position={[x, 0, z]}>
       {/* 1. เงาสีดำรูปวงกลมบนพื้นหิน */}
@@ -112,7 +111,8 @@ export function AnimatedPlaneMonster({
       <mesh ref={meshRef} position={[0, baseY, 0]}>
         <planeGeometry args={[width, height]} />
         <meshBasicMaterial
-          map={activeTexture}
+          ref={matRef}
+          map={textureList[0]}
           transparent={true}
           alphaTest={0.05} // ตัดส่วนโปร่งใสออกเนียนตา ไม่เห็นขอบสี่เหลี่ยมดำ
           side={THREE.DoubleSide}

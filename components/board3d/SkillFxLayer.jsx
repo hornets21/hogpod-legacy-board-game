@@ -12,7 +12,7 @@
 // สกิลอื่นใช้ general purple burst เป็น default
 // ============================================================
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { cellToWorld, TOKEN_OFFSETS } from "@/lib/boardLayout";
@@ -21,7 +21,7 @@ import { on, FX_EVENTS } from "@/lib/skillFxBus";
 let _fxId = 0;
 
 // ─── Component หลัก ──────────────────────────────────────
-export default function SkillFxLayer({ players, currentPlayerIndex }) {
+export default memo(function SkillFxLayer({ players, currentPlayerIndex }) {
   const [effects, setEffects] = useState([]);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function SkillFxLayer({ players, currentPlayerIndex }) {
       ))}
     </group>
   );
-}
+});
 
 // ─── Helper: สร้างข้อมูล fx ตาม skillId/effect ────────────
 function buildEffect(id, payload, players) {
@@ -164,7 +164,7 @@ function getPlayerWorldPos(playerIndex, players) {
 }
 
 // ─── Renderer single fx instance, animate via useFrame ───
-function EffectInstance({ fx }) {
+const EffectInstance = memo(function EffectInstance({ fx }) {
   const ref = useRef(null);
   const startRef = useRef(null);
 
@@ -222,7 +222,7 @@ function EffectInstance({ fx }) {
   });
 
   return renderFxMesh(fx, ref);
-}
+});
 
 // ─── Render mesh ตาม fx.type ─────────────────────────────
 function renderFxMesh(fx, ref) {

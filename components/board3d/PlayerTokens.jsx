@@ -6,7 +6,7 @@
 // Phase 2: เพิ่ม state "hit" (สั่น + แดง) และ "cast" (เรืองแสง)
 // ============================================================
 
-import { Suspense, useEffect, useRef, useMemo } from "react";
+import { Suspense, useEffect, useRef, useMemo, memo } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -17,7 +17,7 @@ import { on, FX_EVENTS } from "@/lib/skillFxBus";
 const WALK_SPEED = 6.5; // เพิ่มความเร็วเดินเพื่อก้าวทันครบ 6 ช่องสมบูรณ์
 const TELEPORT_SPEED = 5.0;
 
-export default function PlayerTokens({ players, currentPlayerIndex, phase }) {
+const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, phase }) {
   return (
     <group>
       {players.map((p, i) => (
@@ -30,9 +30,11 @@ export default function PlayerTokens({ players, currentPlayerIndex, phase }) {
       ))}
     </group>
   );
-}
+});
 
-function Token({ player, index, isActive }) {
+export default PlayerTokens;
+
+const Token = memo(function Token({ player, index, isActive }) {
   const groupRef = useRef(null);
   const crystalRef = useRef(null);
   const beaconRef = useRef(null);
@@ -325,7 +327,7 @@ function Token({ player, index, isActive }) {
       )}
     </group>
   );
-}
+});
 
 const HOUSE_MODELS = {
   watrat: "/models/wartaurus.glb",
