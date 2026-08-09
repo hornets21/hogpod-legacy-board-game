@@ -95,12 +95,14 @@ const Token = memo(function Token({ player, index, isActive }) {
   // Subscribe skill_fx events สำหรับ token ตัวนี้ (โดนดาเมจ / ตัวเองร่าย)
   useEffect(() => {
     const unsubDamage = on(FX_EVENTS.DAMAGE_DEALT, (payload) => {
+      if (payload.visualContext === "pvp") return;
       if (payload.targetIndex === index) {
         hitState.current.active = true;
         hitState.current.t = 0;
       }
     });
     const unsubCast = on(FX_EVENTS.SKILL_CAST, (payload) => {
+      if (payload.visualContext === "pvp") return;
       if (payload.playerId === index && payload.skillData) {
         // เลือกสีตาม effect
         const effect = payload.skillData.effect;

@@ -114,7 +114,12 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
         const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? Math.max(1, cdBase - 1) : cdBase;
         playerObj.skillCooldowns = { ...(playerObj.skillCooldowns || {}), [skId]: cdActual };
         logEntries.push(`✨ ${playerObj.name} ร่ายเวทมนตร์ประจำบ้าน "${sk.nameTh || sk.name}"!`);
-        emitSkillCast({ playerId: p.playerIndex, skillId: skId, skillData: sk });
+        emitSkillCast({
+          playerId: p.playerIndex,
+          skillId: skId,
+          skillData: sk,
+          visualContext: "pvp",
+        });
 
         if (sk.dmg && sk.target === "player") {
           directAttacks.push({ targetIndex, amount: sk.dmg, skill: sk });
@@ -204,7 +209,12 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       } else if (damageTaken > 0) {
         playerObj.hp = Math.max(0, playerObj.hp - damageTaken);
         logEntries.push(`💥 ${p.name} พ่ายแพ้การปะทะ ได้รับความเสียหาย -${damageTaken} HP (เหลือ ${playerObj.hp} HP)`);
-        emitDamageDealt({ targetIndex: p.playerIndex, amount: damageTaken, type: "pvp" });
+        emitDamageDealt({
+          targetIndex: p.playerIndex,
+          amount: damageTaken,
+          type: "pvp",
+          visualContext: "pvp",
+        });
       } else {
         logEntries.push(`🛡️ ${p.name} ไม่ได้รับความเสียหายในการประลองรอบนี้`);
       }
@@ -220,7 +230,13 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
       target.hp = Math.max(0, target.hp - amount);
       updatedPlayers[targetIndex] = target;
       logEntries.push("🔥 " + (skill.nameTh || skill.name) + " สร้างความเสียหาย " + amount + " ใส่ " + target.name);
-      emitDamageDealt({ targetIndex, amount, type: "pvp", sourceId: skill.id });
+      emitDamageDealt({
+        targetIndex,
+        amount,
+        type: "pvp",
+        sourceId: skill.id,
+        visualContext: "pvp",
+      });
     });
 
     const hasActiveAlliance = Object.values(selectedAlliances).some(Boolean);

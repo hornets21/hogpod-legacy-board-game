@@ -27,6 +27,7 @@ export default memo(function SkillFxLayer({ players, currentPlayerIndex }) {
   useEffect(() => {
     // 1. ดักจับการร่ายสกิล (Skill Cast)
     const unsubSkill = on(FX_EVENTS.SKILL_CAST, (payload) => {
+      if (payload.visualContext === "pvp") return;
       const id = ++_fxId;
       const fx = buildEffect(id, payload, players);
       if (!fx) return;
@@ -40,6 +41,7 @@ export default memo(function SkillFxLayer({ players, currentPlayerIndex }) {
 
     // 2. ดักจับความเสียหาย (Damage Dealt / PvP Clash Shockwave)
     const unsubDmg = on(FX_EVENTS.DAMAGE_DEALT, (payload) => {
+      if (payload.visualContext === "pvp") return;
       const id = ++_fxId;
       const targetPos = getPlayerWorldPos(payload.targetIndex, players);
       const fx = {
