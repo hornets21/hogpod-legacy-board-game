@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
+import { generateBingoCard } from "@/lib/bingoEngine";
 
 export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
   const [currentHouseIndex, setCurrentHouseIndex] = useState(0);
@@ -49,9 +50,26 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
       } else if (p.skills.length < 2) {
         p.skills = [...p.skills, itemId];
       }
+    } else if (itemType === "bingo") {
+      if (p.hasBingoCard) {
+        p.hasBingoCard = false;
+        p.bingoCard = null;
+      } else {
+        p.hasBingoCard = true;
+        p.bingoCard = generateBingoCard();
+      }
     }
 
     updated[currentHouseIndex] = p;
+    setSetupPlayers(updated);
+  }
+
+  function handleGiveBingoAll() {
+    const updated = setupPlayers.map((p) => ({
+      ...p,
+      hasBingoCard: true,
+      bingoCard: p.bingoCard || generateBingoCard(),
+    }));
     setSetupPlayers(updated);
   }
 
@@ -200,6 +218,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             <TabBtn active={activeTab === "wands"} label="🪄 ไม้กายสิทธิ์" onClick={() => setActiveTab("wands")} />
             <TabBtn active={activeTab === "pets"} label="🐾 สัตว์วิเศษ" onClick={() => setActiveTab("pets")} />
             <TabBtn active={activeTab === "skills"} label="✨ คาถาประจำบ้าน" onClick={() => setActiveTab("skills")} />
+            <TabBtn active={activeTab === "bingo"} label="🎯 ป้าย Bingo" onClick={() => setActiveTab("bingo")} />
           </div>
 
           {/* Tab Content Cards Grid */}
@@ -269,6 +288,21 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                 })}
               </div>
             )}
+
+            {activeTab === "bingo" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ShopCard
+                  title="ป้าย Bingo ประจำบ้าน (Mystic Bingo)"
+                  desc="ติดตั้งป้ายบิงโก แสดงตารางเลข 5x5 ที่มุมขวาล่างเพื่อลุ้นรับโบนัส Gold"
+                  price={500}
+                  gold={currentPlayer.gold}
+                  owned={currentPlayer.hasBingoCard}
+                  onBuy={() => handleToggleEquip("bingo")}
+                  icon="🎯"
+                  img="/images/items/special/bingo.webp"
+                />
+              </div>
+            )}
           </div>
 
           {/* Footer Next Button & Admin Access */}
@@ -277,6 +311,14 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
               <span className="text-xs text-white/40 font-bold">
                 {currentHouseIndex + 1} จาก {setupPlayers.length} บ้าน
               </span>
+              <button
+                onClick={handleGiveBingoAll}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/40 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105"
+                title="แจกป้าย Bingo ให้ทุกบ้านทันทีเมื่อเริ่มต้นเกม"
+              >
+                <span>🎯</span>
+                <span>แจกป้าย Bingo ให้ทุกบ้าน</span>
+              </button>
               {onOpenAdmin && (
                 <button
                   onClick={onOpenAdmin}

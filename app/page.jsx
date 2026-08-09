@@ -20,6 +20,8 @@ import NpcSpawnWidget from "@/components/NpcSpawnWidget";
 import NpcSkillModal from "@/components/NpcSkillModal";
 import NpcPetModal from "@/components/NpcPetModal";
 import NpcDoctorModal from "@/components/NpcDoctorModal";
+import BingoWidget from "@/components/BingoWidget";
+import { generateBingoCard, checkPlayerBingo } from "@/lib/bingoEngine";
 import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain, emitHeal } from "@/lib/skillFxBus";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
@@ -349,6 +351,38 @@ function gameReducer(state, action) {
         players,
         log: [...state.log, `🌀 [แอดมิน] วาร์ป ${players[targetIdx].name} ไปยังช่อง ${npc.cell} (NPC ${action.npcId})`],
       };
+    }
+
+    case "GIVE_BINGO_CARD": {
+      const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      const players = [...state.players];
+      const p = { ...players[targetIdx] };
+      p.hasBingoCard = true;
+      p.bingoCard = generateBingoCard();
+      const { updatedPlayer, logs: bingoLogs } = checkPlayerBingo(p, p.position);
+      players[targetIdx] = updatedPlayer;
+      const log = [`🎯 [แอดมิน] เสก "ป้าย Bingo" ให้บ้าน ${p.name}!`];
+      if (bingoLogs && bingoLogs.length > 0) log.push(...bingoLogs);
+      return { ...state, players, log: [...state.log, ...log] };
+    }
+
+    case "REMOVE_BINGO_CARD": {
+      const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
+      const players = [...state.players];
+      const p = { ...players[targetIdx] };
+      p.hasBingoCard = false;
+      p.bingoCard = null;
+      players[targetIdx] = p;
+      return { ...state, players, log: [...state.log, `🚫 [แอดมิน] ถอน "ป้าย Bingo" ของบ้าน ${p.name}`] };
+    }
+
+    case "GIVE_BINGO_ALL": {
+      const players = state.players.map((p) => {
+        const updated = { ...p, hasBingoCard: true, bingoCard: p.bingoCard || generateBingoCard() };
+        const { updatedPlayer } = checkPlayerBingo(updated, updated.position);
+        return updatedPlayer;
+      });
+      return { ...state, players, log: [...state.log, `🎯 [แอดมิน] เสก "ป้าย Bingo" ให้ผู้เล่นทุกบ้าน!`] };
     }
 
     case "ADMIN_TELEPORT_TO_BOSS": {
@@ -1294,6 +1328,9 @@ export default function Home() {
           onClose={() => dispatch({ type: "CLOSE_PET_MODAL" })}
         />
       )}
+
+      {/* ── Bingo Widget (แสดงเฉพาะบ้านที่มีป้าย Bingo มุมขวาล่าง) ── */}
+      <BingoWidget players={state.players} currentPlayerIndex={state.currentPlayerIndex} />
 
       {/* ── Win Screen ─────────────────────────────────────────── */}
       {state.winner && (

@@ -466,6 +466,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
               <ShopTab active={activeCategory === "potion"} icon="🧪" label="ยาไอเทม" onClick={() => setActiveCategory("potion")} />
               <ShopTab active={activeCategory === "skill"} icon="✨" label="วิชาคาถา" onClick={() => setActiveCategory("skill")} />
               <ShopTab active={activeCategory === "pet"} icon="🐾" label="สัตว์วิเศษ" onClick={() => setActiveCategory("pet")} />
+              <ShopTab active={activeCategory === "bingo"} icon="🎯" label="ป้าย Bingo" onClick={() => setActiveCategory("bingo")} />
             </div>
 
             {/* Item List / Actions Grid */}
@@ -850,6 +851,51 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                         }
                       />
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* BINGO CATEGORY */}
+              {activeCategory === "bingo" && (
+                <div className="space-y-4">
+                  <div className="bg-black/50 border border-amber-500/30 p-4 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                      <span className="text-3xl animate-bounce">🎯</span>
+                      <div>
+                        <h4 className="font-black text-amber-400 text-sm">ระบบป้าย Bingo (Mystic Bingo System)</h4>
+                        <p className="text-xs text-slate-300">
+                          สถานะบ้าน {player.name}: <span className={player.hasBingoCard ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>{player.hasBingoCard ? "✅ มีป้าย Bingo แล้ว" : "❌ ยังไม่มีป้าย Bingo"}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      {player.hasBingoCard ? (
+                        <button
+                          onClick={() => onDispatch({ type: "REMOVE_BINGO_CARD", playerIndex: selectedHouseIdx })}
+                          className="py-3 px-4 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 font-black text-xs transition-all hover:scale-105 shadow-md flex items-center justify-center gap-2"
+                        >
+                          <span>🚫</span>
+                          <span>ถอนป้าย Bingo ของบ้าน {player.name}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onDispatch({ type: "GIVE_BINGO_CARD", playerIndex: selectedHouseIdx })}
+                          className="py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-yellow-400 text-slate-950 font-black text-xs transition-all hover:scale-105 shadow-md flex items-center justify-center gap-2 border border-yellow-300"
+                        >
+                          <span>🎯</span>
+                          <span>เสกป้าย Bingo ให้บ้าน {player.name}</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onDispatch({ type: "GIVE_BINGO_ALL" })}
+                        className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs transition-all hover:scale-105 shadow-md flex items-center justify-center gap-2 border border-emerald-300"
+                      >
+                        <span>🌟</span>
+                        <span>เสกป้าย Bingo ให้ผู้เล่นทุกบ้าน (All Houses)</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

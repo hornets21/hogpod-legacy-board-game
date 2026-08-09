@@ -165,34 +165,71 @@ function Animated3DDice({ isRolling, diceResult, onRoll, canRoll, resetDiceKey }
   );
 }
 
-// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์ + Dynamic 3D Combat Camera Zoom Focus
+// กล้องเอียงมองลงกระดาน + parallax ตามเมาส์ + Dynamic 3D Combat Camera Zoom Focus (Fast Crisp Glide Return)
 function CameraRig({ focusCell = null, isCombatActive = false }) {
+  const currentCamPos = useRef(new THREE.Vector3(0, 11, 10.8));
+  const currentLookAt = useRef(new THREE.Vector3(0, 0.5, 0.3));
+  const wasCombat = useRef(false);
+
   useFrame(({ camera, pointer }, dt) => {
-    const k = Math.min(1, dt * 3.5); // ความเร็วนุ่มนวลในการเคลื่อนที่กล้อง
+    const delta = Math.min(dt, 0.033);
+
+    let destX = 0;
+    let destY = 11;
+    let destZ = 10.8;
+
+    let lookX = 0;
+    let lookY = 0.5;
+    let lookZ = 0.3;
 
     if (isCombatActive && focusCell) {
-      const [targetX, , targetZ] = cellToWorld(focusCell);
-      // โหมดประลองยุทธ์: ซูมกล้องลงไปประชิดพิกัดช่องต่อสู้ 3D
-      const destX = targetX + pointer.x * 0.4;
-      const destY = 4.2 + pointer.y * 0.3;
-      const destZ = targetZ + 3.8;
+      const [wx, , wz] = cellToWorld(focusCell);
+      destX = wx + pointer.x * 0.3;
+      destY = 4.2 + pointer.y * 0.2;
+      destZ = wz + 3.8;
 
-      camera.position.x += (destX - camera.position.x) * k;
-      camera.position.y += (destY - camera.position.y) * k;
-      camera.position.z += (destZ - camera.position.z) * k;
-      camera.lookAt(targetX, 0.5, targetZ);
+      lookX = wx;
+      lookY = 0.5;
+      lookZ = wz;
+
+      wasCombat.current = true;
     } else {
-      // โหมดเดินบนกระดานปกติ: กล้องมุมมองกว้าง
-      const destX = pointer.x * 1.1;
-      const destY = 11 + pointer.y * 0.7;
-      const destZ = 10.8;
+      destX = pointer.x * 1.1;
+      destY = 11 + pointer.y * 0.7;
+      destZ = 10.8;
 
-      camera.position.x += (destX - camera.position.x) * k;
-      camera.position.y += (destY - camera.position.y) * k;
-      camera.position.z += (destZ - camera.position.z) * k;
-      camera.lookAt(0, 0, 0.3);
+      lookX = 0;
+      lookY = 0.5;
+      lookZ = 0.3;
     }
+
+    // เมื่อพึ่งจบการต่อสู้ (wasCombat == true) ให้ใช้สปีดดึงกล้องกลับอย่างรวดเร็วและกระชับ (0.2s) ป้องกันกล้องยืดลากกระตุก
+    const k = wasCombat.current && !isCombatActive ? Math.min(1, delta * 14.0) : Math.min(1, delta * 7.0);
+
+    currentCamPos.current.x += (destX - currentCamPos.current.x) * k;
+    currentCamPos.current.y += (destY - currentCamPos.current.y) * k;
+    currentCamPos.current.z += (destZ - currentCamPos.current.z) * k;
+
+    currentLookAt.current.x += (lookX - currentLookAt.current.x) * k;
+    currentLookAt.current.y += (lookY - currentLookAt.current.y) * k;
+    currentLookAt.current.z += (lookZ - currentLookAt.current.z) * k;
+
+    // เช็คเมื่อกล้องกลับถึงตำแหน่งกระดานปกติแล้ว ให้รีเซ็ต flag
+    if (!isCombatActive && wasCombat.current) {
+      const dist = Math.hypot(
+        currentCamPos.current.x - destX,
+        currentCamPos.current.y - destY,
+        currentCamPos.current.z - destZ
+      );
+      if (dist < 0.1) {
+        wasCombat.current = false;
+      }
+    }
+
+    camera.position.copy(currentCamPos.current);
+    camera.lookAt(currentLookAt.current);
   });
+
   return null;
 }
 

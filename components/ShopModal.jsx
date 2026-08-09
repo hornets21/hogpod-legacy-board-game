@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
+import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST, BINGO_ITEM } from "@/lib/gameData";
 import ItemTooltip from "@/components/fx/ItemTooltip";
 
 export default function ShopModal({ player, onBuy, onClose }) {
-  const [activeCategory, setActiveCategory] = useState("wands"); // wands | armor | amulets | potions | skills | pets
+  const [activeCategory, setActiveCategory] = useState("wands"); // wands | armor | amulets | potions | skills | pets | bingo
 
   if (!player) return null;
 
@@ -62,6 +62,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
             <CategoryTab active={activeCategory === "potions"} icon="🧪" label="ยาปรุง" onClick={() => setActiveCategory("potions")} />
             <CategoryTab active={activeCategory === "skills"} icon="✨" label="คาถาบ้าน" onClick={() => setActiveCategory("skills")} />
             <CategoryTab active={activeCategory === "pets"} icon="🐾" label="สัตว์วิเศษ" onClick={() => setActiveCategory("pets")} />
+            <CategoryTab active={activeCategory === "bingo"} icon="🎯" label="ป้าย Bingo" onClick={() => setActiveCategory("bingo")} />
           </div>
 
           {/* DISPLAY SHELVES CONTENT AREA */}
@@ -264,6 +265,25 @@ export default function ShopModal({ player, onBuy, onClose }) {
                     }}
                   />
                 ))}
+
+              {activeCategory === "bingo" && (
+                <ShopShelfCard
+                  title={BINGO_ITEM?.name || "ป้าย Bingo"}
+                  sub={BINGO_ITEM?.description || "ป้ายบิงโกประจำบ้าน แสดงตารางตัวเลขเมื่อตกช่องตรงกับบิงโก ลุ้นโบนัส 10,000 Gold!"}
+                  price={BINGO_ITEM?.price || 500}
+                  gold={player.gold}
+                  icon="🎯"
+                  img={BINGO_ITEM?.image}
+                  owned={player.hasBingoCard}
+                  onBuy={() => onBuy("bingo", "bingo_sign")}
+                  itemData={{
+                    ...(BINGO_ITEM || {}),
+                    name: "ป้าย Bingo",
+                    categoryTh: "🎯 ป้ายบิงโกประจำบ้าน",
+                    price: 500,
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -297,7 +317,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
               ✨ คาถา: <span className="text-purple-400 font-bold">{player.skills.length}/2</span>
             </div>
             <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
-              🐾 สัตว์: <span className="text-emerald-400 font-bold">{player.pet ? player.pet.name : "ไม่มี"}</span>
+              🎯 บิงโก: <span className="text-amber-400 font-bold">{player.hasBingoCard ? "มีแล้ว" : "ไม่มี"}</span>
             </div>
           </div>
         </div>
@@ -403,6 +423,7 @@ function getCategoryTitle(cat) {
     case "potions": return "ยาฟื้นฟู & ยาพิษ";
     case "skills": return "คาถาประจำบ้าน";
     case "pets": return "สัตว์วิเศษบัฟพิเศษ";
+    case "bingo": return "ป้ายบิงโกประจำบ้าน";
     default: return "";
   }
 }
