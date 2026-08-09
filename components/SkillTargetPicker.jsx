@@ -23,6 +23,7 @@ export default function SkillTargetPicker({
 }) {
   const [targetIndex, setTargetIndex] = useState(null);
   const [monsterCell, setMonsterCell] = useState(null);
+  const [diceChoice, setDiceChoice] = useState(6);
 
   const skill = skillId ? SKILLS[skillId] : null;
 
@@ -31,6 +32,7 @@ export default function SkillTargetPicker({
     if (open) {
       setTargetIndex(null);
       setMonsterCell(null);
+      setDiceChoice(6);
     }
   }, [open, skillId, casterIndex]);
 
@@ -51,12 +53,18 @@ export default function SkillTargetPicker({
 
   const eligibleMonsters = Array.from(monsterCells || [])
     .map((cell) => ({ cell, monster: MONSTER_MAP[cell] }))
-    .filter((m) => m.monster);
+    .filter((m) => {
+      if (!m.monster) return false;
+      if (skill?.effect === "banish_monster" && m.monster.isBoss) return false;
+      return true;
+    });
 
   const requiresTarget = skill.requiresTarget;
+  const isLockDice = skill.effect === "lock_dice";
   const needsTarget = requiresTarget === "player" || requiresTarget === "monster";
 
   const canConfirm =
+    isLockDice ||
     !needsTarget ||
     (requiresTarget === "player" && targetIndex !== null) ||
     (requiresTarget === "monster" && monsterCell !== null);
@@ -64,7 +72,9 @@ export default function SkillTargetPicker({
   const handleConfirm = () => {
     if (!canConfirm) return;
     const resolvedTarget =
-      requiresTarget === "player"
+      isLockDice
+        ? diceChoice
+        : requiresTarget === "player"
         ? targetIndex
         : requiresTarget === "monster"
         ? monsterCell
@@ -105,12 +115,17 @@ export default function SkillTargetPicker({
                   className="w-full h-full object-contain"
                 />
               </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-black text-white text-lg truncate">
-                  {skill.nameTh || skill.name}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-white text-lg truncate">
+                    {skill.nameTh || skill.name}
+                  </h3>
+                  {skill.categoryTh && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/60 border border-purple-400/40 text-purple-200 font-bold shrink-0">
+                      {skill.categoryTh}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-white/60 truncate">{skill.description}</p>
-              </div>
               <button
                 onClick={onCancel}
                 className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all"
@@ -131,6 +146,34 @@ export default function SkillTargetPicker({
                   {caster.name}
                 </span>
                 <span className="text-white/40">· HP {Math.max(0, caster.hp)}/{caster.maxHp}</span>
+              </div>
+            )}
+
+            {/* Target selection: Dice Value (for lock_dice) */}
+            {isLockDice && (
+              <div className="mb-4">
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-300 mb-2">
+                  🎲 เลือกแต้มลูกเต๋าที่ต้องการล็อก (1 - 6)
+                </div>
+                <div className="grid grid-cols-6 gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((num) => {
+                    const selected = diceChoice === num;
+                    return (
+                      <button
+                        key={num}
+                        onClick={() => setDiceChoice(num)}
+                        className={`py-3 rounded-2xl border-2 font-black text-center transition-all flex flex-col items-center justify-center gap-1 ${
+                          selected
+                            ? "bg-emerald-500/30 border-emerald-400 text-emerald-200 ring-2 ring-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,0.4)] scale-105"
+                            : "bg-slate-900/60 border-white/10 text-white/70 hover:border-white/30 hover:bg-slate-800"
+                        }`}
+                      >
+                        <span className="text-xl">🎲</span>
+                        <span className="text-base font-black">{num}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

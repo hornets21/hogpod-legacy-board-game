@@ -76,24 +76,33 @@ function gameReducer(state, action) {
       // ROLL_DICE must only update the destination so the token can animate there.
       if (state.trapCells?.[player.position]) {
         // กับดักยาพิษ — ใครเหยียบก็ตาย รวมถึงเจ้าของด้วย (ตามคำอธิบายยา) และกับดัก single-use
-        const p = { ...player, hp: 0 };
-        const players = [...state.players];
-        players[state.currentPlayerIndex] = p;
         const trapCells = { ...state.trapCells };
         delete trapCells[player.position];
-        let next = handlePlayerDeath({ ...state, players, trapCells }, state.currentPlayerIndex);
-        next = {
-          ...next,
-          log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
-        };
-        return advanceTurn(next);
+
+        if (!player.isInvincible) {
+          const p = { ...player, hp: 0 };
+          const players = [...state.players];
+          players[state.currentPlayerIndex] = p;
+          let next = handlePlayerDeath({ ...state, players, trapCells }, state.currentPlayerIndex);
+          next = {
+            ...next,
+            log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
+          };
+          return advanceTurn(next);
+        } else {
+          return advanceTurn({
+            ...state,
+            trapCells,
+            log: [...state.log, `🛡️ ${player.name} เหยียบกับดักยาพิษ แต่มีสถานะอมตะจึงไม่ได้รับความเสียหาย!`],
+          });
+        }
       }
 
       let next = checkWin(state);
       if (next.winner || next.phase !== "play") return next;
 
       const monsterMap = next.monsterMap || MONSTER_MAP;
-      const monster = monsterMap[player.position];
+      const monster = next.revealedMonsters?.[player.position] || monsterMap[player.position];
       const revealedMonsters = { ...next.revealedMonsters };
 
       // 1. ตรวจสอบมอนสเตอร์ในช่อง
@@ -183,7 +192,7 @@ function gameReducer(state, action) {
             petModalPlayer: player,
           };
         }
-        if (npcResult.action === "skill_granted" || npcResult.action === "pet_granted") {
+        if (npcResult.action === "skill_granted" || npcResult.action === "pet_granted" || npcResult.action === "merchant_shop") {
           return npcResult.state;
         }
       }
@@ -209,6 +218,11 @@ function gameReducer(state, action) {
       if (combat.resolved) {
         if (combat.playerDied) {
           next = handlePlayerDeath(next, combat.playerIndex);
+          next = {
+            ...next,
+            phase: "play",
+            combatState: null,
+          };
         } else if (combat.monsterDied) {
           const players = [...next.players];
           const p = { ...players[combat.playerIndex] };
@@ -217,17 +231,47 @@ function gameReducer(state, action) {
           players[combat.playerIndex] = p;
           const monsterCells = new Set(next.monsterCells);
           monsterCells.delete(combat.monster.cell);
+          const revealedMonsters = { ...next.revealedMonsters };
+          delete revealedMonsters[combat.monster.cell];
+          const monsterMap = { ...next.monsterMap };
+          delete monsterMap[combat.monster.cell];
+
           next = {
             ...next,
             players,
             monsterCells,
+            revealedMonsters,
+            monsterMap,
             phase: "play",
             combatState: null,
             log: [...next.log, `💰 ${p.name} ได้รับ ${goldReward.toLocaleString()} เหรียญ!`],
           };
           next = checkWin(next);
-        }
+        } else {
+          // Monster survived with remaining HP! Check if battle was at Boss cell (cell 90)
+          const isBossCell = combat.monster?.cell === 90 || combat.monster?.isBoss || next.players[combat.playerIndex]?.position === 90;
+          let players = [...next.players];
+          let customLog = [];
+          const p = { ...players[combat.playerIndex] };
 
+          if (isBossCell) {
+            const newPos = Math.max(1, p.position - 6);
+            p.position = newPos;
+            players[combat.playerIndex] = p;
+            customLog.push(`↩️ ${p.name} ยังไม่สามารถปราบ Final Boss ได้! กระเด็นถอยหลังไป 6 ช่อง (ช่อง ${newPos}) เพื่อเริ่มทอยใหม่ (บอสเหลือ HP ${combat.monster.currentHp}/${combat.monster.hp})`);
+          } else {
+            customLog.push(`⚔️ ${p.name} ยังไม่สามารถปราบ ${combat.monster.name} ได้! (มอนสเตอร์สแตนด์บายที่ช่อง ${combat.monster.cell} เหลือ HP ${combat.monster.currentHp}/${combat.monster.hp})`);
+          }
+
+          next = {
+            ...next,
+            players,
+            phase: "play",
+            combatState: null,
+            log: [...next.log, ...customLog],
+          };
+        }
+        
         if (!next.winner) {
           next = advanceTurn(next);
         }
@@ -310,7 +354,7 @@ function gameReducer(state, action) {
     case "ADMIN_TELEPORT_TO_BOSS": {
       const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
       const player = state.players[targetIdx];
-      const boss = state.monsterMap?.[90] || MONSTER_MAP[90];
+      const boss = state.revealedMonsters?.[90] || state.monsterMap?.[90] || MONSTER_MAP[90];
 
       // Do not revive or recreate the boss after it has already been defeated.
       if (!player || !boss || !state.monsterCells?.has(90)) {
@@ -372,13 +416,30 @@ function gameReducer(state, action) {
       const player = state.players[state.currentPlayerIndex];
       if (player.pet?.effect === "dodge_once" && !player.dodgeUsed) {
         const players = [...state.players];
-        players[state.currentPlayerIndex] = { ...player, dodgeUsed: true };
+        const activeMonster = state.combatState?.monster;
+        const isBossCell = activeMonster?.cell === 90 || activeMonster?.isBoss || player.position === 90;
+        const newPos = isBossCell ? Math.max(1, player.position - 6) : player.position;
+
+        players[state.currentPlayerIndex] = { ...player, dodgeUsed: true, position: newPos };
+        let revealedMonsters = state.revealedMonsters;
+        let monsterMap = state.monsterMap;
+        if (activeMonster && activeMonster.cell != null) {
+          revealedMonsters = { ...revealedMonsters, [activeMonster.cell]: activeMonster };
+          monsterMap = { ...monsterMap, [activeMonster.cell]: activeMonster };
+        }
+
+        const fleeLog = isBossCell
+          ? `🏦 ${player.name} ใช้บัฟ "แบงค์" หลบหลีกบอส! กระเด็นถอยหลังไป 6 ช่อง (ช่อง ${newPos})`
+          : `🏦 ${player.name} ใช้บัฟ "แบงค์" หนีการต่อสู้!`;
+
         return {
           ...state,
           players,
+          revealedMonsters,
+          monsterMap,
           phase: "play",
           combatState: null,
-          log: [...state.log, `🏦 ${player.name} ใช้บัฟ "แบงค์" หนีการต่อสู้!`],
+          log: [...state.log, fleeLog],
         };
       }
       return state;
@@ -948,7 +1009,7 @@ export default function Home() {
             {/* Background Music Player */}
             <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
 
-            {/* Quick Action Emoji Buttons (Admin, Shop, Reset Dice) */}
+            {/* Quick Action Emoji Buttons (Admin) */}
             <div className="flex items-center gap-2">
               {/* Admin Floating Button */}
               <button
@@ -960,27 +1021,7 @@ export default function Home() {
                 }`}
                 title="เมนูแอดมิน"
               >
-                👑
-              </button>
-
-              {/* Shop Button */}
-              <button
-                onClick={() => dispatch({ type: "OPEN_SHOP" })}
-                disabled={!!state.combatState}
-                className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-yellow-300 hover:border-yellow-400/50 hover:bg-yellow-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                title="เปิดร้านค้าฮอกปด"
-              >
-                🏪
-              </button>
-
-              {/* Reset Dice Button */}
-              <button
-                onClick={() => setResetDiceKey((k) => k + 1)}
-                disabled={isRolling}
-                className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-500/10 hover:scale-105 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                title="รีเซ็ตลูกเต๋า 3D กลับสู่ตำแหน่งเริ่มต้น"
-              >
-                🔄
+                ⚙️
               </button>
             </div>
 
@@ -1190,6 +1231,7 @@ export default function Home() {
           player={currentPlayer}
           onResolveCombat={(combatResult) => dispatch({ type: "COMBAT_RESOLVE", combatResult })}
           onUseSkill={(skillId) => handleSkillRequest(state.currentPlayerIndex, skillId)}
+          onUsePotion={(potionId) => dispatch({ type: "USE_POTION", potionId })}
           onFlee={
             currentPlayer.pet?.effect === "dodge_once" && !currentPlayer.dodgeUsed
               ? () => dispatch({ type: "FLEE_COMBAT" })

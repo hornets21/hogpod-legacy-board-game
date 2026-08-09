@@ -37,7 +37,11 @@ function Badge({ buffId, duration = 0, amount = 0 }) {
     >
       <span className="text-[10px] leading-none">{cfg.icon}</span>
       <span className="leading-none">
-        {buffId === "temp_dmg" && amount > 0 ? `+${amount}` : cfg.label}
+        {buffId === "temp_dmg" && amount > 0
+          ? `+${amount}`
+          : buffId === "lock_dice" && amount > 0
+          ? `เต๋า (${amount})`
+          : cfg.label}
         {duration > 0 && (
           <span className="ml-0.5 text-white/60">{duration}T</span>
         )}
@@ -65,7 +69,7 @@ export default function BuffBadges({ player }) {
   }
   // lock_dice (nextRollOverride)
   if (player.nextRollOverride) {
-    activeBuffs.push({ buffId: "lock_dice", duration: 1 });
+    activeBuffs.push({ buffId: "lock_dice", duration: 1, amount: player.nextRollOverride });
   }
   // bank / dodge buff (pet)
   if (player.pet?.effect === "dodge_once" && !player.dodgeUsed) {

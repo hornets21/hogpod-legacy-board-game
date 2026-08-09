@@ -135,6 +135,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             <SlotFrame
               label="ARMOR (เกราะ)"
               icon="🛡️"
+              img={currentPlayer.armor ? currentPlayer.armor.image : null}
               active={!!currentPlayer.armor}
               itemTitle={currentPlayer.armor ? currentPlayer.armor.name : "ยังไม่ได้สวมใส่"}
               itemSub={currentPlayer.armor ? currentPlayer.armor.description : "สุ่มรับเสื้อเกราะ"}
@@ -223,7 +224,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                   owned={currentPlayer.wand?.type === "vip"}
                   onBuy={() => handleToggleEquip("wand", "vip")}
                   icon="✨"
-                  img={currentPlayer.vipWandImg || "/images/items/03_ไม้ตะเคียน.webp"}
+                  img={currentPlayer.vipWandImg || "/images/items/weapons/wand_takian_green.webp"}
                 />
               </div>
             )}
@@ -241,6 +242,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                     disabled={false}
                     onBuy={() => handleToggleEquip("pet", pet.id)}
                     icon={pet.emoji}
+                    img={pet.image}
                   />
                 ))}
               </div>
@@ -281,7 +283,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                   className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105"
                   title="เปิด Admin Panel เพื่อกำหนดไอเทม เงิน และสถานะเริ่มต้นแบบอิสระ"
                 >
-                  <span>👑</span>
+                  <span>⚙️</span>
                   <span>ตั้งค่า Admin (Pay To Win)</span>
                 </button>
               )}

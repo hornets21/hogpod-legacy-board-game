@@ -12,67 +12,69 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
   const playerHp = Math.max(1, player?.hp || 1);
   const tierMult = monster?.isBoss ? 1.25 : monster?.isElite ? 1.1 : 1.0;
 
-  // ตัวเลือกสเตตัสสุ่มโดยคำนวณอิงจากค่าพลังของผู้เล่น (Opponent Stats) + สุ่มเปอร์เซ็นต์
+  const baseMonsterHp = typeof monster?.currentHp === "number" ? monster.currentHp : (typeof monster?.hp === "number" ? monster.hp : 50);
+  const baseMonsterDmg = typeof monster?.dmg === "number" ? monster.dmg : 10;
+
   const segments = [
     {
-      label: "⚔️ DMG ~40% | 🩸 HP ~65%",
+      label: "EASY: DMG 50% | HP 50%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (0.50 + Math.random() * 0.25) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (0.30 + Math.random() * 0.20) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 0.50));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.50));
         return { hp, dmg };
       },
       color: "#22c55e",
-      text: "มอนสเตอร์สุ่มได้สเตตัสระดับง่าย (Easy Roll)",
+      text: "มอนสเตอร์สุ่มได้สเตตัสระดับง่าย (Easy Roll) — พลังและเลือดลดลง 50%!",
     },
     {
-      label: "⚔️ DMG ~70% | 🩸 HP ~85%",
+      label: "BALANCED: DMG 75% | HP 75%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (0.70 + Math.random() * 0.30) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (0.55 + Math.random() * 0.25) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 0.75));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.75));
         return { hp, dmg };
       },
       color: "#3b82f6",
-      text: "มอนสเตอร์สุ่มได้สเตตัสปานกลางสูสี (Balanced Roll)",
+      text: "มอนสเตอร์สุ่มได้สเตตัสสมดุล (Balanced Roll) — พลังและเลือดลดลง 25%",
     },
     {
-      label: "💥 DMG ~110% | 🩸 HP ~55%",
+      label: "CANNON: DMG 120% | HP 50%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (0.40 + Math.random() * 0.25) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (0.90 + Math.random() * 0.30) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 0.50));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.20));
         return { hp, dmg };
       },
       color: "#eab308",
-      text: "มอนสเตอร์สุ่มได้ ดาเมจรุนแรงแต่เลือดน้อย! (Glass Cannon)",
+      text: "มอนสเตอร์สุ่มได้ สายโจมตีรุนแรง! (Glass Cannon) — ดาเมจสูงขึ้น เลือดลดลง 50%",
     },
     {
-      label: "🛡️ DMG ~75% | 🩸 HP ~125%",
+      label: "TANK: DMG 60% | HP 120%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (1.10 + Math.round(Math.random() * 30) / 100) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (0.60 + Math.random() * 0.25) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 1.20));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.60));
         return { hp, dmg };
       },
       color: "#a855f7",
-      text: "มอนสเตอร์สุ่มได้ เลือดอึดถึกทาน! (Tank Roll)",
+      text: "มอนสเตอร์สุ่มได้ สายถึกทน! (Tank Roll) — เลือดอึดขึ้น 20% ดาเมจลดลง",
     },
     {
-      label: "⚠️ DMG ~115% | 🩸 HP ~120%",
+      label: "HARD: DMG 110% | HP 110%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (1.00 + Math.random() * 0.35) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (1.00 + Math.random() * 0.30) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 1.10));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.10));
         return { hp, dmg };
       },
       color: "#f97316",
-      text: "มอนสเตอร์สุ่มได้สเตตัสเสี่ยงสูง! (High Risk)",
+      text: "มอนสเตอร์สุ่มได้สเตตัสยาก! (Hard Roll) — เลือดและดาเมจเพิ่มขึ้น 10%",
     },
     {
-      label: "💀 DMG ~135% | 🩸 HP ~140%",
+      label: "LETHAL: DMG 130% | HP 130%",
       getStats: () => {
-        const hp = Math.max(5, Math.round(playerDmg * (1.20 + Math.random() * 0.40) * tierMult));
-        const dmg = Math.max(1, Math.round(playerHp * (1.15 + Math.random() * 0.35) * tierMult));
+        const hp = Math.max(1, Math.round(baseMonsterHp * 1.30));
+        const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.30));
         return { hp, dmg };
       },
       color: "#ef4444",
-      text: "มอนสเตอร์สุ่มได้สเตตัสบ้าคลั่ง! (Lethal Boss Roll)",
+      text: "มอนสเตอร์สุ่มได้สเตตัสคลั่ง! (Lethal Roll) — เลือดและดาเมจเพิ่มขึ้น 30%!",
     },
   ];
 
@@ -90,30 +92,32 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
     setTimeout(() => {
       setSpinning(false);
       const selectedSeg = segments[selectedIndex];
-      const { dmg, hp } = selectedSeg.getStats();
+      const { dmg: rolledDmg, hp: rolledHpThreshold } = selectedSeg.getStats();
 
-      // Compare stats after spin to decide winner
       const currentDmg = getTotalDmg(player);
       const currentHp = player.hp;
+      const monsterHp = typeof monster?.currentHp === "number" ? monster.currentHp : (monster?.hp || 50);
 
-      // 1. ผู้เล่นรอดชีวิตจากพลังโจมตีมอนสเตอร์ (HP ผู้เล่น > DMG มอนสเตอร์)
-      const isPlayerAlive = player.isInvincible || currentHp > dmg;
-      // 2. ผู้เล่นต้องมีพลังโจมตีเพียงพอสำหรับล้มมอนสเตอร์ (Player DMG >= Monster HP)
-      const isMonsterDefeated = isPlayerAlive && currentDmg >= hp;
-
-      const outcome = isMonsterDefeated ? "win" : "lose";
+      // ผู้เล่นชนะการปะทะหากพลังโจมตีผู้เล่น (playerDmg) >= rolledHpThreshold (เกณฑ์การปะทะของวงล้อ)
+      const isWinClash = currentDmg >= rolledHpThreshold;
+      const damageDealt = isWinClash ? currentDmg : Math.max(1, Math.round(currentDmg * 0.5));
+      const remainingMonsterHp = Math.max(0, monsterHp - damageDealt);
+      const outcome = isWinClash ? "win" : "lose";
 
       setSpunResult({
         ...selectedSeg,
-        dmg,
-        hp,
+        dmg: rolledDmg,
+        hp: rolledHpThreshold,
         outcome,
         playerDmg: currentDmg,
         playerHp: currentHp,
+        damageDealt,
+        remainingMonsterHp,
       });
     }, 4000);
   }
 
+  // Auto-resolve safety timer after spin result is ready
   const handleConfirmResult = () => {
     if (!spunResult) return;
     onSpinComplete({
@@ -125,22 +129,70 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-5 py-2">
-      <div className="text-center">
-        <h3 className="text-base font-black text-yellow-400">🎰 วงล้อสุ่มสเตตัสมอนสเตอร์ (Stat Roulette)</h3>
-        <p className="text-xs text-white/60">หมุนวงล้อเพื่อสุ่มพลังโจมตีและเลือดของมอนสเตอร์ แล้ววัดผลแพ้-ชนะ!</p>
-      </div>
+    <div className="relative flex flex-col items-center justify-center select-none w-full max-w-sm mx-auto px-2">
+      {/* Dynamic Floating Result HUD Banner */}
+      {spunResult ? (
+        <div className="w-full flex flex-col items-center gap-2 animate-fade-in z-30 mb-2">
+          {/* Victory / Defeat Game Banner */}
+          <div
+            className={`w-full py-2 px-4 rounded-2xl border-2 text-center shadow-[0_0_30px_rgba(0,0,0,0.8)] backdrop-blur-md transition-transform duration-300 transform animate-bounce ${
+              spunResult.outcome === "win"
+                ? "bg-emerald-950/90 border-emerald-400 text-emerald-300 shadow-emerald-500/40"
+                : "bg-red-950/90 border-red-400 text-red-300 shadow-red-500/40"
+            }`}
+          >
+            <div className="text-xl md:text-2xl font-black tracking-wider drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              {spunResult.outcome === "win" ? "CLASH VICTORY!" : "CLASH DEFEAT!"}
+            </div>
+            <div className="text-[11px] font-bold text-white/90 truncate mt-0.5">
+              {spunResult.outcome === "win"
+                ? `⚔️ ชนะการปะทะ! สร้าง ${spunResult.damageDealt} ดาเมจใส่ ${monster?.name || "มอนสเตอร์"}`
+                : `💥 แพ้การปะทะ! โดนโจมตีสวนกลับ ${spunResult.dmg} ดาเมจ`}
+            </div>
+            <div className="text-[10px] font-black text-amber-300 mt-1 flex justify-center gap-3 bg-black/50 py-1 px-3 rounded-lg border border-white/10">
+              <span>พลังโจมตีผู้เล่น: {spunResult.playerDmg}</span>
+              <span>VS</span>
+              <span>เกณฑ์สุ่มวงล้อ: DMG {spunResult.dmg} | HP {spunResult.hp}</span>
+            </div>
+          </div>
 
-      {/* Wheel Container */}
-      <div className="relative w-64 h-64">
-        {/* Pointer Indicator */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 text-3xl text-red-500 drop-shadow-md">
-          ▼
+          {/* Action Continue Button */}
+          <button
+            onClick={handleConfirmResult}
+            className={`w-full py-3 px-6 rounded-xl font-black text-sm shadow-2xl transition-all duration-200 active:scale-95 border border-white/30 tracking-wider uppercase ${
+              spunResult.outcome === "win"
+                ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-white shadow-emerald-500/60 hover:brightness-110"
+                : "bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-red-500/60 hover:brightness-110"
+            }`}
+          >
+            {spunResult.outcome === "win" ? "รับรางวัล & จบการต่อสู้" : "ยอมรับผล & จบการต่อสู้"}
+          </button>
+        </div>
+      ) : (
+        /* Status Text Header (Compact Game HUD style) */
+        <div className="text-center mb-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-950/70 border border-purple-400/40 text-[10px] font-black text-amber-300 tracking-wider uppercase shadow-md">
+            <span>STAT ROULETTE</span>
+          </div>
+        </div>
+      )}
+
+      {/* Magic Wheel (Compact Responsive Size to fit within 1 screen) */}
+      <div className="relative w-48 h-48 sm:w-52 sm:h-52 md:w-56 md:h-56 flex items-center justify-center p-2 my-1">
+        {/* Outer Runic Magic Aura Rings */}
+        <div className="absolute inset-0 rounded-full border-2 border-amber-400/40 shadow-[0_0_25px_rgba(245,158,11,0.3)] pointer-events-none" />
+        <div className="absolute inset-1.5 rounded-full border border-purple-500/30 pointer-events-none" />
+
+        {/* Pointer Indicator (Golden Gem Arrow) */}
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center filter drop-shadow-[0_0_10px_rgba(239,68,68,0.9)]">
+          <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[16px] border-t-amber-400 relative">
+            <div className="absolute -top-4 -left-2 w-4 h-4 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444] border border-amber-200" />
+          </div>
         </div>
 
-        {/* The Wheel */}
+        {/* The Magic Wheel */}
         <div
-          className="w-full h-full rounded-full border-4 border-yellow-500/60 relative overflow-hidden shadow-[0_0_35px_rgba(240,184,91,0.3)]"
+          className="w-full h-full rounded-full border-4 border-amber-400/80 relative overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.3),inset_0_0_25px_rgba(0,0,0,0.8)]"
           style={{
             transform: `rotate(${rotation}deg)`,
             transition: spinning ? "transform 4s cubic-bezier(0.15, 0.9, 0.2, 1)" : "none",
@@ -151,15 +203,16 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
             return (
               <div
                 key={idx}
-                className="absolute w-1/2 h-1/2 top-0 right-0 origin-bottom-left flex items-center justify-center p-2 text-[10px] font-black text-white select-none border border-black/20"
+                className="absolute w-1/2 h-1/2 top-0 right-0 origin-bottom-left flex items-center justify-center p-1.5 text-[9px] font-black text-white select-none border border-black/40 shadow-inner"
                 style={{
                   backgroundColor: seg.color,
                   transform: `rotate(${angle}deg)`,
                   clipPath: "polygon(0 0, 100% 0, 0 100%)",
+                  backgroundImage: "radial-gradient(circle at 70% 30%, rgba(255,255,255,0.25), transparent 70%)",
                 }}
               >
                 <span
-                  className="transform -rotate-45 translate-x-2 -translate-y-2 text-center leading-tight drop-shadow-md font-black"
+                  className="transform -rotate-45 translate-x-1.5 -translate-y-1.5 text-center leading-tight font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] tracking-tighter"
                 >
                   {seg.label}
                 </span>
@@ -167,59 +220,41 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
             );
           })}
         </div>
+
+        {/* Center Orb (Spin Trigger or Arcane Core Crystal) */}
+        {!spunResult && (
+          <button
+            onClick={spinWheel}
+            disabled={spinning}
+            className={`absolute w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 via-purple-600 to-indigo-900 border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.8)] flex items-center justify-center z-20 transition-transform active:scale-95 ${
+              spinning ? "opacity-80 cursor-wait" : "hover:scale-110 cursor-pointer"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-full bg-amber-400/30 border border-white/60 animate-pulse flex items-center justify-center text-amber-200 font-black text-[11px] uppercase tracking-tighter shadow-inner">
+              {spinning ? "SPIN..." : "SPIN"}
+            </div>
+          </button>
+        )}
       </div>
 
-      {/* Result announcement & manual close button */}
-      {spunResult ? (
-        <div className="flex flex-col items-center gap-3 w-full max-w-sm animate-fade-in">
-          <div
-            className={`w-full p-4 rounded-2xl border-2 text-center shadow-xl backdrop-blur-md ${
-              spunResult.outcome === "win"
-                ? "bg-emerald-950/90 border-emerald-500 text-emerald-300 shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-                : "bg-red-950/90 border-red-500 text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
-            }`}
-          >
-            <div className="text-2xl font-black mb-1">
-              {spunResult.outcome === "win" ? "🎉 ชนะการต่อสู้! (VICTORY)" : "💀 พ่ายแพ้ในการต่อสู้! (DEFEAT)"}
-            </div>
-            <div className="text-xs font-bold mb-2 text-white/80">{spunResult.text}</div>
-
-            <div className="text-xs bg-black/60 p-2.5 rounded-xl border border-white/10 space-y-1 text-left">
-              <div className="flex justify-between">
-                <span className="text-white/70">พลังโจมตีผู้เล่น:</span>
-                <span className="font-bold text-amber-400">{spunResult.playerDmg}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/70">เลือดผู้เล่น:</span>
-                <span className="font-bold text-emerald-400">{spunResult.playerHp} HP</span>
-              </div>
-              <div className="flex justify-between border-t border-white/10 pt-1 mt-1">
-                <span className="text-white/70">มอนสเตอร์สุ่มได้:</span>
-                <span className="font-bold text-red-400">DMG {spunResult.dmg} | HP {spunResult.hp}</span>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={handleConfirmResult}
-            className={`w-full py-3.5 px-6 rounded-xl font-black text-base shadow-2xl transition-all hover:scale-105 active:scale-95 ${
-              spunResult.outcome === "win"
-                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-400 hover:to-teal-400 shadow-emerald-500/50"
-                : "bg-gradient-to-r from-red-600 to-rose-600 text-white hover:from-red-500 hover:to-rose-500 shadow-red-500/50"
-            }`}
-          >
-            {spunResult.outcome === "win" ? "🏆 รับรางวัล & ปิดหน้าต่าง" : "💀 ยืนยันผล & ปิดหน้าต่าง"}
-          </button>
-        </div>
-      ) : (
+      {/* Main Spin Button below wheel (if not spun) */}
+      {!spunResult && (
         <button
           onClick={spinWheel}
           disabled={spinning}
-          className={`btn-primary text-sm px-8 py-3 rounded-xl font-black shadow-lg ${
-            spinning ? "opacity-50 cursor-not-allowed" : "hover:scale-105"
+          className={`mt-2 w-full py-2.5 px-6 rounded-xl font-black text-xs text-white shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-300/60 transition-all duration-200 tracking-wider uppercase ${
+            spinning
+              ? "bg-slate-800 opacity-60 cursor-not-allowed border-purple-500/30"
+              : "bg-gradient-to-r from-purple-700 via-amber-500 to-indigo-700 hover:brightness-110 active:scale-95"
           }`}
         >
-          {spinning ? "🌀 กำลังสุ่มสเตตัสมอนสเตอร์..." : "🎲 หมุนสุ่มพลังมอนสเตอร์!"}
+          <span className="flex items-center justify-center gap-2">
+            {spinning ? (
+              <span>กำลังสุ่มพลังมอนสเตอร์...</span>
+            ) : (
+              <span>หมุนวงล้อสุ่มพลังมอนสเตอร์</span>
+            )}
+          </span>
         </button>
       )}
     </div>

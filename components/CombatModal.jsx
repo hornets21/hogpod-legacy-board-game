@@ -6,8 +6,11 @@ import WheelOfFate from "@/components/WheelOfFate";
 import { getTotalDmg } from "@/lib/gameEngine";
 import { AnimatedUiMonster } from "@/components/board3d/AnimatedMonster";
 import GrandFinalBossModalModel from "@/components/board3d/GrandFinalBossModalModel";
+import SkillButton from "@/components/fx/SkillButton";
+import { SKILLS, POTIONS } from "@/lib/gameData";
+import ItemTooltip from "@/components/fx/ItemTooltip";
 
-export default function CombatModal({ combatState, player, onResolveCombat, onUseSkill, onFlee }) {
+export default function CombatModal({ combatState, player, onResolveCombat, onUseSkill, onUsePotion, onFlee }) {
   const [introState, setIntroState] = useState("intro"); // "intro" | "ready"
   const [hitStop, setHitStop] = useState(false);
 
@@ -22,8 +25,27 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
 
   const { monster } = combatState;
   const totalDmg = getTotalDmg(player);
-  const hpPct = Math.max(0, (monster.currentHp / monster.hp) * 100);
+  const monsterMaxHp = monster?.hp || 1;
+  const monsterCurrentHp = typeof monster?.currentHp === "number" ? monster.currentHp : monsterMaxHp;
+  const hpPct = Math.max(0, Math.min(100, (monsterCurrentHp / monsterMaxHp) * 100));
   const playerHpPct = Math.max(0, (player.hp / player.maxHp) * 100);
+
+  // Filter skills: only show skills meant for monster combat / self buffs (thunder_star, skunk_blast, stay_stupid, lock_dice)
+  const combatUsableSkills = (player.skills || []).filter((skId) => {
+    const sk = SKILLS[skId];
+    if (!sk) return false;
+    return (
+      sk.target === "monster" ||
+      sk.requiresTarget === "monster" ||
+      sk.effect === "invincible" ||
+      sk.effect === "lock_dice"
+    );
+  });
+
+  // Filter potions: only show combat-friendly potions (heal, damage, cooldown) — exclude revive & poison
+  const combatUsablePotions = (player.potions || []).filter((potId) => {
+    return potId === "heal" || potId === "damage" || potId === "cooldown";
+  });
 
   const playerIdleImg = player.image || null;
   const monsterIdleImg = monster.image || null;
@@ -123,6 +145,71 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
                 <span className="text-amber-400 font-black text-lg">{totalDmg}</span>
               </div>
             </div>
+
+            {/* House Skills Section in Combat (Filtered for Monster Combat) */}
+            {combatUsableSkills.length > 0 && onUseSkill && (
+              <div className="w-full mt-3 bg-black/60 p-3 rounded-2xl border border-purple-500/30">
+                <div className="text-[10px] font-black uppercase tracking-wider text-purple-300 mb-2 flex items-center justify-between">
+                  <span>✨ คาถาต่อสู้ (Monster Skills)</span>
+                  <span className="text-[9px] text-white/50 font-normal">กดใช้ใส่ Monster</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {combatUsableSkills.map((skillId, idx) => (
+                    <SkillButton
+                      key={idx}
+                      skillId={skillId}
+                      playerIndex={player.playerIndex !== undefined ? player.playerIndex : 0}
+                      playerId={player.playerIndex !== undefined ? player.playerIndex : 0}
+                      cooldown={skillId ? player.skillCooldowns?.[skillId] || 0 : 0}
+                      onUse={onUseSkill}
+                      size="sm"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Combat Potions Section (Heal / Damage / Cooldown Potions) */}
+            {combatUsablePotions.length > 0 && onUsePotion && (
+              <div className="w-full mt-3 bg-black/60 p-3 rounded-2xl border border-amber-500/30">
+                <div className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2 flex items-center justify-between">
+                  <span>🧪 ยาต่อสู้ (Combat Potions)</span>
+                  <span className="text-[9px] text-white/50 font-normal">เพิ่มเลือด / ดาเมจ / ลดคูลดาวน์</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {combatUsablePotions.map((potId, idx) => {
+                    const pot = POTIONS[potId];
+                    if (!pot) return null;
+                    const potItem = { ...pot, categoryTh: "🧪 ยาปรุง" };
+
+                    const potBtn = (
+                      <button
+                        onClick={() => onUsePotion(potId)}
+                        className="flex items-center gap-2 p-2 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 text-left transition-all hover:scale-105 group w-full"
+                      >
+                        <div className="w-7 h-7 rounded-lg overflow-hidden bg-black/50 border border-amber-400/40 shrink-0 flex items-center justify-center">
+                          {pot.image ? (
+                            <img src={pot.image} alt={pot.name} className="w-full h-full object-contain p-0.5" />
+                          ) : (
+                            <span className="text-sm">🧪</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-black text-amber-200 truncate">{pot.name}</div>
+                          <div className="text-[8px] text-white/50 truncate">{pot.description}</div>
+                        </div>
+                      </button>
+                    );
+
+                    return (
+                      <ItemTooltip key={idx} item={potItem} position="top">
+                        {potBtn}
+                      </ItemTooltip>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -143,7 +230,7 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
               </div>
             </div>
           ) : (
-            <div className="w-full flex items-center justify-center animate-fade-in scale-100 lg:scale-110">
+            <div className="w-full flex items-center justify-center animate-fade-in my-auto">
               <WheelOfFate
                 monster={monster}
                 player={player}
@@ -198,7 +285,7 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
             <div className="w-full space-y-3 bg-black/50 p-4 rounded-2xl border border-red-500/20">
               <div className="flex justify-between items-center text-sm font-bold text-white/90">
                 <span className="flex items-center gap-1.5">❤️ ENEMY HP</span>
-                <span className="text-red-400 font-black text-base">{Math.max(0, monster.currentHp)} / {monster.hp}</span>
+                <span className="text-red-400 font-black text-base">{Math.max(0, monsterCurrentHp)} / {monsterMaxHp}</span>
               </div>
               <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-white/10">
                 <motion.div

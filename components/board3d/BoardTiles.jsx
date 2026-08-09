@@ -6,7 +6,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useTexture, Text } from "@react-three/drei";
+import { useTexture, Text, Html } from "@react-three/drei";
 import * as THREE from "three";
 import {
   buildGrid,
@@ -153,6 +153,26 @@ export default function BoardTiles({ revealedMonsters, usedLadders, monsterMap, 
               >
                 {cell}
               </Text>
+
+              {/* ป้ายสัญลักษณ์เวทมนตร์กรณีมอนสเตอร์บาดเจ็บ: ลอยแบบป้าย NPC ด้วย Html Component */}
+              {revealedMonsters?.[cell] && typeof revealedMonsters[cell].currentHp === "number" && revealedMonsters[cell].currentHp < revealedMonsters[cell].hp && (
+                <Html position={[x, 1.25, z]} center distanceFactor={12} zIndexRange={[100, 0]}>
+                  <div
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-black shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md transition-all duration-300 pointer-events-none whitespace-nowrap ${
+                      hoveredCell === cell
+                        ? "bg-red-950/95 border-rose-400 text-rose-200 scale-110 shadow-rose-500/60 ring-2 ring-rose-400/40"
+                        : "bg-slate-950/85 border-red-500/40 text-red-400 opacity-90"
+                    }`}
+                  >
+                    <span className="text-xs">❤️</span>
+                    {hoveredCell === cell ? (
+                      <span>{revealedMonsters[cell].currentHp} / {revealedMonsters[cell].hp}</span>
+                    ) : (
+                      <span className="text-[10px] font-bold opacity-90">{revealedMonsters[cell].currentHp}</span>
+                    )}
+                  </div>
+                </Html>
+              )}
             </group>
           );
         })

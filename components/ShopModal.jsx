@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
+import ItemTooltip from "@/components/fx/ItemTooltip";
 
 export default function ShopModal({ player, onBuy, onClose }) {
   const [activeCategory, setActiveCategory] = useState("wands"); // wands | armor | amulets | potions | skills | pets
@@ -85,6 +86,14 @@ export default function ShopModal({ player, onBuy, onClose }) {
                     img={commonWandImg}
                     owned={player.wand?.type === "common"}
                     onBuy={() => onBuy("wand", "common")}
+                    itemData={{
+                      name: `ไม้ทั่วไป: ${commonWandName}`,
+                      categoryTh: "🪄 ไม้กายสิทธิ์",
+                      dmgBonus: 20,
+                      description: `ไม้ประจำบ้าน ${player.name} เพิ่มพลังโจมตี +20 DMG`,
+                      image: commonWandImg,
+                      price: 1290,
+                    }}
                   />
                   <ShopShelfCard
                     title={`ไม้ VIP: ${vipWandName}`}
@@ -95,34 +104,96 @@ export default function ShopModal({ player, onBuy, onClose }) {
                     img={vipWandImg}
                     owned={player.wand?.type === "vip"}
                     onBuy={() => onBuy("wand", "vip")}
+                    itemData={{
+                      name: `ไม้ VIP: ${vipWandName}`,
+                      categoryTh: "🪄 ไม้กายสิทธิ์ (VIP)",
+                      dmgBonus: 35,
+                      description: `ไม้ระดับสูงประจำบ้าน ${player.name} เพิ่มพลังโจมตีอย่างมาก +35 DMG`,
+                      image: vipWandImg,
+                      price: 2200,
+                    }}
                   />
                 </>
               )}
 
               {activeCategory === "armor" && (
-                <ShopShelfCard
-                  title="กล่องเกราะลึกลับ"
-                  sub="สุ่มรับเสื้อเกราะ (ผ้าขาวม้า, เสื้อกั๊ก)"
-                  price={800}
-                  gold={player.gold}
-                  icon="🎲"
-                  img="/images/items/armor_chest.png"
-                  owned={!!player.armor}
-                  onBuy={() => onBuy("armor", "random")}
-                />
+                <>
+                  <ShopShelfCard
+                    title="กล่องเกราะลึกลับ (สุ่ม)"
+                    sub="สุ่มรับเสื้อเกราะในคลัง"
+                    price={800}
+                    gold={player.gold}
+                    icon="🎲"
+                    img={ARMOR_POOL[0]?.image}
+                    owned={!!player.armor}
+                    onBuy={() => onBuy("armor", "random")}
+                    itemData={{
+                      name: "กล่องเกราะลึกลับ (สุ่ม)",
+                      categoryTh: "🛡️ สุ่มเสื้อเกราะ",
+                      description: "สุ่มรับเสื้อเกราะป้องกัน 1 ตัวจากสระไอเทมในคลัง",
+                      image: ARMOR_POOL[0]?.image,
+                      price: 800,
+                    }}
+                  />
+                  {ARMOR_POOL.map((armor) => (
+                    <ShopShelfCard
+                      key={armor.id}
+                      title={armor.name}
+                      sub={armor.description}
+                      price={800}
+                      gold={player.gold}
+                      icon="🛡️"
+                      img={armor.image}
+                      owned={player.armor?.id === armor.id}
+                      onBuy={() => onBuy("armor", armor.id)}
+                      itemData={{
+                        ...armor,
+                        categoryTh: "🛡️ เสื้อเกราะ",
+                        price: 800,
+                      }}
+                    />
+                  ))}
+                </>
               )}
 
               {activeCategory === "amulets" && (
-                <ShopShelfCard
-                  title="หีบเครื่องราง"
-                  sub="สุ่มรับเครื่องรางศักดิ์สิทธิ์"
-                  price={1000}
-                  gold={player.gold}
-                  icon="📦"
-                  img="/images/items/amulet_chest.png"
-                  owned={!!player.amulet}
-                  onBuy={() => onBuy("amulet", "random")}
-                />
+                <>
+                  <ShopShelfCard
+                    title="หีบเครื่องราง (สุ่ม)"
+                    sub="สุ่มรับเครื่องรางศักดิ์สิทธิ์"
+                    price={1000}
+                    gold={player.gold}
+                    icon="📦"
+                    img={AMULET_POOL[0]?.image}
+                    owned={!!player.amulet}
+                    onBuy={() => onBuy("amulet", "random")}
+                    itemData={{
+                      name: "หีบเครื่องราง (สุ่ม)",
+                      categoryTh: "📿 สุ่มเครื่องราง",
+                      description: "สุ่มรับเครื่องรางเวทมนตร์ 1 ชิ้นจากสระเครื่องราง",
+                      image: AMULET_POOL[0]?.image,
+                      price: 1000,
+                    }}
+                  />
+                  {AMULET_POOL.map((amulet) => (
+                    <ShopShelfCard
+                      key={amulet.id}
+                      title={amulet.name}
+                      sub={amulet.description}
+                      price={1000}
+                      gold={player.gold}
+                      icon="📿"
+                      img={amulet.image}
+                      owned={player.amulet?.id === amulet.id}
+                      onBuy={() => onBuy("amulet", amulet.id)}
+                      itemData={{
+                        ...amulet,
+                        categoryTh: "📿 เครื่องราง",
+                        price: 1000,
+                      }}
+                    />
+                  ))}
+                </>
               )}
 
               {activeCategory === "potions" &&
@@ -139,6 +210,10 @@ export default function ShopModal({ player, onBuy, onClose }) {
                       img={pot.image}
                       disabled={player.potions.length >= 5}
                       onBuy={() => onBuy("potion", id)}
+                      itemData={{
+                        ...pot,
+                        categoryTh: "🧪 ยาปรุง",
+                      }}
                     />
                   ))}
 
@@ -148,15 +223,22 @@ export default function ShopModal({ player, onBuy, onClose }) {
                   return (
                     <ShopShelfCard
                       key={skill.id}
-                      title={skill.name}
+                      title={skill.nameTh || skill.name}
                       sub={skill.description}
                       price={2000}
                       gold={player.gold}
-                      icon={null}
+                      icon="🔮"
                       img={`/images/skills/${skill.id}_skill.webp`}
                       owned={owned}
                       disabled={!owned && player.skills.length >= 2}
                       onBuy={() => onBuy("skill", skill.id)}
+                      itemData={{
+                        ...skill,
+                        name: skill.nameTh || skill.name,
+                        categoryTh: skill.categoryTh || "✨ คาถาประจำบ้าน",
+                        image: `/images/skills/${skill.id}_skill.webp`,
+                        price: 2000,
+                      }}
                     />
                   );
                 })}
@@ -170,10 +252,16 @@ export default function ShopModal({ player, onBuy, onClose }) {
                     price={pet.price}
                     gold={player.gold}
                     icon={pet.emoji}
-                    img={`/images/pets/${pet.id}.png`}
+                    img={pet.image}
                     owned={player.pet?.id === pet.id}
                     disabled={!!player.pet && player.pet.id !== pet.id}
                     onBuy={() => onBuy("pet", pet.id)}
+                    itemData={{
+                      ...pet,
+                      categoryTh: "🐾 สัตว์วิเศษ",
+                      price: pet.price,
+                      icon: pet.emoji,
+                    }}
                   />
                 ))}
             </div>
@@ -235,14 +323,22 @@ function CategoryTab({ active, icon, label, onClick }) {
   );
 }
 
-function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disabled = false, onBuy }) {
+function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disabled = false, onBuy, itemData }) {
   const canAfford = gold >= price;
   const isDisabled = disabled || (!owned && !canAfford);
 
-  return (
+  const tooltipItem = itemData || {
+    name: title,
+    description: sub,
+    image: img,
+    icon: icon,
+    price: price,
+  };
+
+  const cardContent = (
     <div
       onClick={!isDisabled && !owned ? onBuy : undefined}
-      className={`group flex flex-col justify-between p-3 rounded-2xl border transition-all relative overflow-hidden ${
+      className={`group flex flex-col justify-between p-3 rounded-2xl border transition-all relative overflow-hidden h-full ${
         owned
           ? "border-emerald-500/60 bg-emerald-950/30 text-emerald-300"
           : isDisabled
@@ -260,7 +356,9 @@ function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disa
               className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-300"
               onError={(e) => {
                 e.currentTarget.style.display = "none";
-                e.currentTarget.nextElementSibling.style.display = "flex";
+                if (e.currentTarget.nextElementSibling) {
+                  e.currentTarget.nextElementSibling.style.display = "flex";
+                }
               }}
             />
           ) : null}
@@ -293,6 +391,8 @@ function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disa
       </div>
     </div>
   );
+
+  return <ItemTooltip item={tooltipItem} position="top">{cardContent}</ItemTooltip>;
 }
 
 function getCategoryTitle(cat) {

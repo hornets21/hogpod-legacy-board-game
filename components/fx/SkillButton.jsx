@@ -14,6 +14,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { SKILLS } from "@/lib/gameData";
 import { on, FX_EVENTS } from "@/lib/skillFxBus";
 
+import ItemTooltip from "@/components/fx/ItemTooltip";
+
 export default function SkillButton({
   skillId,
   playerIndex,        // index ของ player ที่เป็นเจ้าของสกิล (เพื่อตรวจ cast flash)
@@ -48,14 +50,22 @@ export default function SkillButton({
     ? "h-9 px-2 text-xs"
     : "h-12 px-3 text-sm";
 
-  return (
+  const skillItem = skill
+    ? {
+        ...skill,
+        image: `/images/skills/${skill.id}_skill.webp`,
+        icon: "🔮",
+      }
+    : null;
+
+  const buttonElement = (
     <motion.button
       onClick={() => canUse && onUse && onUse(actualSkillId)}
       disabled={!canUse}
       whileTap={canUse ? { scale: 0.88 } : undefined}
       whileHover={canUse ? { scale: 1.06, boxShadow: "0 0 18px rgba(168,85,247,0.6)" } : undefined}
       transition={{ type: "spring", stiffness: 600, damping: 18 }}
-      className={`relative ${sizeCls} rounded-xl border flex items-center gap-1.5 text-left font-bold overflow-hidden transition-colors ${
+      className={`relative w-full ${sizeCls} rounded-xl border flex items-center gap-1.5 text-left font-bold overflow-hidden transition-colors ${
         skill
           ? cd > 0
             ? "border-white/10 bg-black/50 text-white/40 cursor-not-allowed"
@@ -64,7 +74,6 @@ export default function SkillButton({
             : "border-purple-500/50 bg-purple-950/40 text-purple-200 hover:border-purple-300 hover:bg-purple-900/60 cursor-pointer"
           : "border-white/5 bg-black/30 text-white/10 cursor-not-allowed"
       }`}
-      title={skill ? `${skill.nameTh || skill.name}: ${skill.description}` : "ยังไม่ได้รับการฝึกคาถา"}
     >
       {/* Skill icon / placeholder */}
       <div className="w-6 h-6 rounded shrink-0 flex items-center justify-center overflow-hidden bg-black/40 z-10">
@@ -176,4 +185,10 @@ export default function SkillButton({
       </AnimatePresence>
     </motion.button>
   );
+
+  if (skillItem) {
+    return <ItemTooltip item={skillItem} position="top">{buttonElement}</ItemTooltip>;
+  }
+
+  return buttonElement;
 }

@@ -1,12 +1,23 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
 const MODEL_PATH = "/models/granfinalboss.glb";
-const MODEL_SCALE = 0.009;
+
+function BossCameraTarget() {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    // Focus camera directly at origin (0, 0, 0) where boss center is located
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }, [camera]);
+
+  return null;
+}
 
 function BossScene() {
   const groupRef = useRef(null);
@@ -24,13 +35,20 @@ function BossScene() {
   const normalizedScene = useMemo(() => {
     const clone = scene.clone();
     const bounds = new THREE.Box3().setFromObject(clone);
+    const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
 
-    clone.scale.setScalar(MODEL_SCALE);
+    // Normalize so maximum dimension fits in ~2.0 units space
+    const targetHeight = 2.0;
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = maxDim > 0 ? targetHeight / maxDim : 0.01;
+
+    clone.scale.setScalar(scale);
+    // Center bounding box center at origin (0, 0, 0)
     clone.position.set(
-      -center.x * MODEL_SCALE,
-      -bounds.min.y * MODEL_SCALE,
-      -center.z * MODEL_SCALE
+      -center.x * scale,
+      -center.y * scale,
+      -center.z * scale
     );
     return clone;
   }, [scene]);
@@ -40,11 +58,11 @@ function BossScene() {
 
     const t = clock.elapsedTime;
     groupRef.current.position.y = Math.sin(t * 1.8) * 0.05;
-    groupRef.current.rotation.y = Math.sin(t * 0.45) * 0.12;
+    groupRef.current.rotation.y = Math.sin(t * 0.45) * 0.2;
   });
 
   return (
-    <group ref={groupRef} position={[0, -0.75, 0]}>
+    <group ref={groupRef} position={[0, 0, 0]}>
       <primitive object={normalizedScene} />
     </group>
   );
@@ -55,9 +73,10 @@ export default function GrandFinalBossModalModel() {
     <Canvas
       shadows
       dpr={[1, 1.5]}
-      camera={{ position: [0, 1.35, 3.8], fov: 38, near: 0.1, far: 20 }}
+      camera={{ position: [0, 0, 3.8], fov: 38, near: 0.1, far: 20 }}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
     >
+      <BossCameraTarget />
       <ambientLight intensity={1.5} color="#fef3c7" />
       <directionalLight position={[3, 5, 4]} intensity={2.8} color="#fff7ed" castShadow />
       <pointLight position={[-2, 1.5, 1]} intensity={2.2} color="#ef4444" />

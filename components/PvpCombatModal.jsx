@@ -153,6 +153,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
               position: positions[index],
             };
           });
+          playerObj.position = updatedPlayers[p.playerIndex].position;
           logEntries.push("🌀 " + playerObj.name + " สลับตำแหน่งผู้เข้าร่วม PvP");
         }
       }

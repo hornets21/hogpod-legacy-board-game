@@ -52,7 +52,11 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
         {/* CURRENT PET INFO */}
         {showRewards && <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">{player.pet?.emoji || "🐾"}</span>
+            {player.pet?.image ? (
+              <img src={player.pet.image} alt={player.pet.name} className="w-10 h-10 object-contain rounded-lg border border-amber-400/40 bg-black/40 p-0.5" />
+            ) : (
+              <span className="text-3xl">{player.pet?.emoji || "🐾"}</span>
+            )}
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase">สัตว์เลี้ยงปัจจุบัน:</span>
               <h4 className="text-sm font-bold text-amber-200">{player.pet?.name || "ไม่มี"}</h4>
@@ -81,7 +85,11 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{pet.emoji}</span>
+                      {pet.image ? (
+                        <img src={pet.image} alt={pet.name} className="w-7 h-7 object-contain rounded-md border border-white/20 bg-black/40 p-0.5" />
+                      ) : (
+                        <span className="text-xl">{pet.emoji}</span>
+                      )}
                       <span className="font-bold text-emerald-200 text-xs">{pet.name}</span>
                     </div>
                     <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-emerald-400 bg-emerald-500" : "border-slate-600"}`}>

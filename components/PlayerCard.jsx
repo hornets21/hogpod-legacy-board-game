@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import { getTotalDmg } from "@/lib/gameEngine";
-import { POTIONS } from "@/lib/gameData";
+import { POTIONS, HOUSES } from "@/lib/gameData";
 import SkillButton from "@/components/fx/SkillButton";
 import BuffBadges from "@/components/fx/BuffBadges";
 import DamagePopup from "@/components/fx/DamagePopup";
+import ItemTooltip from "@/components/fx/ItemTooltip";
 
 export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, onUsePotion }) {
   const [isExpanded, setIsExpanded] = useState(isActive);
@@ -18,12 +20,93 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
   const totalDmg = getTotalDmg(player);
   const hpPct = Math.max(0, (player.hp / player.maxHp) * 100);
 
-  // Equipment slots helper
+  const houseData = HOUSES[player?.houseId] || {};
+  const wandImg = player.wand
+    ? (player.wand.type === "vip"
+        ? (player.vipWandImg || houseData.vipWandImg)
+        : (player.commonWandImg || houseData.commonWandImg))
+    : null;
+
+  const wandName = player.wand ? (player.wand.name || (player.wand.type === "vip" ? (player.vipWand || houseData.vipWand) : (player.commonWand || houseData.commonWand))) : null;
+
+  // Equipment slots helper with complete Tooltip itemData
   const equipSlots = [
-    { type: "Wand", icon: "🪄", item: player.wand ? (player.wand.name || (player.wand.type === "vip" ? "VIP Wand" : "Common Wand")) : null, img: player.wand ? (player.wand.type === "vip" ? player.vipWandImg : player.commonWandImg) : null },
-    { type: "Armor", icon: "🛡️", item: player.armor ? player.armor.name : null },
-    { type: "Amulet", icon: "📿", item: player.amulet ? player.amulet.name : null },
-    { type: "Pet", icon: "🐾", item: player.pet ? player.pet.name : null, img: player.pet ? `/images/pets/${player.pet.id}.png` : null },
+    {
+      type: "Wand",
+      icon: "🪄",
+      item: wandName,
+      img: wandImg,
+      itemData: player.wand
+        ? {
+            name: wandName,
+            categoryTh: "🪄 ไม้กายสิทธิ์",
+            dmgBonus: player.wand.dmgBonus || (player.wand.type === "vip" ? 35 : 20),
+            description: `ไม้กายสิทธิ์ประจำบ้าน ${houseData.name || ""} เพิ่มพลังโจมตี +${player.wand.dmgBonus || 20} DMG`,
+            image: wandImg,
+            icon: "🪄",
+          }
+        : {
+            name: "ช่องว่าง (ไม้กายสิทธิ์)",
+            categoryTh: "🪄 ไม้กายสิทธิ์",
+            description: "ยังไม่ได้ติดไม้กายสิทธิ์ประจำบ้าน",
+            icon: "🪄",
+          },
+    },
+    {
+      type: "Armor",
+      icon: "🛡️",
+      item: player.armor ? player.armor.name : null,
+      img: player.armor ? player.armor.image : null,
+      itemData: player.armor
+        ? {
+            ...player.armor,
+            categoryTh: "🛡️ เสื้อเกราะ",
+            icon: "🛡️",
+          }
+        : {
+            name: "ช่องว่าง (เสื้อเกราะ)",
+            categoryTh: "🛡️ เสื้อเกราะ",
+            description: "ยังไม่ได้สวมใส่เสื้อเกราะ (สามารถหาซื้อได้จากพ่อค้าลึกลับ)",
+            icon: "🛡️",
+          },
+    },
+    {
+      type: "Amulet",
+      icon: "📿",
+      item: player.amulet ? player.amulet.name : null,
+      img: player.amulet ? player.amulet.image : null,
+      itemData: player.amulet
+        ? {
+            ...player.amulet,
+            categoryTh: "📿 เครื่องราง",
+            icon: "📿",
+          }
+        : {
+            name: "ช่องว่าง (เครื่องราง)",
+            categoryTh: "📿 เครื่องราง",
+            description: "ยังไม่ได้สวมใส่เครื่องรางศักดิ์สิทธิ์ (สุ่มรับได้จากร้านค้า)",
+            icon: "📿",
+          },
+    },
+    {
+      type: "Pet",
+      icon: "🐾",
+      item: player.pet ? player.pet.name : null,
+      img: player.pet ? (player.pet.image || `/images/items/pets/${player.pet.id}.webp`) : null,
+      itemData: player.pet
+        ? {
+            ...player.pet,
+            categoryTh: "🐾 สัตว์วิเศษ",
+            icon: player.pet.emoji || "🐾",
+            image: player.pet.image || `/images/items/pets/${player.pet.id}.webp`,
+          }
+        : {
+            name: "ช่องว่าง (สัตว์วิเศษ)",
+            categoryTh: "🐾 สัตว์วิเศษ",
+            description: "ยังไม่มีสัตว์วิเศษข้างกาย (สามารถรับบัฟพิเศษได้เมื่อซื้อจากร้านค้า)",
+            icon: "🐾",
+          },
+    },
   ];
 
   // Potion inventory slots (5 slots)
@@ -103,69 +186,96 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
               backgroundColor: hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444",
             }}
           />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-xs text-white truncate max-w-[100px]">{player.name}</span>
+              {isActive && (
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-500 text-black animate-pulse">
+                  เทิร์นนี้
+                </span>
+              )}
+            </div>
+            <div className="text-[9px] text-white/50 flex items-center gap-1.5 font-bold">
+              <span>ช่อง #{player.position}</span>
+              <span>·</span>
+              <span className="text-amber-400">⚔️ {totalDmg} DMG</span>
+            </div>
+          </div>
         </div>
 
-        {/* Buff State Indicators — โชว์ invincible / +dmg / lock_dice / bank */}
-        <BuffBadges player={player} />
-
-        {/* Compact stats line if collapsed */}
-        {!isExpanded && (
-          <div className="flex items-center justify-between text-[10px] text-white/70 font-semibold px-0.5">
-            <span>⚔️ {totalDmg} DMG</span>
-            <span>💰 {player.gold.toLocaleString()} Gold</span>
-            <span className="text-purple-300 font-bold">✨ {player.skills.length} สกิล</span>
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="text-[10px] font-black text-amber-400 bg-amber-950/50 px-2 py-0.5 rounded-lg border border-amber-500/30">
+            💰 {player.gold}
           </div>
-        )}
+          <span className="text-xs text-white/40">{isExpanded ? "▲" : "▼"}</span>
+        </div>
       </div>
 
-      {/* Detailed Content (Shown when isExpanded is true) */}
+      {/* Expanded Content Panel */}
       {isExpanded && (
-        <div className="space-y-2.5 pt-1 border-t border-white/5 animate-fadeIn">
-          {/* Stats Grid: Attack Dmg & Gold */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-black/40 border border-white/5 rounded-xl p-1.5 px-2.5 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-white/50">⚔️ DMG</span>
-              <span className="font-black text-orange-400">{totalDmg}</span>
+        <div className="p-3 space-y-2.5 text-xs animate-fade-in border-t border-white/5">
+          {/* Health Bar */}
+          <div>
+            <div className="flex justify-between items-center text-[10px] font-bold text-white/80 mb-1">
+              <span>❤️ พลังชีวิต</span>
+              <span className="font-black text-emerald-400">
+                {Math.max(0, player.hp)} / {player.maxHp} HP
+              </span>
             </div>
-            <div className="bg-black/40 border border-white/5 rounded-xl p-1.5 px-2.5 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-white/50">💰 GOLD</span>
-              <span className="font-black text-yellow-400">{player.gold.toLocaleString()}</span>
+            <div className="w-full h-2.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-white/10">
+              <motion.div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.7)]"
+                initial={false}
+                animate={{ width: `${hpPct}%` }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              />
             </div>
           </div>
+
+          {/* Buff State Indicators */}
+          <BuffBadges player={player} />
 
           {/* Game Equipment Inventory Slots */}
           <div>
             <div className="text-[9px] font-black uppercase tracking-wider text-white/40 mb-1">🛡️ อุปกรณ์สวมใส่</div>
             <div className="grid grid-cols-4 gap-1.5">
-              {equipSlots.map((slot, idx) => (
-                <div
-                  key={idx}
-                  className={`h-8 rounded-lg border flex flex-col items-center justify-center p-0.5 text-center relative overflow-hidden transition-all ${
-                    slot.item
-                      ? "border-yellow-500/50 bg-yellow-950/20 text-yellow-300"
-                      : "border-white/10 bg-black/40 text-white/20"
-                  }`}
-                  title={slot.item ? `${slot.type}: ${slot.item}` : `ช่องว่าง (${slot.type})`}
-                >
-                  {slot.item && slot.img ? (
-                    <>
-                      <img
-                        src={slot.img}
-                        alt={slot.item}
-                        className="w-full h-full object-contain p-0.5 absolute inset-0"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          e.currentTarget.nextElementSibling.style.display = "flex";
-                        }}
-                      />
-                      <span className="hidden w-full h-full items-center justify-center text-[10px]">{slot.icon}</span>
-                    </>
-                  ) : (
-                    <span className="text-[10px]">{slot.icon}</span>
-                  )}
-                  <span className="text-[8px] font-black truncate w-full relative z-10 bg-black/40 px-0.5 rounded">{slot.item || slot.type}</span>
-                </div>
-              ))}
+              {equipSlots.map((slot, idx) => {
+                const slotContent = (
+                  <div
+                    className={`h-8 rounded-lg border flex flex-col items-center justify-center p-0.5 text-center relative overflow-hidden transition-all ${
+                      slot.item
+                        ? "border-yellow-500/50 bg-yellow-950/20 text-yellow-300"
+                        : "border-white/10 bg-black/40 text-white/20"
+                    }`}
+                  >
+                    {slot.item && slot.img ? (
+                      <>
+                        <img
+                          src={slot.img}
+                          alt={slot.item}
+                          className="w-full h-full object-contain p-0.5 absolute inset-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            if (e.currentTarget.nextElementSibling) {
+                              e.currentTarget.nextElementSibling.style.display = "flex";
+                            }
+                          }}
+                        />
+                        <span className="hidden w-full h-full items-center justify-center text-[10px]">{slot.icon}</span>
+                      </>
+                    ) : (
+                      <span className="text-[10px]">{slot.icon}</span>
+                    )}
+                    <span className="text-[8px] font-black truncate w-full relative z-10 bg-black/40 px-0.5 rounded">{slot.item || slot.type}</span>
+                  </div>
+                );
+
+                return (
+                  <ItemTooltip key={idx} item={slot.itemData} position="top">
+                    {slotContent}
+                  </ItemTooltip>
+                );
+              })}
             </div>
           </div>
 
@@ -177,17 +287,19 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
             <div className="grid grid-cols-5 gap-1">
               {potionSlots.map((potId, idx) => {
                 const pot = potId ? POTIONS[potId] : null;
-                return (
+                const potItem = pot
+                  ? { ...pot, categoryTh: "🧪 ยาปรุง" }
+                  : { name: `ช่องว่าง (กระเป๋ายา #${idx + 1})`, categoryTh: "🧪 กระเป๋ายา", description: "ยังไม่มีน้ำยาในช่องนี้ (ซื้อยาได้จากร้านค้า)", icon: "🧪" };
+
+                const potBtn = (
                   <button
-                    key={idx}
                     onClick={() => potId && onUsePotion && onUsePotion(potId, playerIndex)}
                     disabled={!potId}
-                    className={`h-8 rounded-lg border flex items-center justify-center text-sm transition-all ${
+                    className={`h-8 w-full rounded-lg border flex items-center justify-center text-sm transition-all ${
                       pot
                         ? "border-emerald-500/40 bg-emerald-950/30 text-white hover:scale-110 hover:border-emerald-400 cursor-pointer"
                         : "border-white/5 bg-black/30 text-white/10 cursor-not-allowed"
                     }`}
-                    title={pot ? pot.name : "ช่องยาว่าง"}
                   >
                     {pot ? (
                       pot.image ? (
@@ -198,7 +310,9 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
                             className="w-full h-full object-contain p-0.5"
                             onError={(e) => {
                               e.currentTarget.style.display = "none";
-                              e.currentTarget.nextElementSibling.style.display = "flex";
+                              if (e.currentTarget.nextElementSibling) {
+                                e.currentTarget.nextElementSibling.style.display = "flex";
+                              }
                             }}
                           />
                           <span className="hidden w-full h-full items-center justify-center text-sm" />
@@ -211,11 +325,17 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
                     )}
                   </button>
                 );
+
+                return (
+                  <ItemTooltip key={idx} item={potItem} position="top">
+                    {potBtn}
+                  </ItemTooltip>
+                );
               })}
             </div>
           </div>
 
-          {/* Skill Book Slots (2 Slots - Allow Countering!) */}
+          {/* Skill Book Slots (2 Slots) */}
           <div>
             <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-wider text-white/40 mb-1">
               <span>✨ ช่องคาถาประจำบ้าน (2 สกิล)</span>

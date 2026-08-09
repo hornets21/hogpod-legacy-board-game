@@ -11,6 +11,7 @@ const NPC_MODELS = {
   skill_trainer: "/models/npc_skills.glb",
   pet_trainer: "/models/npc_animal.glb",
   doctor: "/models/npc_docter.glb",
+  merchant: "/models/npc_mysterious_merchant.glb",
 };
 
 const FALLBACK_IMAGE = "/images/npc/npc_ผู้ฝึก_skills.webp";
@@ -109,10 +110,10 @@ function SingleNpc({ npcState, npcInfo }) {
 
       <Html position={[0, 1.55, 0]} center distanceFactor={12} zIndexRange={[100, 0]}>
         <div
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md pointer-events-none whitespace-nowrap animate-bounce"
+          className="flex items-center px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border backdrop-blur-md pointer-events-none whitespace-nowrap animate-bounce"
           style={{ backgroundColor: "rgba(13, 16, 23, 0.9)", borderColor: auraColor, color: auraColor }}
         >
-          <span>{npcInfo?.name}</span>
+          <span>{npcInfo?.nameEn || npcInfo?.name}</span>
         </div>
       </Html>
     </group>

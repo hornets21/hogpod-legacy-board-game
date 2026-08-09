@@ -255,8 +255,8 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                     {player.wand ? (
                       <>
                         <img
-                          src={player.wand.type === "vip" ? player.vipWandImg : player.commonWandImg}
-                          alt={player.wand.type === "vip" ? player.vipWand : player.commonWand}
+                          src={player.wand.type === "vip" ? (player.vipWandImg || HOUSES[player.houseId]?.vipWandImg) : (player.commonWandImg || HOUSES[player.houseId]?.commonWandImg)}
+                          alt={player.wand.type === "vip" ? (player.vipWand || HOUSES[player.houseId]?.vipWand) : (player.commonWand || HOUSES[player.houseId]?.commonWand)}
                           className="w-full h-full object-contain p-0.5"
                           onError={(e) => {
                             e.currentTarget.style.display = "none";
@@ -717,6 +717,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                       <ItemGrantCard
                         key={armor.id}
                         icon="🛡️"
+                        img={armor.image}
                         title={armor.name}
                         desc={armor.description}
                         stats={`HP: ${armor.hpBonus > 0 ? `+${armor.hpBonus}` : armor.hpBonus} | DMG: +${armor.dmgBonus}`}
@@ -746,6 +747,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                       <ItemGrantCard
                         key={amulet.id}
                         icon="📿"
+                        img={amulet.image}
                         title={amulet.name}
                         desc={amulet.description}
                         stats={`DMG: +${amulet.dmgBonus}`}
@@ -833,6 +835,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                       <ItemGrantCard
                         key={pet.id}
                         icon={pet.emoji}
+                        img={pet.image}
                         title={pet.name}
                         desc={pet.description}
                         badge={pet.nameEn}

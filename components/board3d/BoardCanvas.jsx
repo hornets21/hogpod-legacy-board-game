@@ -228,8 +228,10 @@ function describeHover(info) {
   if (type === "win") {
     lines.push({ icon: "🏆", text: "แท่นชัยชนะ — เอาชนะบอสมหาเวทย์ที่นี่" });
   } else if (monster) {
-    lines.push({ icon: monster.emoji || "👾", text: monster.name, strong: true });
-    lines.push({ icon: "❤️", text: `HP ${monster.hp}  ·  DMG ${monster.dmg}` });
+    const curHp = typeof monster.currentHp === "number" ? monster.currentHp : monster.hp;
+    const isDamaged = curHp < monster.hp;
+    lines.push({ icon: monster.emoji || "👾", text: isDamaged ? `${monster.name} (บาดเจ็บ)` : monster.name, strong: true });
+    lines.push({ icon: "❤️", text: `HP คงเหลือ ${curHp}/${monster.hp}  ·  DMG ${monster.dmg}` });
   } else if (type === "boss") {
     lines.push({ icon: "👿", text: "รังของบอสมหาเวทย์!", strong: true });
   } else if (type === "elite") {

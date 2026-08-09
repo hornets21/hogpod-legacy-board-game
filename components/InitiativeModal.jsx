@@ -165,7 +165,7 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
               title="เปิด Admin Panel เพื่อจัดอุปกรณ์ เงิน และสถานะก่อนเริ่มกระดาน"
             >
               <span className="text-xs">ADMIN SETTINGS</span>
-              <span>👑</span>
+              <span>⚙️</span>
               <span>ตั้งค่า Admin (Pay To Win)</span>
             </button>
           )}
