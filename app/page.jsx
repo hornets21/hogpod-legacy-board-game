@@ -700,8 +700,8 @@ function gameReducer(state, action) {
       const p = { ...players[playerIndex] };
 
       if (itemType === "wand") p.wand = null;
-      if (itemType === "armor") p.armor = null;
-      if (itemType === "amulet") p.amulet = null;
+      if (itemType === "armor") equipArmorToPlayer(p, null);
+      if (itemType === "amulet") equipAmuletToPlayer(p, null);
       if (itemType === "pet") p.pet = null;
       if (itemType === "clear_potions") p.potions = [];
       if (itemType === "clear_skills") p.skills = [];

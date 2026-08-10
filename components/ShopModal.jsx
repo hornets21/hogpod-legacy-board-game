@@ -199,7 +199,6 @@ export default function ShopModal({ player, onBuy, onClose }) {
 
               {activeCategory === "potions" &&
                 Object.entries(POTIONS)
-                  .filter(([id]) => id !== "damage")
                   .map(([id, pot]) => (
                     <ShopShelfCard
                       key={id}

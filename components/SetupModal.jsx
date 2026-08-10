@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
 import { generateBingoCard } from "@/lib/bingoEngine";
+import { getTotalDmg } from "@/lib/gameEngine";
 
 export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
   const [currentHouseIndex, setCurrentHouseIndex] = useState(0);
@@ -81,7 +82,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
     }
   }
 
-  const totalDmg = (currentPlayer.baseDmg || 0) + (currentPlayer.wand?.dmgBonus || 0) + (currentPlayer.amulet?.dmgBonus || 0);
+  const totalDmg = getTotalDmg(currentPlayer);
 
   return (
     <div className="modal-overlay z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md">
@@ -107,8 +108,10 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             <div className="flex items-center gap-2">
               <span className="text-blue-400 text-lg">🛡️</span>
               <div>
-                <div className="text-[9px] font-black uppercase text-white/50 tracking-wider">DEFENSE</div>
-                <div className="text-sm font-black text-blue-300">{currentPlayer.armor ? "+10" : "0"}</div>
+                <div className="text-[9px] font-black uppercase text-white/50 tracking-wider">ARMOR</div>
+                <div className="text-sm font-black text-blue-300">
+                  {currentPlayer.armor ? (currentPlayer.armor.hpBonus ? `${currentPlayer.armor.hpBonus > 0 ? "+" : ""}${currentPlayer.armor.hpBonus} HP` : `+${currentPlayer.armor.dmgBonus || 0} DMG`) : "ไม่มี"}
+                </div>
               </div>
             </div>
           </div>
