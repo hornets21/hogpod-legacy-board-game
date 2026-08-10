@@ -38,29 +38,36 @@ export default function NpcDoctorModal({ player, grantedPotions = [], onClose })
         {showRewards && <div className="bg-pink-950/30 border border-pink-500/30 rounded-2xl p-4 flex flex-col gap-3">
           <span className="text-sm font-bold text-pink-200 flex items-center gap-2">
             <span>✨</span>
-            <span>ยินดีด้วย! {player.name} ตกช่องหมอยา! ได้รับยาปรุงพิเศษฟรี 2 ขวด:</span>
+            <span>ยินดีด้วย! {player.name} ตกช่องหมอยา! ได้รับของรางวัล 2 รายการ:</span>
           </span>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {grantedPotions.length > 0 ? (
               grantedPotions.map((pot, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-slate-950/80 p-3 rounded-xl border border-pink-500/30 hover:border-pink-400/60 transition shadow-inner">
-                  <div className="relative w-10 h-10 shrink-0">
+                <div key={idx} className={`flex items-center gap-3 bg-slate-950/80 p-3 rounded-xl border transition shadow-inner ${pot.isBuff ? "border-amber-400/60 bg-amber-950/20" : "border-pink-500/30 hover:border-pink-400/60"}`}>
+                  <div className="relative w-10 h-10 shrink-0 flex items-center justify-center">
                     {pot.image ? (
                       <Image src={pot.image} alt={pot.name} fill className="object-contain" />
                     ) : (
-                      <span className="text-2xl">🧪</span>
+                      <span className="text-2xl">{pot.icon || "🧪"}</span>
                     )}
                   </div>
-                  <div className="overflow-hidden">
-                    <h4 className="text-xs font-bold text-amber-300 truncate">{pot.name}</h4>
+                  <div className="overflow-hidden min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="text-xs font-bold text-amber-300 truncate">{pot.name}</h4>
+                      {pot.isBuff && (
+                        <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-purple-500/30 text-purple-300 border border-purple-400/40 shrink-0">
+                          ⚡ บัฟทันที
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-slate-300 line-clamp-2 mt-0.5">{pot.description}</p>
                   </div>
                 </div>
               ))
             ) : (
               <div className="col-span-2 p-3 bg-amber-950/60 border border-amber-500/40 rounded-xl text-xs text-amber-300 font-bold text-center">
-                ⚠️ กระเป๋ายาของคุณเต็มแล้ว จึงไม่สามารถรับยาเพิ่มได้ในรอบนี้
+                ⚠️ ได้รับการรักษาพิเศษเรียบร้อยแล้ว
               </div>
             )}
           </div>
@@ -72,7 +79,7 @@ export default function NpcDoctorModal({ player, grantedPotions = [], onClose })
           className="w-full py-3.5 rounded-xl text-sm font-black tracking-wider uppercase text-white bg-gradient-to-r from-pink-600 via-purple-600 to-pink-600 hover:from-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(236,72,153,0.5)] border border-pink-300/60 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
         >
           <span>🧪</span>
-          <span>รับยาและเก็บใส่กระเป๋า (ตกลง)</span>
+          <span>รับของรางวัลและลุยต่อ (ตกลง)</span>
         </button>}
 
       </div>

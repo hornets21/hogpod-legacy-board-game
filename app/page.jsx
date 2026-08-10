@@ -21,8 +21,10 @@ import NpcSkillModal from "@/components/NpcSkillModal";
 import NpcPetModal from "@/components/NpcPetModal";
 import NpcDoctorModal from "@/components/NpcDoctorModal";
 import BingoWidget from "@/components/BingoWidget";
+import BingoWinModal from "@/components/BingoWinModal";
+import TeleportModal from "@/components/TeleportModal";
 import { generateBingoCard, checkPlayerBingo } from "@/lib/bingoEngine";
-import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain, emitHeal } from "@/lib/skillFxBus";
+import { on, FX_EVENTS, emitDiceRoll, emitStepMove, emitShopBuy, emitGoldGain, emitHeal, emitTrapTrigger } from "@/lib/skillFxBus";
 
 // กระดาน 3D (WebGL) — โหลดฝั่ง client เท่านั้น
 const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
@@ -68,138 +70,210 @@ function skillNeedsTarget(skillId) {
   return sk?.requiresTarget === "player" || sk?.requiresTarget === "monster";
 }
 
+function resolveDestinationEffects(state) {
+  const player = state.players[state.currentPlayerIndex];
+
+  // Resolve destination effects only after the 3D token has finished walking.
+  // ROLL_DICE must only update the destination so the token can animate there.
+  if (state.trapCells?.[player.position]) {
+    // กับดักยาพิษ — ใครเหยียบก็ตาย รวมถึงเจ้าของด้วย (ตามคำอธิบายยา) และกับดัก single-use
+    const trapCells = { ...state.trapCells };
+    delete trapCells[player.position];
+
+    if (!player.isInvincible) {
+      const p = { ...player, hp: 0 };
+      const players = [...state.players];
+      players[state.currentPlayerIndex] = p;
+      let next = handlePlayerDeath({ ...state, players, trapCells }, state.currentPlayerIndex);
+      next = {
+        ...next,
+        log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
+      };
+      return advanceTurn(next);
+    } else {
+      return advanceTurn({
+        ...state,
+        trapCells,
+        log: [...state.log, `🛡️ ${player.name} เหยียบกับดักยาพิษ แต่มีสถานะอมตะจึงไม่ได้รับความเสียหาย!`],
+      });
+    }
+  }
+
+  let next = checkWin(state);
+  if (next.winner || next.phase !== "play") return next;
+
+  const monsterMap = next.monsterMap || MONSTER_MAP;
+  const monster = next.revealedMonsters?.[player.position] || monsterMap[player.position];
+  const revealedMonsters = { ...next.revealedMonsters };
+
+  // 1. ตรวจสอบมอนสเตอร์ในช่อง
+  if (next.monsterCells.has(player.position) && monster) {
+    revealedMonsters[player.position] = monster;
+    next = { ...next, revealedMonsters };
+
+    // กรณีเป็นมอนสเตอร์สายรักษา (isHealer เช่น เทพธิดาเอวา) -> สุ่มรักษาเลือดผู้เล่น 30% - 100%
+    if (monster.isHealer) {
+      const healPct = Math.floor(Math.random() * 71) + 30; // สุ่ม 30 ถึง 100
+      const maxHp = player.maxHp || 100;
+      const healAmount = Math.round((maxHp * healPct) / 100);
+      const newHp = Math.min(maxHp, player.hp + healAmount);
+
+      const updatedPlayer = { ...player, hp: newHp };
+      const updatedPlayers = [...next.players];
+      updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
+
+      const updatedMonsterCells = new Set(next.monsterCells);
+      updatedMonsterCells.delete(player.position);
+
+      next = {
+        ...next,
+        players: updatedPlayers,
+        monsterCells: updatedMonsterCells,
+        log: [
+          ...next.log,
+          `✨ ${monster.name} มอบพรแห่งการรักษา! ฟื้นฟู HP ให้ ${player.name} ${healPct}% (+${healAmount} HP)`,
+        ],
+      };
+      return advanceTurn(next);
+    }
+
+    // Check if player can dodge (Bank pet)
+    const hasDodge = player.pet?.effect === "dodge_once" && !player.dodgeUsed;
+
+    // Enter combat
+    next = initCombat(next, state.currentPlayerIndex, monster);
+    if (hasDodge) {
+      next = { ...next, activeSkillEffect: "dodge_available" };
+    }
+    return next;
+  }
+
+  // 2. ตรวจสอบการเผชิญหน้าผู้เล่นในช่องเดียวกัน (Multi-Player PvP Encounter)
+  const otherPlayersOnCell = next.players
+    .map((p, idx) => ({ p, idx }))
+    .filter(({ p, idx }) => idx !== state.currentPlayerIndex && p.isAlive && p.position === player.position);
+
+  if (otherPlayersOnCell.length > 0) {
+    const participantIndices = [state.currentPlayerIndex, ...otherPlayersOnCell.map((o) => o.idx)];
+    return {
+      ...next,
+      pvpEncounter: {
+        cell: player.position,
+        participantIndices,
+        attackerIndex: state.currentPlayerIndex,
+      },
+      log: [
+        ...next.log,
+        `⚔️ การประลองหลากบ้าน! ${next.players[state.currentPlayerIndex].name} และ ${otherPlayersOnCell.map((o) => o.p.name).join(", ")} พบกันที่ช่อง ${player.position}!`,
+      ],
+    };
+  }
+
+  // 3. ตรวจสอบ NPC บนช่องกระดาน
+  const spawnedNpc = Object.values(next.npcs || {}).find(
+    (n) => n && n.isSpawned && n.cell === player.position
+  );
+  if (spawnedNpc) {
+    const npcResult = handleNpcLanding(next, state.currentPlayerIndex, spawnedNpc.id);
+    if (npcResult.action === "doctor_granted") {
+      return {
+        ...npcResult.state,
+        doctorModalData: { player, grantedPotions: npcResult.grantedPotions },
+      };
+    }
+    if (npcResult.action === "open_skill_modal") {
+      return {
+        ...npcResult.state,
+        skillModalPlayer: player,
+      };
+    }
+    if (npcResult.action === "open_pet_modal") {
+      return {
+        ...npcResult.state,
+        petModalPlayer: player,
+      };
+    }
+    if (npcResult.action === "skill_granted" || npcResult.action === "pet_granted") {
+      return advanceTurn(npcResult.state);
+    }
+    if (npcResult.action === "merchant_shop") {
+      return {
+        ...npcResult.state,
+        openedShopFromNpc: true,
+      };
+    }
+  }
+
+  return advanceTurn(next);
+}
+
 // ─── Reducer ─────────────────────────────────────────────────
 function gameReducer(state, action) {
   switch (action.type) {
     case "MOVE_AND_CHECK": {
       const player = state.players[state.currentPlayerIndex];
 
-      // Resolve destination effects only after the 3D token has finished walking.
-      // ROLL_DICE must only update the destination so the token can animate there.
-      if (state.trapCells?.[player.position]) {
-        // กับดักยาพิษ — ใครเหยียบก็ตาย รวมถึงเจ้าของด้วย (ตามคำอธิบายยา) และกับดัก single-use
-        const trapCells = { ...state.trapCells };
-        delete trapCells[player.position];
-
-        if (!player.isInvincible) {
-          const p = { ...player, hp: 0 };
-          const players = [...state.players];
-          players[state.currentPlayerIndex] = p;
-          let next = handlePlayerDeath({ ...state, players, trapCells }, state.currentPlayerIndex);
-          next = {
-            ...next,
-            log: [...next.log, `☠️ ${player.name} เหยียบกับดักยาพิษ!`],
-          };
-          return advanceTurn(next);
-        } else {
-          return advanceTurn({
-            ...state,
-            trapCells,
-            log: [...state.log, `🛡️ ${player.name} เหยียบกับดักยาพิษ แต่มีสถานะอมตะจึงไม่ได้รับความเสียหาย!`],
-          });
-        }
-      }
-
-      let next = checkWin(state);
-      if (next.winner || next.phase !== "play") return next;
-
-      const monsterMap = next.monsterMap || MONSTER_MAP;
-      const monster = next.revealedMonsters?.[player.position] || monsterMap[player.position];
-      const revealedMonsters = { ...next.revealedMonsters };
-
-      // 1. ตรวจสอบมอนสเตอร์ในช่อง
-      if (next.monsterCells.has(player.position) && monster) {
-        revealedMonsters[player.position] = monster;
-        next = { ...next, revealedMonsters };
-
-        // กรณีเป็นมอนสเตอร์สายรักษา (isHealer เช่น เทพธิดาเอวา) -> สุ่มรักษาเลือดผู้เล่น 30% - 100%
-        if (monster.isHealer) {
-          const healPct = Math.floor(Math.random() * 71) + 30; // สุ่ม 30 ถึง 100
-          const maxHp = player.maxHp || 100;
-          const healAmount = Math.round((maxHp * healPct) / 100);
-          const newHp = Math.min(maxHp, player.hp + healAmount);
-
-          const updatedPlayer = { ...player, hp: newHp };
-          const updatedPlayers = [...next.players];
-          updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
-
-          const updatedMonsterCells = new Set(next.monsterCells);
-          updatedMonsterCells.delete(player.position);
-
-          next = {
-            ...next,
-            players: updatedPlayers,
-            monsterCells: updatedMonsterCells,
-            log: [
-              ...next.log,
-              `✨ ${monster.name} มอบพรแห่งการรักษา! ฟื้นฟู HP ให้ ${player.name} ${healPct}% (+${healAmount} HP)`,
-            ],
-          };
-          return advanceTurn(next);
-        }
-
-        // Check if player can dodge (Bank pet)
-        const hasDodge = player.pet?.effect === "dodge_once" && !player.dodgeUsed;
-
-        // Enter combat
-        next = initCombat(next, state.currentPlayerIndex, monster);
-        if (hasDodge) {
-          next = { ...next, activeSkillEffect: "dodge_available" };
-        }
-        return next;
-      }
-
-      // 2. ตรวจสอบการเผชิญหน้าผู้เล่นในช่องเดียวกัน (Multi-Player PvP Encounter)
-      const otherPlayersOnCell = next.players
-        .map((p, idx) => ({ p, idx }))
-        .filter(({ p, idx }) => idx !== state.currentPlayerIndex && p.isAlive && p.position === player.position);
-
-      if (otherPlayersOnCell.length > 0) {
-        const participantIndices = [state.currentPlayerIndex, ...otherPlayersOnCell.map((o) => o.idx)];
+      // หากตกช่องบันไดหรือช่องงู ให้แสดง Modal แจ้งเตือนผู้เล่นและหยุดรอก่อน!
+      if (state.pendingTeleport && state.pendingTeleport.playerIndex === state.currentPlayerIndex) {
         return {
-          ...next,
-          pvpEncounter: {
-            cell: player.position,
-            participantIndices,
-            attackerIndex: state.currentPlayerIndex,
+          ...state,
+          teleportModalData: {
+            player,
+            ...state.pendingTeleport,
           },
-          log: [
-            ...next.log,
-            `⚔️ การประลองหลากบ้าน! ${next.players[state.currentPlayerIndex].name} และ ${otherPlayersOnCell.map((o) => o.p.name).join(", ")} พบกันที่ช่อง ${player.position}!`,
-          ],
         };
       }
 
-      // 3. ตรวจสอบ NPC บนช่องกระดาน
-      const spawnedNpc = Object.values(next.npcs || {}).find(
-        (n) => n && n.isSpawned && n.cell === player.position
-      );
-      if (spawnedNpc) {
-        const npcResult = handleNpcLanding(next, state.currentPlayerIndex, spawnedNpc.id);
-        if (npcResult.action === "doctor_granted") {
-          return {
-            ...npcResult.state,
-            doctorModalData: { player, grantedPotions: npcResult.grantedPotions },
-          };
+      return resolveDestinationEffects(state);
+    }
+
+    case "CONFIRM_TELEPORT": {
+      const teleport = state.teleportModalData || state.pendingTeleport;
+      if (!teleport) return state;
+
+      const pIdx = teleport.playerIndex;
+      const players = [...state.players];
+      const player = { ...players[pIdx] };
+      let usedLadders = [...(state.usedLadders || [])];
+      const log = [...state.log];
+
+      if (teleport.type === "ladder") {
+        if (!usedLadders.includes(teleport.from)) {
+          usedLadders.push(teleport.from);
         }
-        if (npcResult.action === "open_skill_modal") {
-          return {
-            ...npcResult.state,
-            skillModalPlayer: player,
-          };
-        }
-        if (npcResult.action === "open_pet_modal") {
-          return {
-            ...npcResult.state,
-            petModalPlayer: player,
-          };
-        }
-        if (npcResult.action === "skill_granted" || npcResult.action === "pet_granted" || npcResult.action === "merchant_shop") {
-          return npcResult.state;
-        }
+        log.push(`🪜 ${player.name} ปีนบันไดขึ้นจากช่อง ${teleport.from} → ช่อง ${teleport.to}! (บันไดถูกใช้งานแล้วและหายไป)`);
+      } else {
+        log.push(`🐍 ${player.name} ถูกงูกลืนกิน สไลด์จากช่อง ${teleport.from} → ช่อง ${teleport.to}!`);
       }
 
-      return advanceTurn(next);
+      player.position = teleport.to;
+
+      const { updatedPlayer, logs: bingoLogs, bingoWin } = checkPlayerBingo(player, teleport.to);
+      players[pIdx] = updatedPlayer;
+      if (bingoLogs && bingoLogs.length > 0) {
+        log.push(...bingoLogs);
+      }
+
+      let next = {
+        ...state,
+        players,
+        usedLadders,
+        pendingTeleport: null,
+        teleportModalData: null,
+        log,
+      };
+
+      if (bingoWin) {
+        next.bingoWinModalData = bingoWin;
+      }
+
+      next = checkWin(next);
+      return next;
+    }
+
+    case "RESOLVE_TELEPORT_LANDING": {
+      if (state.winner || state.phase !== "play") return state;
+      return resolveDestinationEffects(state);
     }
 
     case "ROLL_DICE": {
@@ -297,7 +371,7 @@ function gameReducer(state, action) {
 
     case "RESPAWN_PLAYER": {
       const pIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
-      return handlePlayerDeath(state, pIdx);
+      return advanceTurn(handlePlayerDeath(state, pIdx));
     }
 
     case "END_TURN": {
@@ -353,17 +427,23 @@ function gameReducer(state, action) {
       };
     }
 
+    case "CLOSE_BINGO_WIN_MODAL": {
+      return { ...state, bingoWinModalData: null };
+    }
+
     case "GIVE_BINGO_CARD": {
       const targetIdx = action.playerIndex !== undefined ? action.playerIndex : state.currentPlayerIndex;
       const players = [...state.players];
       const p = { ...players[targetIdx] };
       p.hasBingoCard = true;
       p.bingoCard = generateBingoCard();
-      const { updatedPlayer, logs: bingoLogs } = checkPlayerBingo(p, p.position);
+      const { updatedPlayer, logs: bingoLogs, bingoWin } = checkPlayerBingo(p, p.position);
       players[targetIdx] = updatedPlayer;
       const log = [`🎯 [แอดมิน] เสก "ป้าย Bingo" ให้บ้าน ${p.name}!`];
       if (bingoLogs && bingoLogs.length > 0) log.push(...bingoLogs);
-      return { ...state, players, log: [...state.log, ...log] };
+      const nextState = { ...state, players, log: [...state.log, ...log] };
+      if (bingoWin) nextState.bingoWinModalData = bingoWin;
+      return nextState;
     }
 
     case "REMOVE_BINGO_CARD": {
@@ -377,12 +457,16 @@ function gameReducer(state, action) {
     }
 
     case "GIVE_BINGO_ALL": {
+      let firstWin = null;
       const players = state.players.map((p) => {
         const updated = { ...p, hasBingoCard: true, bingoCard: p.bingoCard || generateBingoCard() };
-        const { updatedPlayer } = checkPlayerBingo(updated, updated.position);
+        const { updatedPlayer, bingoWin } = checkPlayerBingo(updated, updated.position);
+        if (bingoWin && !firstWin) firstWin = bingoWin;
         return updatedPlayer;
       });
-      return { ...state, players, log: [...state.log, `🎯 [แอดมิน] เสก "ป้าย Bingo" ให้ผู้เล่นทุกบ้าน!`] };
+      const nextState = { ...state, players, log: [...state.log, `🎯 [แอดมิน] เสก "ป้าย Bingo" ให้ผู้เล่นทุกบ้าน!`] };
+      if (firstWin) nextState.bingoWinModalData = firstWin;
+      return nextState;
     }
 
     case "ADMIN_TELEPORT_TO_BOSS": {
@@ -413,6 +497,9 @@ function gameReducer(state, action) {
     }
 
     case "CLOSE_SHOP": {
+      if (state.openedShopFromNpc) {
+        return advanceTurn({ ...state, shopOpen: false, openedShopFromNpc: false });
+      }
       return { ...state, shopOpen: false };
     }
 
@@ -466,7 +553,7 @@ function gameReducer(state, action) {
           ? `🏦 ${player.name} ใช้บัฟ "แบงค์" หลบหลีกบอส! กระเด็นถอยหลังไป 6 ช่อง (ช่อง ${newPos})`
           : `🏦 ${player.name} ใช้บัฟ "แบงค์" หนีการต่อสู้!`;
 
-        return {
+        return advanceTurn({
           ...state,
           players,
           revealedMonsters,
@@ -474,7 +561,7 @@ function gameReducer(state, action) {
           phase: "play",
           combatState: null,
           log: [...state.log, fleeLog],
-        };
+        });
       }
       return state;
     }
@@ -897,7 +984,24 @@ export default function Home() {
 
   const currentPlayer = getCurrentPlayer(state);
   const isCurrentPlayerDead = currentPlayer && (currentPlayer.hp <= 0 || !currentPlayer.isAlive);
-  const canRoll = state.phase === "play" && !state.shopOpen && !state.combatState && !state.winner && !isRolling && !isCurrentPlayerDead;
+  const canRoll = state.phase === "play" && !state.shopOpen && !state.combatState && !state.winner && !isRolling && !isCurrentPlayerDead && !state.teleportModalData;
+
+  const handleConfirmTeleport = useCallback(() => {
+    if (!state.teleportModalData) return;
+
+    const isLadder = state.teleportModalData.type === "ladder";
+    if (isLadder) {
+      emitStepMove();
+    } else {
+      emitTrapTrigger();
+    }
+
+    dispatch({ type: "CONFIRM_TELEPORT" });
+
+    setTimeout(() => {
+      dispatch({ type: "RESOLVE_TELEPORT_LANDING" });
+    }, 1400);
+  }, [state.teleportModalData]);
 
   function handleRoll() {
     if (!canRoll) return;
@@ -905,7 +1009,7 @@ export default function Home() {
     setIsRolling(true);
     emitDiceRoll();
     const player = state.players[state.currentPlayerIndex];
-    let rolledVal = Math.floor(Math.random() * 6) + 1;
+    let rolledVal = rollDice(6);
     if (player?.nextRollOverride) {
       rolledVal = player.nextRollOverride;
     }
@@ -1331,6 +1435,22 @@ export default function Home() {
 
       {/* ── Bingo Widget (แสดงเฉพาะบ้านที่มีป้าย Bingo มุมขวาล่าง) ── */}
       <BingoWidget players={state.players} currentPlayerIndex={state.currentPlayerIndex} />
+
+      {/* ── Bingo Win Celebration Modal ──────────────────────────── */}
+      {state.bingoWinModalData && (
+        <BingoWinModal
+          modalData={state.bingoWinModalData}
+          onClose={() => dispatch({ type: "CLOSE_BINGO_WIN_MODAL" })}
+        />
+      )}
+
+      {/* ── Teleport Notification Modal (Ladder / Snake Alert) ───── */}
+      {state.teleportModalData && (
+        <TeleportModal
+          modalData={state.teleportModalData}
+          onConfirm={handleConfirmTeleport}
+        />
+      )}
 
       {/* ── Win Screen ─────────────────────────────────────────── */}
       {state.winner && (
