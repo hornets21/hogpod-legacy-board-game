@@ -4,7 +4,7 @@
 // CellMarkers — emoji sprite ลอยเหนือช่อง (มอนสเตอร์/งู/บันได/กับดัก/ถ้วยรางวัล)
 // ============================================================
 
-import { useMemo, useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { buildGrid, getCellType, cellToWorld } from "@/lib/boardLayout";
 import { MONSTER_MAP } from "@/lib/gameData";
@@ -12,7 +12,7 @@ import { getEmojiTexture } from "./textures";
 
 const FLOAT_Y = 1.02;
 
-export default function CellMarkers({ revealedMonsters, trapCells, usedLadders, monsterMap, cellTeleport }) {
+const CellMarkers = React.memo(function CellMarkers({ revealedMonsters, trapCells, usedLadders, monsterMap, cellTeleport }) {
   const grid = useMemo(() => buildGrid(), []);
 
   const markers = useMemo(() => {
@@ -48,9 +48,9 @@ export default function CellMarkers({ revealedMonsters, trapCells, usedLadders, 
       ))}
     </group>
   );
-}
+});
 
-function MarkerSprite({ marker, phase }) {
+const MarkerSprite = React.memo(function MarkerSprite({ marker, phase }) {
   const ref = useRef(null);
   const [x, , z] = cellToWorld(marker.cell);
   const y = FLOAT_Y + (marker.dy || 0);
@@ -77,4 +77,6 @@ function MarkerSprite({ marker, phase }) {
       />
     </sprite>
   );
-}
+});
+
+export default CellMarkers;

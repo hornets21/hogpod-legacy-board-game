@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useMemo } from "react";
+import React, { Suspense, useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -12,7 +12,7 @@ const HOUSE_MODELS = {
   slarf: "/models/sraraff.glb",
 };
 
-export default function NpcInteractionStage({ player, npcInfo }) {
+const NpcInteractionStage = React.memo(function NpcInteractionStage({ player, npcInfo }) {
   return (
     <div className="absolute inset-0 w-full h-full pointer-events-none z-0">
       <Canvas
@@ -69,7 +69,7 @@ export default function NpcInteractionStage({ player, npcInfo }) {
       </Canvas>
     </div>
   );
-}
+});
 
 function NpcFighter3dMesh({ modelPath, position, targetPoint, color, scale = 0.36, isNpc = false }) {
   const groupRef = useRef(null);
@@ -125,7 +125,7 @@ function GenericHouseModel({ modelPath, ...props }) {
   );
 }
 
-function NpcMagicLinkBeam({ startPos, targetPos, color }) {
+const NpcMagicLinkBeam = React.memo(function NpcMagicLinkBeam({ startPos, targetPos, color }) {
   const meshRef = useRef(null);
   const orbRef = useRef(null);
 
@@ -175,4 +175,6 @@ function NpcMagicLinkBeam({ startPos, targetPos, color }) {
       </mesh>
     </group>
   );
-}
+});
+
+export default NpcInteractionStage;

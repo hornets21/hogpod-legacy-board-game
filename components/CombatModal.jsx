@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import WheelOfFate from "@/components/WheelOfFate";
 import { getTotalDmg } from "@/lib/gameEngine";
 import { AnimatedUiMonster } from "@/components/board3d/AnimatedMonster";
-import GrandFinalBossModalModel from "@/components/board3d/GrandFinalBossModalModel";
+import Combat3dModelDisplay, { HOUSE_MODELS, MONSTER_MODELS } from "@/components/board3d/Combat3dModelDisplay";
 import SkillButton from "@/components/fx/SkillButton";
 import { SKILLS, POTIONS } from "@/lib/gameData";
 import ItemTooltip from "@/components/fx/ItemTooltip";
@@ -13,6 +13,8 @@ import ItemTooltip from "@/components/fx/ItemTooltip";
 export default function CombatModal({ combatState, player, onResolveCombat, onUseSkill, onUsePotion, onFlee }) {
   const [introState, setIntroState] = useState("intro"); // "intro" | "ready"
   const [hitStop, setHitStop] = useState(false);
+  const [playerFx, setPlayerFx] = useState(null);
+  const [monsterFx, setMonsterFx] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -20,6 +22,25 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
     }, 1800);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleUseSkillWithFx = (skillId) => {
+    if (skillId === "thunder_star") {
+      setMonsterFx("lightning");
+    } else if (skillId === "stay_stupid") {
+      setPlayerFx("shield");
+    } else if (skillId === "phoenix_force") {
+      setMonsterFx("fire");
+    } else {
+      setMonsterFx("impact");
+    }
+
+    setTimeout(() => {
+      setPlayerFx(null);
+      setMonsterFx(null);
+    }, 1400);
+
+    if (onUseSkill) onUseSkill(skillId);
+  };
 
   if (!combatState || !player) return null;
 
@@ -51,6 +72,16 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
   const monsterIdleImg = monster.image || null;
   const isGrandFinalBoss = monster.id === "grand_boss" || monster.cell === 90;
 
+  const playerModelPath =
+    player.modelPath ||
+    HOUSE_MODELS[player.houseId] ||
+    HOUSE_MODELS[player.house];
+
+  const monsterModelPath =
+    monster.modelPath ||
+    MONSTER_MODELS[monster.id] ||
+    (isGrandFinalBoss ? "/models/granfinalboss.glb" : null);
+
   const battleTypeLabel = monster.isBoss
     ? "BOSS BATTLE"
     : monster.isElite
@@ -58,10 +89,10 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
     : "ENCOUNTER DETECTED";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-4 md:p-8">
-      {/* Semi-transparent Vignette Backdrop for In-World 3D Camera Visibility */}
+    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-3 md:p-5 h-screen max-h-screen text-white pointer-events-none">
+      {/* Translucent Vignette Backdrop allowing 3D Magic Room Camera visibility */}
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_20%,_rgba(2,6,23,0.75)_100%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_20%,_rgba(2,6,23,0.85)_100%)] pointer-events-none" />
 
       {/* Hit-stop yellow tint (flash) เมื่อ resolve */}
       {hitStop && (
@@ -74,25 +105,25 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
         />
       )}
 
-      {/* TOP HEADER HUD: Battle Status & Category */}
-      <div className="relative z-20 w-full flex items-center justify-between bg-slate-900/80 border border-white/10 rounded-2xl px-6 py-3.5 backdrop-blur-md shadow-xl">
-        <div className="flex items-center gap-3">
-          <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
-          <span className="text-red-400 text-xs md:text-sm font-black tracking-[0.25em] uppercase">
+      {/* TOP HEADER HUD: Battle Room Header */}
+      <div className="relative z-20 w-full max-w-5xl mx-auto flex items-center justify-between bg-slate-950/60 backdrop-blur-md px-5 py-2 rounded-2xl border border-white/10 shadow-2xl shrink-0 pointer-events-auto">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+          <span className="text-red-400 text-xs font-black tracking-[0.2em] uppercase">
             {battleTypeLabel}
           </span>
         </div>
 
-        <div className="text-amber-400 text-xs md:text-sm font-black tracking-widest uppercase bg-amber-950/40 border border-amber-500/30 px-5 py-1.5 rounded-full shadow-inner">
-          ⚔️ COMBAT ARENA ⚔️
+        <div className="text-amber-400 text-xs font-black tracking-widest uppercase bg-amber-950/60 border border-amber-500/40 px-4 py-1 rounded-full shadow-inner">
+          ⚔️ BATTLE ROOM ⚔️
         </div>
 
         {onFlee ? (
           <button
             onClick={onFlee}
-            className="text-xs font-black tracking-widest text-amber-300 hover:text-white bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 px-5 py-2 rounded-xl shadow-lg transition-all hover:scale-105"
+            className="text-[11px] font-black tracking-widest text-amber-300 hover:text-white bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 px-4 py-1.5 rounded-xl shadow-lg transition-all hover:scale-105"
           >
-            🏃 FLEE COMBAT
+            🏃 FLEE
           </button>
         ) : (
           <div className="text-slate-400 text-xs font-bold tracking-wider">
@@ -101,136 +132,156 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
         )}
       </div>
 
-      {/* CENTER MAIN BATTLE STAGE: Full Screen Split Layout */}
-      <div className="relative z-10 flex-1 my-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center overflow-hidden">
+      {/* CENTER MAIN BATTLE STAGE: Floating Stage without heavy box borders */}
+      <div className="relative z-10 flex-1 my-2 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center overflow-hidden min-h-0 pointer-events-auto">
         
-        {/* LEFT COLUMN: Player Stage (Cols 1-4) */}
-        <div className="lg:col-span-4 h-full flex flex-col justify-center items-center lg:items-end">
-          <div className="w-full max-w-md bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.15)] flex flex-col items-center text-center relative overflow-hidden backdrop-blur-xl">
+        {/* LEFT COLUMN: Player Floating 3D Stage (Cols 1-4) */}
+        <div className="lg:col-span-4 h-full flex flex-col justify-center items-center overflow-hidden">
+          <div className="w-full max-w-sm flex flex-col items-center text-center relative max-h-full">
             
-            {/* Player House Crest / Badge */}
-            <div className="text-[11px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/80 px-4 py-1.5 rounded-full border border-emerald-500/30 mb-4 shadow-sm">
+            {/* Player House Crest / Floating Badge */}
+            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-300 bg-emerald-950/70 backdrop-blur-md px-3.5 py-1 rounded-full border border-emerald-500/30 mb-1.5 shadow-lg shrink-0">
               {player.house || "PLAYER CHAMPION"}
             </div>
             
-            {/* Player Avatar Large Display */}
-            <div className="relative w-44 h-44 my-2 rounded-3xl border-2 border-emerald-500/40 overflow-hidden bg-slate-950 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.25)]">
-              {playerIdleImg ? (
-                <img src={playerIdleImg} alt={player.name} className="w-full h-full object-cover" />
+            {/* Player 3D Pedestal Spotlight (Borderless) */}
+            <div className="relative w-32 h-32 md:w-44 md:h-44 my-1 flex items-center justify-center shrink-0">
+              {/* Radial spotlight ground aura */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(16,185,129,0.35)_0%,_transparent_70%)] pointer-events-none rounded-full animate-pulse" />
+              
+              {playerModelPath ? (
+                <Combat3dModelDisplay
+                  modelPath={playerModelPath}
+                  color="#10b981"
+                  activeFx={playerFx}
+                  hitState={hitStop}
+                  fallback={
+                    playerIdleImg ? (
+                      <img src={playerIdleImg} alt={player.name} className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(16,185,129,0.4)]" />
+                    ) : (
+                      <span className="text-6xl">{player.emoji}</span>
+                    )
+                  }
+                />
+              ) : playerIdleImg ? (
+                <img src={playerIdleImg} alt={player.name} className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(16,185,129,0.4)]" />
               ) : (
-                <span className="text-7xl">{player.emoji}</span>
+                <span className="text-6xl">{player.emoji}</span>
               )}
             </div>
 
-            <h3 className="font-black text-white text-2xl md:text-3xl mt-3">{player.name}</h3>
-            <p className="text-xs text-emerald-400/80 font-bold mb-4">{player.nameEn}</p>
+            <h3 className="font-black text-white text-xl md:text-2xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{player.name}</h3>
+            <p className="text-[11px] text-emerald-400/90 font-bold mb-2">{player.nameEn}</p>
 
-            {/* Health & Attack Stats */}
-            <div className="w-full space-y-3 bg-black/50 p-4 rounded-2xl border border-emerald-500/20">
-              <div className="flex justify-between items-center text-sm font-bold text-white/90">
-                <span className="flex items-center gap-1.5">❤️ HP</span>
-                <span className="text-emerald-400 font-black text-base">{Math.max(0, player.hp)} / {player.maxHp}</span>
+            {/* Health & Attack Floating Glass Card */}
+            <div className="w-full space-y-2 bg-slate-950/70 backdrop-blur-md p-3 rounded-2xl border border-emerald-500/20 shadow-xl shrink-0">
+              <div className="flex justify-between items-center text-xs font-bold text-white/90">
+                <span className="flex items-center gap-1">❤️ HP</span>
+                <span className="text-emerald-400 font-black text-sm">{Math.max(0, player.hp)} / {player.maxHp}</span>
               </div>
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-white/10">
+              <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-white/10">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]"
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-300 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.9)]"
                   initial={false}
-                  animate={{ width: `${playerHpPct}%` }}
+                  style={{ transformOrigin: "left", width: "100%" }}
+                  animate={{ scaleX: playerHpPct / 100 }}
                   transition={{ type: "spring", stiffness: 200, damping: 22 }}
                 />
               </div>
 
-              <div className="flex justify-between items-center text-sm font-bold text-white/90 pt-2 border-t border-white/10">
-                <span className="flex items-center gap-1.5">⚔️ ATTACK POWER</span>
-                <span className="text-amber-400 font-black text-lg">{totalDmg}</span>
+              <div className="flex justify-between items-center text-xs font-bold text-white/90 pt-1.5 border-t border-white/10">
+                <span className="flex items-center gap-1">⚔️ ATTACK POWER</span>
+                <span className="text-amber-400 font-black text-base">{totalDmg}</span>
               </div>
             </div>
 
-            {/* House Skills Section in Combat (Filtered for Monster Combat) */}
-            {combatUsableSkills.length > 0 && onUseSkill && (
-              <div className="w-full mt-3 bg-black/60 p-3 rounded-2xl border border-purple-500/30">
-                <div className="text-[10px] font-black uppercase tracking-wider text-purple-300 mb-2 flex items-center justify-between">
-                  <span>✨ คาถาต่อสู้ (Monster Skills)</span>
-                  <span className="text-[9px] text-white/50 font-normal">กดใช้ใส่ Monster</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {combatUsableSkills.map((skillId, idx) => (
-                    <SkillButton
-                      key={idx}
-                      skillId={skillId}
-                      playerIndex={player.playerIndex !== undefined ? player.playerIndex : 0}
-                      playerId={player.playerIndex !== undefined ? player.playerIndex : 0}
-                      cooldown={skillId ? player.skillCooldowns?.[skillId] || 0 : 0}
-                      onUse={onUseSkill}
-                      size="sm"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* FLOATING ACTION BAR (Skills & Potions) */}
+            {(combatUsableSkills.length > 0 || combatUsablePotions.length > 0) && (
+              <div className="w-full mt-2 bg-slate-950/75 backdrop-blur-md p-2 rounded-2xl border border-purple-500/30 shrink-0 overflow-y-auto max-h-[130px] custom-scrollbar shadow-2xl">
+                {/* Skills */}
+                {combatUsableSkills.length > 0 && onUseSkill && (
+                  <div className="mb-2">
+                    <div className="text-[9px] font-black uppercase tracking-wider text-purple-300 mb-1 text-left flex items-center justify-between">
+                      <span>✨ คาถาต่อสู้</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {combatUsableSkills.map((skillId, idx) => (
+                        <SkillButton
+                          key={idx}
+                          skillId={skillId}
+                          playerIndex={player.playerIndex !== undefined ? player.playerIndex : 0}
+                          playerId={player.playerIndex !== undefined ? player.playerIndex : 0}
+                          cooldown={skillId ? player.skillCooldowns?.[skillId] || 0 : 0}
+                          onUse={handleUseSkillWithFx}
+                          size="sm"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* Combat Potions Section (Heal / Damage / Cooldown Potions) */}
-            {combatUsablePotions.length > 0 && onUsePotion && (
-              <div className="w-full mt-3 bg-black/60 p-3 rounded-2xl border border-amber-500/30">
-                <div className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2 flex items-center justify-between">
-                  <span>🧪 ยาต่อสู้ (Combat Potions)</span>
-                  <span className="text-[9px] text-white/50 font-normal">เพิ่มเลือด / ดาเมจ / ลดคูลดาวน์</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {combatUsablePotions.map((potId, idx) => {
-                    const pot = POTIONS[potId];
-                    if (!pot) return null;
-                    const potItem = { ...pot, categoryTh: "🧪 ยาปรุง" };
+                {/* Potions */}
+                {combatUsablePotions.length > 0 && onUsePotion && (
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-wider text-amber-300 mb-1 text-left flex items-center justify-between">
+                      <span>🧪 ยาต่อสู้</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {combatUsablePotions.map((potId, idx) => {
+                        const pot = POTIONS[potId];
+                        if (!pot) return null;
+                        const potItem = { ...pot, categoryTh: "🧪 ยาปรุง" };
 
-                    const potBtn = (
-                      <button
-                        onClick={() => onUsePotion(potId)}
-                        className="flex items-center gap-2 p-2 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 text-left transition-all hover:scale-105 group w-full"
-                      >
-                        <div className="w-7 h-7 rounded-lg overflow-hidden bg-black/50 border border-amber-400/40 shrink-0 flex items-center justify-center">
-                          {pot.image ? (
-                            <img src={pot.image} alt={pot.name} className="w-full h-full object-contain p-0.5" />
-                          ) : (
-                            <span className="text-sm">🧪</span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black text-amber-200 truncate">{pot.name}</div>
-                          <div className="text-[8px] text-white/50 truncate">{pot.description}</div>
-                        </div>
-                      </button>
-                    );
+                        const potBtn = (
+                          <button
+                            onClick={() => onUsePotion(potId)}
+                            className="flex items-center gap-1.5 p-1 rounded-lg bg-amber-950/50 hover:bg-amber-900/70 border border-amber-500/40 text-left transition-all hover:scale-102 group w-full"
+                          >
+                            <div className="w-5 h-5 rounded overflow-hidden bg-black/60 border border-amber-400/40 shrink-0 flex items-center justify-center">
+                              {pot.image ? (
+                                <img src={pot.image} alt={pot.name} className="w-full h-full object-contain p-0.5" />
+                              ) : (
+                                <span className="text-xs">🧪</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[9px] font-black text-amber-200 truncate">{pot.name}</div>
+                            </div>
+                          </button>
+                        );
 
-                    return (
-                      <ItemTooltip key={idx} item={potItem} position="top">
-                        {potBtn}
-                      </ItemTooltip>
-                    );
-                  })}
-                </div>
+                        return (
+                          <ItemTooltip key={idx} item={potItem} position="top">
+                            {potBtn}
+                          </ItemTooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
         {/* CENTER COLUMN: Wheel of Fate & VS Clash Stage (Cols 5-8) */}
-        <div className="lg:col-span-4 h-full flex flex-col items-center justify-center py-2">
+        <div className="lg:col-span-4 h-full flex flex-col items-center justify-center py-1 overflow-hidden">
           {introState === "intro" ? (
             <div
               onClick={() => setIntroState("ready")}
               className="flex flex-col items-center cursor-pointer group"
             >
-              <div className="relative flex items-center justify-center w-36 h-36 md:w-44 md:h-44 rounded-full bg-gradient-to-br from-red-600 via-amber-600 to-red-700 border-4 border-white/90 shadow-[0_0_80px_rgba(239,68,68,0.7)] group-hover:scale-110 transition-transform duration-300 animate-pulse">
-                <span className="text-7xl md:text-8xl font-black italic tracking-tighter text-white drop-shadow-[0_6px_12px_rgba(0,0,0,0.9)]">
+              <div className="relative flex items-center justify-center w-28 h-28 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-red-600 via-amber-600 to-red-700 border-4 border-white/90 shadow-[0_0_70px_rgba(239,68,68,0.8)] group-hover:scale-108 transition-transform duration-300 animate-pulse">
+                <span className="text-6xl md:text-7xl font-black italic tracking-tighter text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)]">
                   VS
                 </span>
               </div>
-              <div className="text-xs font-black tracking-widest text-amber-300 mt-6 bg-slate-900/90 px-6 py-2 rounded-full border border-amber-500/40 shadow-xl group-hover:bg-amber-500 group-hover:text-black transition-all">
+              <div className="text-[11px] font-black tracking-widest text-amber-300 mt-4 bg-slate-950/80 backdrop-blur-md px-5 py-1.5 rounded-full border border-amber-500/40 shadow-2xl group-hover:bg-amber-500 group-hover:text-black transition-all">
                 CLICK TO START CLASH
               </div>
             </div>
           ) : (
-            <div className="w-full flex items-center justify-center animate-fade-in my-auto">
+            <div className="w-full flex items-center justify-center animate-fade-in my-auto max-h-full">
               <WheelOfFate
                 monster={monster}
                 player={player}
@@ -243,21 +294,47 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
           )}
         </div>
 
-        {/* RIGHT COLUMN: Monster Stage (Cols 9-12) */}
-        <div className="lg:col-span-4 h-full flex flex-col justify-center items-center lg:items-start">
-          <div className="w-full max-w-md bg-gradient-to-br from-slate-900/90 to-red-950/40 border border-red-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(239,68,68,0.15)] flex flex-col items-center text-center relative overflow-hidden backdrop-blur-xl">
+        {/* RIGHT COLUMN: Monster Floating 3D Stage (Cols 9-12) */}
+        <div className="lg:col-span-4 h-full flex flex-col justify-center items-center overflow-hidden">
+          <div className="w-full max-w-sm flex flex-col items-center text-center relative max-h-full">
             
-            {/* Enemy Category Badge */}
-            <div className="text-[11px] font-black uppercase tracking-widest text-red-400 bg-red-950/80 px-4 py-1.5 rounded-full border border-red-500/30 mb-4 shadow-sm">
+            {/* Enemy Category Floating Badge */}
+            <div className="text-[10px] font-black uppercase tracking-widest text-red-300 bg-red-950/70 backdrop-blur-md px-3.5 py-1 rounded-full border border-red-500/30 mb-1.5 shadow-lg shrink-0">
               TARGET ENEMY
             </div>
 
-            {/* Monster Avatar / Animation Large Display */}
-            <div className="relative w-44 h-44 my-2 rounded-3xl border-2 border-red-500/40 overflow-hidden bg-slate-950 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.25)]">
-              {isGrandFinalBoss ? (
-                <Suspense fallback={<img src={monsterIdleImg} alt={monster.name} className="w-full h-full object-cover" />}>
-                  <GrandFinalBossModalModel />
-                </Suspense>
+            {/* Monster 3D Pedestal Spotlight (Borderless) */}
+            <div className="relative w-32 h-32 md:w-44 md:h-44 my-1 flex items-center justify-center shrink-0">
+              {/* Radial spotlight ground aura */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(239,68,68,0.35)_0%,_transparent_70%)] pointer-events-none rounded-full animate-pulse" />
+
+              {monsterModelPath ? (
+                <Combat3dModelDisplay
+                  modelPath={monsterModelPath}
+                  color="#ef4444"
+                  activeFx={monsterFx}
+                  hitState={hitStop}
+                  fallback={
+                    monster.frames && monster.frames.length > 0 ? (
+                      <AnimatedUiMonster
+                        frames={monster.frames}
+                        fps={monster.fps || 8}
+                        fallbackImage={monster.image || "/images/monsters/ชบ7000.webp"}
+                        alt={monster.name}
+                      />
+                    ) : (
+                      <img
+                        src={monster.image || "/images/monsters/ชบ7000.webp"}
+                        alt={monster.name}
+                        className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(239,68,68,0.4)]"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/images/monsters/ชบ7000.webp";
+                        }}
+                      />
+                    )
+                  }
+                />
               ) : monster.frames && monster.frames.length > 0 ? (
                 <AnimatedUiMonster
                   frames={monster.frames}
@@ -269,7 +346,7 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
                 <img
                   src={monster.image || "/images/monsters/ชบ7000.webp"}
                   alt={monster.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(239,68,68,0.4)]"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
                     e.currentTarget.src = "/images/monsters/ชบ7000.webp";
@@ -278,27 +355,28 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
               )}
             </div>
 
-            <h3 className="font-black text-white text-2xl md:text-3xl mt-3">{monster.name}</h3>
-            <p className="text-xs text-red-400/80 font-bold mb-4">{monster.nameEn}</p>
+            <h3 className="font-black text-white text-xl md:text-2xl leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{monster.name}</h3>
+            <p className="text-[11px] text-red-400/90 font-bold mb-2">{monster.nameEn}</p>
 
-            {/* Monster Stats */}
-            <div className="w-full space-y-3 bg-black/50 p-4 rounded-2xl border border-red-500/20">
-              <div className="flex justify-between items-center text-sm font-bold text-white/90">
-                <span className="flex items-center gap-1.5">❤️ ENEMY HP</span>
-                <span className="text-red-400 font-black text-base">{Math.max(0, monsterCurrentHp)} / {monsterMaxHp}</span>
+            {/* Monster Stats Floating Glass Card */}
+            <div className="w-full space-y-2 bg-slate-950/70 backdrop-blur-md p-3 rounded-2xl border border-red-500/20 shadow-xl shrink-0">
+              <div className="flex justify-between items-center text-xs font-bold text-white/90">
+                <span className="flex items-center gap-1">❤️ ENEMY HP</span>
+                <span className="text-red-400 font-black text-sm">{Math.max(0, monsterCurrentHp)} / {monsterMaxHp}</span>
               </div>
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-white/10">
+              <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-white/10">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-red-600 to-rose-400 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)]"
+                  className="h-full bg-gradient-to-r from-red-600 to-rose-400 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.9)]"
                   initial={false}
-                  animate={{ width: `${hpPct}%` }}
+                  style={{ transformOrigin: "left", width: "100%" }}
+                  animate={{ scaleX: hpPct / 100 }}
                   transition={{ type: "spring", stiffness: 200, damping: 22 }}
                 />
               </div>
 
-              <div className="flex justify-between items-center text-sm font-bold text-white/90 pt-2 border-t border-white/10">
-                <span className="flex items-center gap-1.5">⚔️ DAMAGE POWER</span>
-                <span className="text-red-400 font-black text-lg">{monster.dmg}</span>
+              <div className="flex justify-between items-center text-xs font-bold text-white/90 pt-1.5 border-t border-white/10">
+                <span className="flex items-center gap-1">⚔️ DAMAGE POWER</span>
+                <span className="text-red-400 font-black text-base">{monster.dmg}</span>
               </div>
             </div>
           </div>
@@ -306,9 +384,9 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
 
       </div>
 
-      {/* BOTTOM FOOTER HUD: Status Hint Bar */}
-      <div className="relative z-20 w-full bg-slate-900/80 border border-white/10 rounded-2xl px-6 py-2.5 flex items-center justify-center backdrop-blur-md">
-        <div className="text-xs text-slate-300 font-bold tracking-widest uppercase flex items-center gap-2">
+      {/* BOTTOM FOOTER HUD: Battle Room Footer */}
+      <div className="relative z-20 w-full max-w-4xl mx-auto bg-slate-950/60 backdrop-blur-md border border-white/10 rounded-xl px-4 py-1.5 flex items-center justify-center shrink-0 shadow-2xl">
+        <div className="text-[11px] text-slate-300 font-bold tracking-widest uppercase flex items-center gap-2">
           <span>✨</span>
           <span>SPIN THE WHEEL OF FATE TO DETERMINE THE WINNER</span>
           <span>✨</span>

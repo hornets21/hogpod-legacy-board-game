@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import React, { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -68,7 +68,7 @@ function BossScene() {
   );
 }
 
-export default function GrandFinalBossModalModel() {
+const GrandFinalBossModalModel = React.memo(function GrandFinalBossModalModel() {
   return (
     <Canvas
       shadows
@@ -86,6 +86,8 @@ export default function GrandFinalBossModalModel() {
       </Suspense>
     </Canvas>
   );
-}
+});
+
+export default GrandFinalBossModalModel;
 
 useGLTF.preload(MODEL_PATH);

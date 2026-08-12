@@ -6,7 +6,7 @@
 // หันหน้าเข้าหากล้องเสมอ (Billboard Effect) คมชัด 100% ไร้ขอบหนา
 // ============================================================
 
-import { useMemo, useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { cellToWorld } from "@/lib/boardLayout";
@@ -23,7 +23,7 @@ function useMonsterTexture(imagePath) {
   }
 }
 
-export default function PlaneMonster({ cell, imagePath, isBoss = false, isDefeated = false }) {
+const PlaneMonster = React.memo(function PlaneMonster({ cell, imagePath, isBoss = false, isDefeated = false }) {
   const meshRef = useRef(null);
   const shadowRef = useRef(null);
   const opacityRef = useRef(1);
@@ -109,4 +109,6 @@ export default function PlaneMonster({ cell, imagePath, isBoss = false, isDefeat
       </mesh>
     </group>
   );
-}
+});
+
+export default PlaneMonster;

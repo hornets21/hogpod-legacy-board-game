@@ -350,7 +350,11 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
           return (
             <div
               key={hId}
-              className="bg-slate-950/90 backdrop-blur-xl border-2 rounded-2xl p-3 shadow-xl flex flex-col justify-between"
+              className={`bg-slate-950/90 backdrop-blur-xl border-2 rounded-2xl p-3 shadow-xl flex flex-col justify-between transition-all duration-300 ${
+                isSkillSelected
+                  ? "ring-2 ring-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-[1.02]"
+                  : ""
+              }`}
               style={{ borderColor: `${p.color || "#f59e0b"}70` }}
             >
               {/* HEADER: NAME & HP */}
@@ -358,6 +362,14 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction }) {
                 <span className="font-black text-xs text-white truncate">{p.name}</span>
                 <span className="text-[10px] font-bold text-emerald-400">HP {Math.max(0, p.hp)}</span>
               </div>
+
+              {/* ACTIVE SPELL BADGE */}
+              {isSkillSelected && SKILLS[selectedSkills[hId]] && (
+                <div className="mb-2 px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/50 text-[10px] font-black text-amber-300 flex items-center justify-between animate-pulse">
+                  <span className="truncate">✨ {SKILLS[selectedSkills[hId]].nameTh || SKILLS[selectedSkills[hId]].name}</span>
+                  <span className="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-extrabold uppercase">พร้อมร่าย</span>
+                </div>
+              )}
 
               {!clashResult ? (
                 <div className="space-y-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -9,7 +9,7 @@ import { cellToWorld } from "@/lib/boardLayout";
 const MODEL_PATH = "/models/granfinalboss.glb";
 const MODEL_SCALE = 0.009;
 
-export default function GrandFinalBossModel({ cell = 90 }) {
+const GrandFinalBossModel = React.memo(function GrandFinalBossModel({ cell = 90 }) {
   const groupRef = useRef(null);
   const auraRef = useRef(null);
   const { scene, animations } = useGLTF(MODEL_PATH);
@@ -76,6 +76,8 @@ export default function GrandFinalBossModel({ cell = 90 }) {
       </group>
     </group>
   );
-}
+});
+
+export default GrandFinalBossModel;
 
 useGLTF.preload(MODEL_PATH);

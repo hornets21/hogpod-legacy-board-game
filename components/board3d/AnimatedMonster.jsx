@@ -5,7 +5,7 @@
 // ทั้งบนกระดาน 3D (PlaneGeometry Billboard) และ 2D UI (HTML img)
 // ============================================================
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { cellToWorld } from "@/lib/boardLayout";
@@ -14,7 +14,7 @@ import { cellToWorld } from "@/lib/boardLayout";
  * 3D Cutout Sprite Monster Component สำหรับ Render บนกระดาน 3D
  * แสดงผลภาพ 2D Cutout ใส คมชัด 100% ไร้ขอบดำ พร้อมมิติความหนาจากแสงและเงา (Clean Cutout + Dynamic Shadow)
  */
-export function AnimatedPlaneMonster({
+export const AnimatedPlaneMonster = React.memo(function AnimatedPlaneMonster({
   cell,
   frames = [],
   fps = 8,
@@ -120,12 +120,12 @@ export function AnimatedPlaneMonster({
       </mesh>
     </group>
   );
-}
+});
 
 /**
  * 2D UI Animated Monster Image สำหรับแสดงใน HTML Modal / Combat / UI Cards
  */
-export function AnimatedUiMonster({
+export const AnimatedUiMonster = React.memo(function AnimatedUiMonster({
   frames = [],
   fallbackImage = "/images/monsters/ชบ7000.webp",
   fps = 8,
@@ -165,4 +165,4 @@ export function AnimatedUiMonster({
       }}
     />
   );
-}
+});
