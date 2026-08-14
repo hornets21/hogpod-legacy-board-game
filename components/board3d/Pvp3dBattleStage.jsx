@@ -495,5 +495,3 @@ function HouseModel({ modelPath, ...props }) {
     </group>
   );
 }
-
-Object.values(HOUSE_MODELS).forEach((path) => useGLTF.preload(path));

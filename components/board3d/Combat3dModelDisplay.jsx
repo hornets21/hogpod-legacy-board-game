@@ -254,7 +254,8 @@ const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({ modelPat
           {/* ✨ Active Spell / Impact FX Overlay */}
           <CombatFxOverlay key={activeFx} activeFx={activeFx} color={color} />
 
-          <Suspense fallback={fallback}>
+          {/* HTML fallbacks must stay outside Canvas; R3F only accepts Three.js objects here. */}
+          <Suspense fallback={null}>
             <ModelMesh modelPath={modelPath} hitState={hitState} />
           </Suspense>
         </Canvas>
@@ -264,17 +265,3 @@ const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({ modelPat
 });
 
 export default Combat3dModelDisplay;
-
-// Preload models into useGLTF cache
-const ALL_PRELOAD_MODELS = [
-  ...Object.values(HOUSE_MODELS),
-  ...Object.values(MONSTER_MODELS),
-];
-ALL_PRELOAD_MODELS.forEach((path) => {
-  try {
-    useGLTF.preload(path);
-  } catch (e) {
-    // ignore
-  }
-});
-

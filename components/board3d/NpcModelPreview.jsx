@@ -79,5 +79,3 @@ export default function NpcModelPreview({ npcId, color = "#f0b85b" }) {
     </div>
   );
 }
-
-Object.values(NPC_MODEL_PATHS).forEach((path) => useGLTF.preload(path));

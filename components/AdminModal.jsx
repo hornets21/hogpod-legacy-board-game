@@ -18,7 +18,7 @@ import { getTotalDmg } from "@/lib/gameEngine";
 
 import { setSfxVolume, getSfxVolume } from "@/lib/sfx";
 
-export default function AdminModal({ state, players, onDispatch, onClose, isBgmMuted, onToggleBgm, onConfirmSetup }) {
+export default function AdminModal({ state, players, onDispatch, onClose, isBgmMuted, onToggleBgm, bgmVolume = 0.2, onBgmVolumeChange, onConfirmSetup }) {
   const [selectedHouseIdx, setSelectedHouseIdx] = useState(0);
   const [activeCategory, setActiveCategory] = useState("gold"); // gold | wand | armor | amulet | potion | skill | pet
   const [sfxVol, setSfxVolState] = useState(() => (typeof window !== "undefined" ? getSfxVolume() : 0.8));
@@ -117,6 +117,17 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
               />
             </div>
             {onToggleBgm && (
+              <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={bgmVolume}
+                onChange={(e) => onBgmVolumeChange?.(parseFloat(e.target.value))}
+                className="w-20 accent-emerald-400 cursor-pointer"
+                title={`BGM Volume: ${Math.round(bgmVolume * 100)}%`}
+              />
               <button
                 onClick={onToggleBgm}
                 className={`px-3 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all hover:scale-105 shadow-md ${
@@ -129,6 +140,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                 <span>{isBgmMuted ? "🔇" : "🎵"}</span>
                 <span>{isBgmMuted ? "เปิดเสียง BGM" : "ปิดเสียง BGM"}</span>
               </button>
+              </div>
             )}
             <button
               onClick={onClose}

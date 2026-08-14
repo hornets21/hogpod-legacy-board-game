@@ -137,5 +137,3 @@ const NpcModels = memo(function NpcModels({ npcs }) {
 });
 
 export default NpcModels;
-
-Object.values(NPC_MODELS).forEach((path) => useGLTF.preload(path));

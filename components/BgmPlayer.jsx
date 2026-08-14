@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { attachSfxListeners, setSfxMuted } from "@/lib/sfx";
 
-export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
+export default function BgmPlayer({ isMuted, volume = 0.2, hideFloatingButton = true }) {
   const audioRef = useRef(null);
 
   const soundPath = "/sounds/harry potter themesong fail recorder cover 1.webm";
@@ -14,7 +14,8 @@ export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
   useEffect(() => {
     const audio = new Audio(soundPath);
     audio.loop = true;
-    audio.volume = 0.5; // เสียงหลัก 50% ให้ได้ยินชัด
+    audio.volume = volume;
+    audio.muted = isMuted;
     audioRef.current = audio;
 
     // ── เปิด SFX listener (Web Audio synthesized) ──
@@ -89,6 +90,10 @@ export default function BgmPlayer({ isMuted, hideFloatingButton = true }) {
     // Sync sfx mute ด้วย
     setSfxMuted(isMuted);
   }, [isMuted]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+  }, [volume]);
 
   if (hideFloatingButton) return null;
 

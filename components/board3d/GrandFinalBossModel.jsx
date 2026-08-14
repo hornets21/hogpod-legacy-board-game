@@ -79,5 +79,3 @@ const GrandFinalBossModel = React.memo(function GrandFinalBossModel({ cell = 90 
 });
 
 export default GrandFinalBossModel;
-
-useGLTF.preload(MODEL_PATH);

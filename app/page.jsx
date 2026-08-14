@@ -909,9 +909,18 @@ export default function Home() {
   const [playersCollapsed, setPlayersCollapsed] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(false);
+  const [bgmVolume, setBgmVolume] = useState(() => {
+    if (typeof window === "undefined") return 0.2;
+    const saved = Number.parseFloat(localStorage.getItem("podBoardGame_bgmVolume"));
+    return Number.isFinite(saved) ? Math.max(0, Math.min(1, saved)) : 0.2;
+  });
   const [resetDiceKey, setResetDiceKey] = useState(0);
   const [pendingSkill, setPendingSkill] = useState(null); // { playerIndex, skillId }
   const [pendingTrap, setPendingTrap] = useState(null); // { playerIndex } — ยาพิชี้ช่องวางกับดัก
+
+  useEffect(() => {
+    localStorage.setItem("podBoardGame_bgmVolume", bgmVolume.toString());
+  }, [bgmVolume]);
 
   // Always confirm skills through the picker first. If a skill does not require
   // a target, the picker still acts as a confirmation dialog.
@@ -1145,7 +1154,7 @@ export default function Home() {
             <MobaAutoGoldWidget state={state} onDispatch={dispatch} />
 
             {/* Background Music Player */}
-            <BgmPlayer isMuted={bgmMuted} hideFloatingButton={true} />
+            <BgmPlayer isMuted={bgmMuted} volume={bgmVolume} hideFloatingButton={true} />
 
             {/* Quick Action Emoji Buttons (Admin) */}
             <div className="flex items-center gap-2">
@@ -1279,6 +1288,8 @@ export default function Home() {
           onClose={() => setAdminOpen(false)}
           isBgmMuted={bgmMuted}
           onToggleBgm={() => setBgmMuted((m) => !m)}
+          bgmVolume={bgmVolume}
+          onBgmVolumeChange={setBgmVolume}
           onConfirmSetup={
             state.phase === "setup"
               ? () => dispatch({ type: "COMPLETE_SETUP", players: state.players })

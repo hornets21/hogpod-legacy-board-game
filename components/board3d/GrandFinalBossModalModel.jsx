@@ -89,5 +89,3 @@ const GrandFinalBossModalModel = React.memo(function GrandFinalBossModalModel() 
 });
 
 export default GrandFinalBossModalModel;
-
-useGLTF.preload(MODEL_PATH);
