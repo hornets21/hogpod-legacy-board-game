@@ -17,7 +17,7 @@ import { on, FX_EVENTS } from "@/lib/skillFxBus";
 const WALK_SPEED = 6.5; // เพิ่มความเร็วเดินเพื่อก้าวทันครบ 6 ช่องสมบูรณ์
 const TELEPORT_SPEED = 5.0;
 
-const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, phase }) {
+const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, phase, onMoveComplete }) {
   return (
     <group>
       {players.map((p, i) => (
@@ -26,6 +26,7 @@ const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, p
           player={p}
           index={i}
           isActive={i === currentPlayerIndex && phase === "play"}
+          onMoveComplete={onMoveComplete}
         />
       ))}
     </group>
@@ -34,7 +35,7 @@ const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, p
 
 export default PlayerTokens;
 
-const Token = memo(function Token({ player, index, isActive }) {
+const Token = memo(function Token({ player, index, isActive, onMoveComplete }) {
   const groupRef = useRef(null);
   const crystalRef = useRef(null);
   const beaconRef = useRef(null);
@@ -49,6 +50,7 @@ const Token = memo(function Token({ player, index, isActive }) {
     scale: 1,
     segmentDistance: 0,
     segmentProgress: 0,
+    completionCell: null,
   });
   const prevPos = useRef(player.position);
 
@@ -80,6 +82,7 @@ const Token = memo(function Token({ player, index, isActive }) {
 
     // ถ้าเป็นการเดินปกติไปข้างหน้า (1-6 ช่อง) ให้คิวเดินทีละช่องจนครบก้าว
     if (diff > 0 && diff <= 90) {
+      a.completionCell = null;
       for (let c = prev + 1; c <= next; c++) a.queue.push(c);
       a.segmentDistance = 0;
       a.segmentProgress = 0;
@@ -158,6 +161,10 @@ const Token = memo(function Token({ player, index, isActive }) {
           g.position.y = 0;
           g.rotation.x = 0;
           g.rotation.z = 0;
+          if (isActive && a.completionCell !== player.position) {
+            a.completionCell = player.position;
+            onMoveComplete?.(index, player.position);
+          }
         } else {
           a.segmentDistance = 0;
         }

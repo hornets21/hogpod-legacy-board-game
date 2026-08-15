@@ -60,7 +60,7 @@ function HouseModel({ modelPath, scale }) {
   );
 }
 
-export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAdmin }) {
+export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAdmin, isHost = false }) {
   const [isRevealed, setIsRevealed] = useState(false);
 
   useEffect(() => {
@@ -93,10 +93,10 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
           <div className="mx-auto mt-5 h-px w-32 bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
         </div>
         <h2 className="hidden text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 uppercase tracking-[0.08em] mb-3 drop-shadow-[0_0_22px_rgba(245,158,11,0.35)]">
-          สุ่มทอยเต๋าจัดลำดับการเดิน!
+          Turn Order Roll
         </h2>
         <p className="hidden max-w-xl text-sm text-slate-300/70 font-bold mb-10">
-          ผู้ที่ทอยเต๋าได้คะแนนสูงที่สุด จะได้รับสิทธิ์เดินกระดานเป็นคนแรก
+          The realm now turns to fate. Each house casts the die to claim the right of first passage across the board.
         </p>
 
         {/* Rolls Cards Grid */}
@@ -138,7 +138,7 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
 
                 <div className="flex items-end justify-between pt-3 text-[0px]">
                   <div className="text-[10px] text-white/50 uppercase tracking-[0.35em] font-black">ROLL</div>
-                  <div className="text-[10px] text-white/50 uppercase font-black">คะแนนเต๋า</div>
+                  <div className="text-[10px] text-white/50 uppercase font-black tracking-[0.25em]">SCORE</div>
                   <div className={`text-5xl font-black tabular-nums ${isWinner && isRevealed ? "text-amber-200 animate-pulse drop-shadow-[0_0_15px_rgba(245,158,11,0.8)]" : "text-cyan-200"}`}>
                     {isRevealed ? item.score : "..."}
                   </div>
@@ -148,36 +148,50 @@ export default function InitiativeModal({ initiativeRolls, onStartPlay, onOpenAd
           })}
         </div>
 
-        {/* Winner is highlighted directly on the winning house card. */}
+        {/* Winner banner (kept hidden — the #1 card is already highlighted). */}
         {false && (
           <div className="w-full max-w-7xl p-4 bg-[linear-gradient(90deg,transparent,rgba(245,158,11,0.1),rgba(34,211,238,0.08),rgba(245,158,11,0.1),transparent)] mb-8 text-amber-100 font-black text-base flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(245,158,11,0.12)] animate-fade-in">
             <span>🏆</span>
-            <span>{initiativeRolls[0].player.name} ได้คะแนนสูงสุด ({initiativeRolls[0].score} แต้ม) เริ่มเดินเป็นคนแรก!</span>
+            <span>{initiativeRolls[0].player.name} rolled the highest ({initiativeRolls[0].score}) and claims the first move!</span>
           </div>
         )}
 
-        {/* Action Buttons */}
+        {/* Action Buttons — host-only. Players wait while the host launches the match. */}
         <div className="w-full max-w-7xl flex flex-col items-center gap-4">
-          {onOpenAdmin && (
+          {onOpenAdmin && isHost && (
             <button
               onClick={onOpenAdmin}
-              className="order-2 w-full max-w-md py-3 px-6 bg-white/[0.04] hover:bg-white/[0.1] text-[0px] text-amber-200/80 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all hover:-translate-y-0.5"
-              title="เปิด Admin Panel เพื่อจัดอุปกรณ์ เงิน และสถานะก่อนเริ่มกระดาน"
+              className="order-2 w-full max-w-md py-3 px-6 bg-white/[0.04] hover:bg-white/[0.1] text-amber-200/80 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all hover:-translate-y-0.5"
+              title="Open the Admin panel to configure equipment, gold, and statuses before the board opens."
             >
-              <span className="text-xs">ADMIN SETTINGS</span>
-              <span>⚙️</span>
-              <span>ตั้งค่า Admin (Pay To Win)</span>
+              <span>Admin Setup</span>
             </button>
           )}
 
-          <button
-            onClick={onStartPlay}
-            className="order-1 w-full max-w-md py-4 px-8 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-amber-200 hover:via-yellow-300 hover:to-amber-400 text-[0px] text-slate-950 font-black tracking-wide shadow-[0_0_35px_rgba(245,158,11,0.42)] transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            <span className="text-base">START TURN 1</span>
-            <span>🎮</span>
-            <span>เข้าสู่การแข่งขัน (START TURN 1)</span>
-          </button>
+          {isHost && onStartPlay ? (
+            <button
+              onClick={onStartPlay}
+              className="order-1 w-full max-w-md py-4 px-8 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-amber-200 hover:via-yellow-300 hover:to-amber-400 text-slate-950 font-black tracking-wide shadow-[0_0_35px_rgba(245,158,11,0.42)] transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2 text-base"
+            >
+              <span>Start Turn 1</span>
+            </button>
+          ) : (
+            <div className="order-1 w-full max-w-md py-4 px-8 bg-white/[0.04] border border-amber-300/20 rounded-xl text-amber-100/70 font-black flex items-center justify-center gap-2 text-sm">
+              <span>Awaiting host to begin Turn 1...</span>
+            </div>
+          )}
+
+          {!isHost && onOpenAdmin && (
+            // Non-host admins (e.g. spectator/admins) may still open admin settings
+            // while the host controls the match start.
+            <button
+              onClick={onOpenAdmin}
+              className="order-2 w-full max-w-md py-3 px-6 bg-white/[0.04] hover:bg-white/[0.1] text-amber-200/80 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all hover:-translate-y-0.5"
+              title="Open the Admin panel to configure equipment, gold, and statuses before the board opens."
+            >
+              <span>Admin Settings</span>
+            </button>
+          )}
         </div>
 
       </div>

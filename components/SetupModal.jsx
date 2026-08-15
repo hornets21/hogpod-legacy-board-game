@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HOUSES, WANDS, ARMOR_POOL, AMULET_POOL, POTIONS, SKILLS, PETS, SKILL_LIST, PET_LIST } from "@/lib/gameData";
 import { generateBingoCard } from "@/lib/bingoEngine";
 import { getTotalDmg } from "@/lib/gameEngine";
+import HouseModelPreview from "@/components/board3d/HouseModelPreview";
 
 export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
   const [currentHouseIndex, setCurrentHouseIndex] = useState(0);
@@ -17,7 +18,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
     ? (currentPlayer.wand.type === "vip"
         ? (currentPlayer.vipWand || houseInfo.vipWand)
         : (currentPlayer.commonWand || houseInfo.commonWand))
-    : "ยังไม่ได้สวมใส่";
+    : "Not Equipped";
 
   const equippedWandImg = currentPlayer?.wand
     ? (currentPlayer.wand.type === "vip"
@@ -110,7 +111,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
               <div>
                 <div className="text-[9px] font-black uppercase text-white/50 tracking-wider">ARMOR</div>
                 <div className="text-sm font-black text-blue-300">
-                  {currentPlayer.armor ? (currentPlayer.armor.hpBonus ? `${currentPlayer.armor.hpBonus > 0 ? "+" : ""}${currentPlayer.armor.hpBonus} HP` : `+${currentPlayer.armor.dmgBonus || 0} DMG`) : "ไม่มี"}
+                  {currentPlayer.armor ? (currentPlayer.armor.hpBonus ? `${currentPlayer.armor.hpBonus > 0 ? "+" : ""}${currentPlayer.armor.hpBonus} HP` : `+${currentPlayer.armor.dmgBonus || 0} DMG`) : "None"}
                 </div>
               </div>
             </div>
@@ -146,20 +147,20 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
           {/* LEFT SLOTS (Wand, Armor, Amulet, Pet) */}
           <div className="flex flex-col gap-3 z-10 w-full lg:w-48">
             <SlotFrame
-              label="WAND (อาวุธ)"
+              label="Wand"
               icon="🪄"
               img={equippedWandImg}
               active={!!currentPlayer.wand}
               itemTitle={equippedWandName}
-              itemSub={currentPlayer.wand ? `+${currentPlayer.wand.dmgBonus} DMG` : "แตะเพื่อเลือกซื้อ"}
+              itemSub={currentPlayer.wand ? `+${currentPlayer.wand.dmgBonus} DMG` : "Tap to select"}
             />
             <SlotFrame
-              label="ARMOR (เกราะ)"
+              label="Armor"
               icon="🛡️"
               img={currentPlayer.armor ? currentPlayer.armor.image : null}
               active={!!currentPlayer.armor}
-              itemTitle={currentPlayer.armor ? currentPlayer.armor.name : "ยังไม่ได้สวมใส่"}
-              itemSub={currentPlayer.armor ? currentPlayer.armor.description : "สุ่มรับเสื้อเกราะ"}
+              itemTitle={currentPlayer.armor ? currentPlayer.armor.name : "Not Equipped"}
+              itemSub={currentPlayer.armor ? currentPlayer.armor.description : "Random armor on start"}
             />
           </div>
 
@@ -170,16 +171,18 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
               <p className="text-xs text-amber-400 font-bold uppercase tracking-widest">{currentPlayer.nameEn} · MEMBER {currentPlayer.memberCount}</p>
             </div>
 
-            {/* Character Spotlight Display */}
+            {/* Character Spotlight Display with 3D Model */}
             <div className="relative w-56 h-72 rounded-3xl border-4 border-amber-500/30 bg-black/60 shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden flex items-center justify-center group">
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80 z-10" />
-              {currentPlayer.image ? (
-                <img src={currentPlayer.image} alt={currentPlayer.name} className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
-              ) : (
-                <span className="text-8xl">{currentPlayer.emoji}</span>
-              )}
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.15),transparent_70%)] pointer-events-none z-0" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80 z-10 pointer-events-none" />
+              <HouseModelPreview
+                houseId={currentPlayer.houseId}
+                fallbackImage={currentPlayer.image}
+                fallbackEmoji={currentPlayer.emoji}
+                className="w-full h-full relative z-0"
+              />
               {/* HERO POWER BADGE */}
-              <div className="absolute bottom-3 inset-x-0 z-20 flex flex-col items-center">
+              <div className="absolute bottom-3 inset-x-0 z-20 flex flex-col items-center pointer-events-none">
                 <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest">HERO POWER</span>
                 <span className="text-xl font-black text-white tracking-wider">{totalDmg * 10 + currentPlayer.hp * 5}</span>
               </div>
@@ -189,25 +192,25 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
           {/* RIGHT SLOTS (Skills & Pet) */}
           <div className="flex flex-col gap-3 z-10 w-full lg:w-48">
             <SlotFrame
-              label="PET (สัตว์วิเศษ)"
+              label="Pet"
               icon="🐾"
               active={!!currentPlayer.pet}
-              itemTitle={currentPlayer.pet ? currentPlayer.pet.name : "ยังไม่มีสัตว์วิเศษ"}
-              itemSub={currentPlayer.pet ? currentPlayer.pet.description : "บัฟพิเศษถาวร"}
+              itemTitle={currentPlayer.pet ? currentPlayer.pet.name : "No Pet"}
+              itemSub={currentPlayer.pet ? currentPlayer.pet.description : "Permanent buff"}
             />
             <SlotFrame
-              label="SKILL 1 (คาถา 1)"
+              label="Skill 1"
               icon="✨"
               active={currentPlayer.skills.length > 0}
-              itemTitle={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.name : "ยังไม่ได้ติดตั้ง"}
-              itemSub={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.nameTh : "แตะเพื่อเลือกเรียน"}
+              itemTitle={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.name : "Not Assigned"}
+              itemSub={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.nameTh : "Tap to select"}
             />
             <SlotFrame
-              label="SKILL 2 (คาถา 2)"
+              label="Skill 2"
               icon="🔮"
               active={currentPlayer.skills.length > 1}
-              itemTitle={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.name : "ยังไม่ได้ติดตั้ง"}
-              itemSub={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.nameTh : "แตะเพื่อเลือกเรียน"}
+              itemTitle={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.name : "Not Assigned"}
+              itemSub={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.nameTh : "Tap to select"}
             />
           </div>
 
@@ -218,10 +221,10 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
           
           {/* Tab Navigation */}
           <div className="flex justify-center gap-2 border-b border-white/10 pb-3">
-            <TabBtn active={activeTab === "wands"} label="🪄 ไม้กายสิทธิ์" onClick={() => setActiveTab("wands")} />
-            <TabBtn active={activeTab === "pets"} label="🐾 สัตว์วิเศษ" onClick={() => setActiveTab("pets")} />
-            <TabBtn active={activeTab === "skills"} label="✨ คาถาประจำบ้าน" onClick={() => setActiveTab("skills")} />
-            <TabBtn active={activeTab === "bingo"} label="🎯 ป้าย Bingo" onClick={() => setActiveTab("bingo")} />
+            <TabBtn active={activeTab === "wands"} label="Wands" onClick={() => setActiveTab("wands")} />
+            <TabBtn active={activeTab === "pets"} label="Pets" onClick={() => setActiveTab("pets")} />
+            <TabBtn active={activeTab === "skills"} label="Skills" onClick={() => setActiveTab("skills")} />
+            <TabBtn active={activeTab === "bingo"} label="Bingo" onClick={() => setActiveTab("bingo")} />
           </div>
 
           {/* Tab Content Cards Grid */}
@@ -229,8 +232,8 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             {activeTab === "wands" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ShopCard
-                  title={`ไม้กายสิทธิ์ทั่วไป (${currentPlayer.commonWand || houseInfo.commonWand})`}
-                  desc="+20 ดาเมจ (1,290 Gold)"
+                  title={`Common Wand · ${currentPlayer.commonWand || houseInfo.commonWand}`}
+                  desc="+20 DMG · 1,290 Gold"
                   price={1290}
                   gold={currentPlayer.gold}
                   owned={currentPlayer.wand?.type === "common"}
@@ -239,8 +242,8 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                   img={currentPlayer.commonWandImg || houseInfo.commonWandImg}
                 />
                 <ShopCard
-                  title={`ไม้กายสิทธิ์ VIP (${currentPlayer.vipWand || houseInfo.vipWand})`}
-                  desc="+35 ดาเมจ (2,200 Gold)"
+                  title={`VIP Wand · ${currentPlayer.vipWand || houseInfo.vipWand}`}
+                  desc="+35 DMG · 2,200 Gold"
                   price={2200}
                   gold={currentPlayer.gold}
                   owned={currentPlayer.wand?.type === "vip"}
@@ -256,7 +259,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                 {PET_LIST.map((pet) => (
                   <ShopCard
                     key={pet.id}
-                    title={`${pet.name} (${pet.nameEn})`}
+                    title={`${pet.name} · ${pet.nameEn}`}
                     desc={pet.description}
                     price={pet.price}
                     gold={currentPlayer.gold}
@@ -277,7 +280,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                   return (
                     <ShopCard
                       key={sk.id}
-                      title={`${sk.name} (${sk.nameTh})`}
+                      title={`${sk.name} · ${sk.nameTh}`}
                       desc={sk.description}
                       price={2000}
                       gold={currentPlayer.gold}
@@ -295,8 +298,8 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             {activeTab === "bingo" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ShopCard
-                  title="ป้าย Bingo ประจำบ้าน (Mystic Bingo)"
-                  desc="ติดตั้งป้ายบิงโก แสดงตารางเลข 5x5 ที่มุมขวาล่างเพื่อลุ้นรับโบนัส Gold"
+                  title="Mystic Bingo Card"
+                  desc="Equip a 5x5 Bingo board on bottom-right to earn bonus Gold"
                   price={500}
                   gold={currentPlayer.gold}
                   owned={currentPlayer.hasBingoCard}
@@ -312,24 +315,22 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
           <div className="flex justify-between items-center pt-2 border-t border-white/5">
             <div className="flex items-center gap-3">
               <span className="text-xs text-white/40 font-bold">
-                {currentHouseIndex + 1} จาก {setupPlayers.length} บ้าน
+                {currentHouseIndex + 1} of {setupPlayers.length} Houses
               </span>
               <button
                 onClick={handleGiveBingoAll}
                 className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/40 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105"
-                title="แจกป้าย Bingo ให้ทุกบ้านทันทีเมื่อเริ่มต้นเกม"
+                title="Equip Bingo Card to all houses"
               >
-                <span>🎯</span>
-                <span>แจกป้าย Bingo ให้ทุกบ้าน</span>
+                <span>Give Bingo to All</span>
               </button>
               {onOpenAdmin && (
                 <button
                   onClick={onOpenAdmin}
                   className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105"
-                  title="เปิด Admin Panel เพื่อกำหนดไอเทม เงิน และสถานะเริ่มต้นแบบอิสระ"
+                  title="Open Admin Panel"
                 >
-                  <span>⚙️</span>
-                  <span>ตั้งค่า Admin (Pay To Win)</span>
+                  <span>Admin Setup</span>
                 </button>
               )}
             </div>
@@ -338,8 +339,8 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
               className="btn-primary text-sm px-8 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition-transform"
             >
               {currentHouseIndex < setupPlayers.length - 1
-                ? `ถัดไป: ${setupPlayers[currentHouseIndex + 1].name} ➡️`
-                : "🚀 เสร็จสิ้นการติดตั้ง เริ่มเล่นเกม!"}
+                ? `Next: ${setupPlayers[currentHouseIndex + 1].name}`
+                : "Start Game"}
             </button>
           </div>
 
@@ -426,7 +427,7 @@ function ShopCard({ title, desc, price, gold, onBuy, icon, img, owned = false, d
         <div className="text-[10px] opacity-70 truncate">{desc}</div>
       </div>
       <span className="font-black text-xs flex-shrink-0 ml-2">
-        {owned ? "✅ ถอดออก" : "🔓 สวมใส่"}
+        {owned ? "Unequip" : "Equip"}
       </span>
     </button>
   );

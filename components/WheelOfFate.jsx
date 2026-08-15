@@ -224,14 +224,18 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         {/* Center Orb (Spin Trigger or Arcane Core Crystal) */}
         {!spunResult && (
           <button
-            onClick={spinWheel}
-            disabled={spinning}
-            className={`absolute w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 via-purple-600 to-indigo-900 border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.8)] flex items-center justify-center z-20 transition-transform active:scale-95 ${
-              spinning ? "opacity-80 cursor-wait" : "hover:scale-110 cursor-pointer"
+            onClick={onSpinComplete ? spinWheel : undefined}
+            disabled={spinning || !onSpinComplete}
+            className={`absolute w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 via-purple-600 to-indigo-900 border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.8)] flex items-center justify-center z-20 transition-transform ${
+              spinning
+                ? "opacity-80 cursor-wait"
+                : !onSpinComplete
+                ? "opacity-70 cursor-not-allowed"
+                : "hover:scale-110 cursor-pointer active:scale-95"
             }`}
           >
-            <div className="w-9 h-9 rounded-full bg-amber-400/30 border border-white/60 animate-pulse flex items-center justify-center text-amber-200 font-black text-[11px] uppercase tracking-tighter shadow-inner">
-              {spinning ? "SPIN..." : "SPIN"}
+            <div className="w-9 h-9 rounded-full bg-amber-400/30 border border-white/60 animate-pulse flex items-center justify-center text-amber-200 font-black text-[10px] uppercase tracking-tighter shadow-inner text-center">
+              {spinning ? "SPIN..." : !onSpinComplete ? "WATCH" : "SPIN"}
             </div>
           </button>
         )}
@@ -240,19 +244,21 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
       {/* Main Spin Button below wheel (if not spun) */}
       {!spunResult && (
         <button
-          onClick={spinWheel}
-          disabled={spinning}
+          onClick={onSpinComplete ? spinWheel : undefined}
+          disabled={spinning || !onSpinComplete}
           className={`mt-2 w-full py-2.5 px-6 rounded-xl font-black text-xs text-white shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-300/60 transition-all duration-200 tracking-wider uppercase ${
-            spinning
+            spinning || !onSpinComplete
               ? "bg-slate-800 opacity-60 cursor-not-allowed border-purple-500/30"
               : "bg-gradient-to-r from-purple-700 via-amber-500 to-indigo-700 hover:brightness-110 active:scale-95"
           }`}
         >
           <span className="flex items-center justify-center gap-2">
             {spinning ? (
-              <span>กำลังสุ่มพลังมอนสเตอร์...</span>
+              <span>Determining Monster Power...</span>
+            ) : !onSpinComplete ? (
+              <span>Watching Battle...</span>
             ) : (
-              <span>หมุนวงล้อสุ่มพลังมอนสเตอร์</span>
+              <span>Spin Fate Wheel</span>
             )}
           </span>
         </button>

@@ -92,13 +92,13 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
             </div>
             <div>
               <h2 className="font-black text-amber-400 text-lg sm:text-xl tracking-tight flex items-center gap-2">
-                เมนูควบคุมแอดมิน (PAY TO WIN GOD MODE)
+                Admin Control Panel
                 <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold">
                   ADMIN POWER
                 </span>
               </h2>
               <p className="text-xs text-white/50 font-semibold">
-                เลือกบ้านเพื่อดูหน้าช่องตัวละคร อุปกรณ์สวมใส่ และเปย์ไอเทมจากร้านค้าเข้าบ้านได้ทันที
+                Select a house to inspect equipment, stats, and grant items directly.
               </p>
             </div>
           </div>
@@ -135,10 +135,10 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                     ? "bg-red-950/80 border-red-500/50 text-red-300 hover:bg-red-900"
                     : "bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900"
                 }`}
-                title={isBgmMuted ? "เปิดเสียงเพลงหลัก BGM" : "ปิดเสียงเพลงหลัก BGM"}
+                title={isBgmMuted ? "Unmute BGM" : "Mute BGM"}
               >
                 <span>{isBgmMuted ? "🔇" : "🎵"}</span>
-                <span>{isBgmMuted ? "เปิดเสียง BGM" : "ปิดเสียง BGM"}</span>
+                <span>{isBgmMuted ? "Unmute BGM" : "Mute BGM"}</span>
               </button>
               </div>
             )}
@@ -185,7 +185,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                     <span className="font-black text-xs text-white truncate">{p.name}</span>
                     {!p.isAlive && (
                       <span className="text-[9px] bg-red-500/30 text-red-300 border border-red-500/50 px-1 rounded font-bold">
-                        ตาย
+                        Defeated
                       </span>
                     )}
                   </div>
@@ -360,8 +360,8 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
             {/* Potion Slots (5 slots) */}
             <div>
               <div className="text-[10px] font-black uppercase text-amber-400/80 mb-1 flex items-center justify-between">
-                <span>🧪 กระเป๋ายา ({player.potions.length}/5)</span>
-                {player.potions.length > 0 && (
+                <span>🧪 กระเป๋ายา ({(player.potions || []).length}/5)</span>
+                {(player.potions || []).length > 0 && (
                   <button
                     onClick={() => onDispatch({ type: "ADMIN_REMOVE_ITEM", playerIndex: selectedHouseIdx, itemType: "clear_potions" })}
                     className="text-[9px] text-red-400 hover:text-red-300"
@@ -372,7 +372,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
               </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {Array.from({ length: 5 }).map((_, slotIdx) => {
-                  const potId = player.potions[slotIdx];
+                  const potId = (player.potions || [])[slotIdx];
                   const pot = potId ? POTIONS[potId] : null;
                   return (
                     <div
@@ -416,8 +416,8 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
             {/* Skill Slots (2 slots) */}
             <div>
               <div className="text-[10px] font-black uppercase text-amber-400/80 mb-1 flex items-center justify-between">
-                <span>✨ คาถาประจำบ้าน ({player.skills.length}/2)</span>
-                {player.skills.length > 0 && (
+                <span>✨ คาถาประจำบ้าน ({(player.skills || []).length}/2)</span>
+                {(player.skills || []).length > 0 && (
                   <button
                     onClick={() => onDispatch({ type: "ADMIN_REMOVE_ITEM", playerIndex: selectedHouseIdx, itemType: "clear_skills" })}
                     className="text-[9px] text-red-400 hover:text-red-300"
@@ -428,7 +428,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {Array.from({ length: 2 }).map((_, slotIdx) => {
-                  const skillId = player.skills[slotIdx];
+                  const skillId = (player.skills || [])[slotIdx];
                   const skill = skillId ? SKILLS[skillId] : null;
                   return (
                     <div
@@ -566,12 +566,12 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                       {[
-                        { label: "Standard (+10g/3s)", amt: 10, sec: 3 },
-                        { label: "Fast (+20g/3s)", amt: 20, sec: 3 },
-                        { label: "Turbo (+50g/2s)", amt: 50, sec: 2 },
-                        { label: "Ultra (+100g/1s)", amt: 100, sec: 1 },
+                        { label: "Standard (+90g/10s)", amt: 90, sec: 10 },
+                        { label: "Fast (+150g/5s)", amt: 150, sec: 5 },
+                        { label: "Turbo (+200g/2s)", amt: 200, sec: 2 },
+                        { label: "Ultra (+300g/1s)", amt: 300, sec: 1 },
                       ].map((p) => {
-                        const isCurrent = (state?.autoGoldAmount ?? 10) === p.amt && (state?.autoGoldInterval ?? 3) === p.sec;
+                        const isCurrent = (state?.autoGoldAmount ?? 90) === p.amt && (state?.autoGoldInterval ?? 10) === p.sec;
                         return (
                           <button
                             key={p.label}
@@ -905,7 +905,7 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                         className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs transition-all hover:scale-105 shadow-md flex items-center justify-center gap-2 border border-emerald-300"
                       >
                         <span>🌟</span>
-                        <span>เสกป้าย Bingo ให้ผู้เล่นทุกบ้าน (All Houses)</span>
+                        <span>Grant Bingo Card to All Houses</span>
                       </button>
                     </div>
                   </div>
@@ -930,11 +930,11 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                   }}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all hover:scale-105"
                 >
-                  ยืนยันการตั้งค่า & สุ่มทอยเต๋าจัดลำดับ -&gt;
+                  Confirm Setup & Roll Initiative -&gt;
                 </button>
               ) : (
                 <div className="text-[11px] text-white/50 font-semibold">
-                  แอดมินสายเปย์ Pay To Win System Active
+                  Admin System Active
                 </div>
               )}
             </div>
@@ -1000,7 +1000,7 @@ function ItemGrantCard({ icon, img, title, desc, stats, badge, badgeColor, onGra
         onClick={onGrant}
         className="mt-2 w-full py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 text-amber-300 font-black text-xs transition-all flex items-center justify-center gap-1 active:scale-95"
       >
-        <span>⚡</span> เปย์ให้บ้านนี้ (Grant)
+        <span>⚡</span> Grant to House
       </button>
     </div>
   );

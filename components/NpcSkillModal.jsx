@@ -38,7 +38,7 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
             </div>
           </div>
           <span className="text-xs font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-3 py-1 rounded-full shrink-0">
-            สกิลเต็ม {player.skills.length} สกิล
+            สกิลเต็ม {(player.skills || []).length} สกิล
           </span>
         </div>
 
@@ -75,7 +75,7 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
             เลือกสกิลเดิม 1 สกิลที่จะให้ NPC สลับแทนที่:
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {player.skills.map((rawSkill) => {
+            {(player.skills || []).map((rawSkill) => {
               const skillId = typeof rawSkill === "string" ? rawSkill : rawSkill?.id;
               const skill = SKILLS[skillId] || (typeof rawSkill === "object" ? rawSkill : null);
               if (!skill) return null;

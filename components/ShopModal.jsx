@@ -208,7 +208,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
                       gold={player.gold}
                       icon={null}
                       img={pot.image}
-                      disabled={player.potions.length >= 5}
+                      disabled={(player.potions || []).length >= 5}
                       onBuy={() => onBuy("potion", id)}
                       itemData={{
                         ...pot,
@@ -219,7 +219,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
 
               {activeCategory === "skills" &&
                 SKILL_LIST.map((skill) => {
-                  const owned = player.skills.includes(skill.id);
+                  const owned = (player.skills || []).includes(skill.id);
                   return (
                     <ShopShelfCard
                       key={skill.id}
@@ -310,10 +310,10 @@ export default function ShopModal({ player, onBuy, onClose }) {
 
           <div className="grid grid-cols-3 gap-1.5 text-[10px] text-white/70 font-semibold text-center">
             <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
-              🧪 ยา: <span className="text-amber-400 font-bold">{player.potions.length}/5</span>
+              🧪 ยา: <span className="text-amber-400 font-bold">{(player.potions || []).length}/5</span>
             </div>
             <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
-              ✨ คาถา: <span className="text-purple-400 font-bold">{player.skills.length}/2</span>
+              ✨ คาถา: <span className="text-purple-400 font-bold">{(player.skills || []).length}/2</span>
             </div>
             <div className="bg-slate-950/40 p-1.5 rounded-lg border border-white/5 truncate">
               🎯 บิงโก: <span className="text-amber-400 font-bold">{player.hasBingoCard ? "มีแล้ว" : "ไม่มี"}</span>

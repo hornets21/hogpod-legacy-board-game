@@ -8,8 +8,8 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
   const [progress, setProgress] = useState(0);
 
   const enabled = state?.autoGoldEnabled ?? true;
-  const amount = state?.autoGoldAmount ?? 10;
-  const interval = state?.autoGoldInterval ?? 3;
+  const amount = state?.autoGoldAmount ?? 90;
+  const interval = state?.autoGoldInterval ?? 10;
 
   // Progress bar animation loop synced with tick interval
   useEffect(() => {
@@ -36,10 +36,10 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
   }
 
   const presets = [
-    { label: "Standard MOBA", amount: 10, interval: 3, icon: "⚔️", desc: "+10g ทุก 3 วินาที (มาตรฐาน MOBA)" },
-    { label: "Turbo MOBA", amount: 50, interval: 2, icon: "⚡", desc: "+50g ทุก 2 วินาที (สายฟาร์มไว)" },
-    { label: "Ultra Speed", amount: 100, interval: 1, icon: "🏎️", desc: "+100g ทุก 1 วินาที (สายรวยลัด)" },
-    { label: "Casual", amount: 10, interval: 5, icon: "🐢", desc: "+10g ทุก 5 วินาที (สายชิลล์)" },
+    { label: "Standard MOBA", amount: 90, interval: 10, icon: "⚔️", desc: "+90g every 10s" },
+    { label: "Turbo MOBA", amount: 150, interval: 5, icon: "⚡", desc: "+150g every 5s" },
+    { label: "Ultra Speed", amount: 200, interval: 2, icon: "🏎️", desc: "+200g every 2s" },
+    { label: "Casual", amount: 50, interval: 15, icon: "🐢", desc: "+50g every 15s" },
   ];
 
   return (
@@ -52,7 +52,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
             ? "bg-slate-950/90 border-amber-500/50 hover:border-amber-400 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.25)]"
             : "bg-slate-950/70 border-white/15 text-slate-400 opacity-70 hover:opacity-100"
         }`}
-        title="คลิกเพื่อตั้งค่าระบบเพิ่มเงินอัตโนมัติแบบ MOBA"
+        title="Configure MOBA Auto Gold settings"
       >
         {/* Glowing Gold Icon */}
         <div className={`relative flex items-center justify-center w-7 h-7 rounded-xl ${enabled ? "bg-amber-500/20 text-amber-400 animate-pulse" : "bg-white/5 text-slate-400"}`}>
@@ -62,7 +62,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
         {/* Info label */}
         <div className="text-left leading-none">
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-amber-400/90">
-            <span>MOBA AUTO GOLD</span>
+            <span>MOBA GOLD</span>
             <span className={`w-1.5 h-1.5 rounded-full ${enabled ? "bg-emerald-400 animate-ping" : "bg-red-500"}`} />
           </div>
           <div className="text-xs font-black tracking-tight text-white mt-0.5">
@@ -72,7 +72,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
                 <span className="text-white/60 font-semibold text-[10px]"> / {interval}s</span>
               </>
             ) : (
-              <span className="text-slate-400">ปิดใช้งาน</span>
+              <span className="text-slate-400">Disabled</span>
             )}
           </div>
         </div>
@@ -105,9 +105,9 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
                 <span className="text-lg">💰</span>
                 <div>
                   <h4 className="font-black text-xs text-amber-400 uppercase tracking-wider">
-                    ตั้งค่า MOBA Auto Gold
+                    MOBA Auto Gold Settings
                   </h4>
-                  <p className="text-[10px] text-white/50">แจกเงินทองอัตโนมัติตามระยะเวลา (Passive Income)</p>
+                  <p className="text-[10px] text-white/50">Passive gold income over time</p>
                 </div>
               </div>
               <button
@@ -120,7 +120,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
 
             {/* Toggle On/Off Switch */}
             <div className="flex items-center justify-between bg-black/40 border border-white/10 p-2.5 rounded-2xl mb-3">
-              <span className="text-xs font-bold text-slate-200">เปิดระบบแจกเงินอัตโนมัติ</span>
+              <span className="text-xs font-bold text-slate-200">Enable Auto Gold</span>
               <button
                 onClick={() => onDispatch({ type: "TOGGLE_AUTO_GOLD" })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -137,7 +137,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
 
             {/* Presets List */}
             <div className="space-y-2 mb-3">
-              <div className="text-[10px] font-black uppercase text-amber-400/80">⚡ รูปแบบความเร็ว (Presets)</div>
+              <div className="text-[10px] font-black uppercase text-amber-400/80">Speed Presets</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {presets.map((p) => {
                   const isActive = enabled && amount === p.amount && interval === p.interval;
@@ -173,7 +173,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
             {/* Custom Sliders / Controls */}
             <div className="bg-black/40 border border-white/10 p-3 rounded-2xl space-y-2.5 mb-3">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-bold">จำนวนเงิน (+Gold):</span>
+                <span className="text-slate-300 font-bold">Gold Amount:</span>
                 <span className="text-amber-400 font-black">+{amount} Gold</span>
               </div>
               <input
@@ -192,8 +192,8 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
               />
 
               <div className="flex justify-between items-center text-xs pt-1">
-                <span className="text-slate-300 font-bold">ระยะเวลา (Interval):</span>
-                <span className="text-cyan-300 font-black">ทุกๆ {interval} วินาที</span>
+                <span className="text-slate-300 font-bold">Interval:</span>
+                <span className="text-cyan-300 font-black">Every {interval} seconds</span>
               </div>
               <input
                 type="range"
@@ -216,7 +216,7 @@ export default function MobaAutoGoldWidget({ state, onDispatch }) {
               onClick={() => onDispatch({ type: "TRIGGER_GOLD_RAIN" })}
               className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all"
             >
-              <span>🌧️</span> ⚡ ฝนเงิน MOBA! (แจก +1,000 Gold ทุกบ้านทันที)
+              <span>🌧️</span> Trigger Gold Rain (+1,000 Gold to All Houses)
             </button>
           </motion.div>
         )}

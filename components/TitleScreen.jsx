@@ -1,6 +1,6 @@
 "use client";
 
-export default function TitleScreen({ onStartNewGame }) {
+export default function TitleScreen({ onStartNewGame, onPlayOnline }) {
   return (
     <main className="fixed inset-0 z-50 overflow-hidden bg-[#050407] text-white select-none">
       <div className="absolute inset-0 bg-[#050407]">
@@ -34,12 +34,23 @@ export default function TitleScreen({ onStartNewGame }) {
             <button
               type="button"
               onClick={onStartNewGame}
-              className="group flex items-center gap-4 text-left text-[clamp(1.65rem,3vw,2.5rem)] font-black leading-none tracking-wide text-white transition-transform hover:translate-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c75c] focus-visible:ring-offset-4 focus-visible:ring-offset-[#050407]"
+              className="group flex items-center gap-4 text-left text-[clamp(1.5rem,2.8vw,2.25rem)] font-black leading-none tracking-wide text-white transition-transform hover:translate-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c75c] focus-visible:ring-offset-4 focus-visible:ring-offset-[#050407]"
             >
               <span className="text-[#e51b4b] transition-transform group-hover:rotate-45" aria-hidden="true">
                 ✦
               </span>
-              <span className="drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]">START GAME</span>
+              <span className="drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]">Local Game</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onPlayOnline}
+              className="group flex items-center gap-4 text-left text-[clamp(1.5rem,2.8vw,2.25rem)] font-black leading-none tracking-wide text-[#f2c75c] transition-transform hover:translate-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c75c] focus-visible:ring-offset-4 focus-visible:ring-offset-[#050407]"
+            >
+              <span className="text-[#f2c75c] transition-transform group-hover:rotate-45" aria-hidden="true">
+                ✦
+              </span>
+              <span className="drop-shadow-[0_0_12px_rgba(242,199,92,0.45)]">Online Multiplayer</span>
             </button>
           </nav>
 

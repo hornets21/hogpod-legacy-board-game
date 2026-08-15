@@ -1,7 +1,8 @@
 "use client";
 
-export default function GameLog({ log, collapsed, onToggleCollapse }) {
-  const recent = [...log].reverse().slice(0, 40);
+export default function GameLog({ log, logs, collapsed = false, onToggleCollapse }) {
+  const rawList = Array.isArray(log) ? log : Array.isArray(logs) ? logs : [];
+  const recent = [...rawList].reverse().slice(0, 40);
   const latest = recent[0];
 
   // โหมดพับ: แถบแนวตั้งบางๆ

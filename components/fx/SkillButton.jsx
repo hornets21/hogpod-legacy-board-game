@@ -71,6 +71,8 @@ export default function SkillButton({
             ? "border-white/10 bg-black/50 text-white/40 cursor-not-allowed"
             : selected
             ? "border-amber-300 bg-amber-500/30 text-amber-100 ring-2 ring-amber-400/60 shadow-md"
+            : disabled
+            ? "border-white/10 bg-slate-900/80 text-white/40 cursor-not-allowed opacity-60"
             : "border-purple-500/50 bg-purple-950/40 text-purple-200 hover:border-purple-300 hover:bg-purple-900/60 cursor-pointer"
           : "border-white/5 bg-black/30 text-white/10 cursor-not-allowed"
       }`}

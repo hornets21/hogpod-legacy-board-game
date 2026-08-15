@@ -34,11 +34,11 @@ export default function NpcSpawnWidget({ state }) {
             ? "bg-slate-950/90 border-blue-500/50 hover:border-blue-400 text-blue-200 shadow-[0_0_20px_rgba(59,130,246,0.25)]"
             : "bg-slate-950/80 border-amber-500/40 text-amber-300 hover:border-amber-400"
         }`}
-        title="คลิกเพื่อดูตัวจับเวลาและตำแหน่งของ NPC บนกระดาน"
+        title="Click to view NPC respawn timers and board locations"
       >
         <div className="flex items-center gap-1 text-sm font-black">
           <span className="text-base animate-bounce">🤖</span>
-          <span className="hidden sm:inline text-xs font-bold text-slate-300">NPC SPAWN:</span>
+          <span className="hidden sm:inline text-xs font-bold text-slate-300">NPC:</span>
         </div>
 
         {/* Individual NPC Status Badges */}
@@ -60,7 +60,7 @@ export default function NpcSpawnWidget({ state }) {
               >
                 <span>{npc.emoji}</span>
                 {isSpawned ? (
-                  <span className="text-emerald-400">ช่อง {cell}</span>
+                  <span className="text-emerald-400">Cell {cell}</span>
                 ) : (
                   <span className="font-mono text-amber-300">{formatTime(cd)}</span>
                 )}
@@ -92,8 +92,8 @@ export default function NpcSpawnWidget({ state }) {
                 <div className="flex items-center gap-2">
                   <span className="text-xl">⏱️</span>
                   <div>
-                    <h3 className="font-black text-sm text-blue-300">ตัวจับเวลา & ตำแหน่ง NPC</h3>
-                    <p className="text-[10px] text-slate-400">NPC แต่ละตัวมีคูลดาวน์เกิดใหม่ทุก 3 นาที (180s)</p>
+                    <h3 className="font-black text-sm text-blue-300">NPC Respawn Timers</h3>
+                    <p className="text-[10px] text-slate-400">Each NPC respawns every 90 seconds</p>
                   </div>
                 </div>
                 <button
@@ -141,11 +141,11 @@ export default function NpcSpawnWidget({ state }) {
                           {/* Status Pill */}
                           {isSpawned ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-black text-[10px] shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-pulse">
-                              🟢 อยู่ที่ช่อง {cell}
+                              🟢 At Cell {cell}
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-300 font-black text-[10px]">
-                              ⏳ เกิดใน {formatTime(cd)}
+                              ⏳ Spawns in {formatTime(cd)}
                             </span>
                           )}
                         </div>
@@ -161,7 +161,7 @@ export default function NpcSpawnWidget({ state }) {
 
               {/* Bottom Tip */}
               <div className="pt-1 text-center text-[10px] text-slate-400 border-t border-white/5">
-                💡 เมื่อเดินตกช่อง NPC จะได้รับไอเท็ม/สกิล และ NPC จะเริ่มนับคูลดาวน์ใหม่ทันที
+                💡 Landing on an NPC grants items or skills and restarts their cooldown timer
               </div>
             </motion.div>
           </>

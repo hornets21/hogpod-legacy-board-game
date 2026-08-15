@@ -110,11 +110,11 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
   ];
 
   // Potion inventory slots (5 slots)
-  const potionSlots = Array.from({ length: 5 }, (_, i) => player.potions[i] || null);
+  const potionSlots = Array.from({ length: 5 }, (_, i) => (player.potions || [])[i] || null);
 
   // Skill inventory slots (2 slots)
   const skillSlots = Array.from({ length: 2 }, (_, i) => {
-    const s = player.skills[i];
+    const s = (player.skills || [])[i];
     return typeof s === "object" ? s?.id : s;
   });
 
@@ -147,19 +147,49 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
         </div>
       ) : null}
 
-      {/* Header: Crest, Name, Position & Expand Toggle */}
+      {/* Header: Crest / Profile Avatar, Name, Position & Expand Toggle */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer" onClick={() => setIsExpanded((e) => !e)}>
-          <div className="w-9 h-9 rounded-xl border-2 overflow-hidden bg-black flex-shrink-0 shadow-md" style={{ borderColor: player.color }}>
+          <div className="w-9 h-9 rounded-xl border-2 overflow-hidden bg-black flex-shrink-0 shadow-md relative" style={{ borderColor: player.color }}>
+            {player._onlineAvatar ? (
+              <img
+                src={player._onlineAvatar}
+                alt={player._onlineName || player.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.nextElementSibling;
+                  if (fallback) fallback.style.display = "flex";
+                }}
+              />
+            ) : null}
             {player.image ? (
-              <img src={player.image} alt={player.name} className="w-full h-full object-cover" />
+              <img
+                src={player.image}
+                alt={player.name}
+                className={`w-full h-full object-cover ${player._onlineAvatar ? "hidden" : ""}`}
+              />
             ) : (
-              <span className="text-xl flex items-center justify-center h-full">{player.emoji}</span>
+              <span className={`text-xl flex items-center justify-center h-full ${player._onlineAvatar ? "hidden" : ""}`}>
+                {player.emoji}
+              </span>
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="font-black text-white text-xs truncate flex items-center gap-1">
-              <span>{player.name}</span>
+            <h3 className="font-black text-white text-xs truncate flex items-center gap-1.5">
+              <span className="truncate">{player._onlineName || player.name}</span>
+              {player._onlineName && (
+                <span
+                  className="text-[8px] font-bold px-1.5 py-0.2 rounded border shrink-0"
+                  style={{
+                    backgroundColor: `${player.color || "#f59e0b"}20`,
+                    borderColor: `${player.color || "#f59e0b"}60`,
+                    color: player.color || "#f59e0b",
+                  }}
+                >
+                  {player.name}
+                </span>
+              )}
             </h3>
             <p className="text-[9px] text-white/50 font-bold truncate">#{player.position} · HP {Math.max(0, player.hp)}/{player.maxHp}</p>
           </div>
@@ -188,7 +218,9 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-black text-xs text-white truncate max-w-[100px]">{player.name}</span>
+              <span className="font-black text-xs text-white truncate max-w-[120px]">
+                {player._onlineName || player.name}
+              </span>
               {isActive && (
                 <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-500 text-black animate-pulse">
                   เทิร์นนี้
@@ -282,7 +314,7 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
           {/* Potion Pouch Slots */}
           <div>
             <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-wider text-white/40 mb-1">
-              <span>🧪 กระเป๋ายา ({player.potions.length}/5)</span>
+              <span>🧪 กระเป๋ายา ({(player.potions || []).length}/5)</span>
             </div>
             <div className="grid grid-cols-5 gap-1">
               {potionSlots.map((potId, idx) => {

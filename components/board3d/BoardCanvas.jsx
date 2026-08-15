@@ -336,6 +336,7 @@ export default function BoardCanvas({
   resetDiceKey,
   focusCell = null,
   isCombatActive = false,
+  onMoveComplete,
 }) {
   const [hoverInfo, setHoverInfo] = useState(null);
   const hoverLines = describeHover(hoverInfo);
@@ -376,6 +377,7 @@ export default function BoardCanvas({
             players={players}
             currentPlayerIndex={currentPlayerIndex}
             phase={phase}
+            onMoveComplete={onMoveComplete}
           />
           {/* Skill VFX Layer — spawn 3D effect ตอนร่ายสกิล / โดนดาเมจ */}
           <SkillFxLayer
