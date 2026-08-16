@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getTotalDmg } from "@/lib/gameEngine";
 
 export default function WheelOfFate({ monster, player, onSpinComplete }) {
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [spunResult, setSpunResult] = useState(null);
+
+  const onSpinCompleteRef = useRef(onSpinComplete);
+  onSpinCompleteRef.current = onSpinComplete;
+  const isBot = Boolean(player?.isBot);
 
   const playerDmg = getTotalDmg(player);
   const playerHp = Math.max(1, player?.hp || 1);
@@ -23,7 +27,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.50));
         return { hp, dmg };
       },
-      color: "#22c55e",
+      color: "#15803d",
       text: "มอนสเตอร์สุ่มได้สเตตัสระดับง่าย (Easy Roll) — พลังและเลือดลดลง 50%!",
     },
     {
@@ -33,7 +37,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.75));
         return { hp, dmg };
       },
-      color: "#3b82f6",
+      color: "#3730a3",
       text: "มอนสเตอร์สุ่มได้สเตตัสสมดุล (Balanced Roll) — พลังและเลือดลดลง 25%",
     },
     {
@@ -43,7 +47,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.20));
         return { hp, dmg };
       },
-      color: "#eab308",
+      color: "#a16207",
       text: "มอนสเตอร์สุ่มได้ สายโจมตีรุนแรง! (Glass Cannon) — ดาเมจสูงขึ้น เลือดลดลง 50%",
     },
     {
@@ -53,7 +57,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 0.60));
         return { hp, dmg };
       },
-      color: "#a855f7",
+      color: "#7e22ce",
       text: "มอนสเตอร์สุ่มได้ สายถึกทน! (Tank Roll) — เลือดอึดขึ้น 20% ดาเมจลดลง",
     },
     {
@@ -63,7 +67,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.10));
         return { hp, dmg };
       },
-      color: "#f97316",
+      color: "#c2410c",
       text: "มอนสเตอร์สุ่มได้สเตตัสยาก! (Hard Roll) — เลือดและดาเมจเพิ่มขึ้น 10%",
     },
     {
@@ -73,10 +77,14 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         const dmg = Math.max(1, Math.round(baseMonsterDmg * 1.30));
         return { hp, dmg };
       },
-      color: "#ef4444",
+      color: "#b91c1c",
       text: "มอนสเตอร์สุ่มได้สเตตัสคลั่ง! (Lethal Roll) — เลือดและดาเมจเพิ่มขึ้น 30%!",
     },
   ];
+  const segmentDegree = 360 / segments.length;
+  const wheelBackground = `conic-gradient(${segments
+    .map((seg, idx) => `${seg.color} ${idx * segmentDegree}deg ${(idx + 1) * segmentDegree}deg`)
+    .join(", ")})`;
 
   function spinWheel() {
     if (spinning || spunResult) return;
@@ -84,8 +92,8 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
     setSpinning(true);
     // Random spin: 5 to 10 full turns + random segment angle
     const selectedIndex = Math.floor(Math.random() * segments.length);
-    const segmentDegree = 360 / segments.length;
-    const targetDegree = 360 * 5 + (360 - selectedIndex * segmentDegree - segmentDegree / 2);
+    const segDegree = 360 / segments.length;
+    const targetDegree = 360 * 5 + (360 - selectedIndex * segDegree - segDegree / 2);
 
     setRotation(targetDegree);
 
@@ -114,18 +122,41 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         damageDealt,
         remainingMonsterHp,
       });
-    }, 4000);
+    }, 4500);
   }
+
+  // Auto-spin for bot (or when viewer is spectating another player's fight)
+  useEffect(() => {
+    const isViewer = typeof onSpinComplete !== "function";
+    if ((isBot || isViewer) && !spinning && !spunResult) {
+      const timer = setTimeout(() => {
+        spinWheel();
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [isBot, spinning, spunResult, typeof onSpinComplete]);
+
+  // Auto-confirm result for bot after displaying victory/defeat banner (3.5s)
+  useEffect(() => {
+    if (spunResult && isBot) {
+      const timer = setTimeout(() => {
+        handleConfirmResult();
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [spunResult, isBot]);
 
   // Auto-resolve safety timer after spin result is ready
   const handleConfirmResult = () => {
     if (!spunResult) return;
-    onSpinComplete({
-      outcome: spunResult.outcome,
-      spunDmg: spunResult.dmg,
-      spunHp: spunResult.hp,
-      text: spunResult.text,
-    });
+    if (typeof onSpinCompleteRef.current === "function") {
+      onSpinCompleteRef.current({
+        outcome: spunResult.outcome,
+        spunDmg: spunResult.dmg,
+        spunHp: spunResult.hp,
+        text: spunResult.text,
+      });
+    }
   };
 
   return (
@@ -152,7 +183,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
             <div className="text-[10px] font-black text-amber-300 mt-1 flex justify-center gap-3 bg-black/50 py-1 px-3 rounded-lg border border-white/10">
               <span>พลังโจมตีผู้เล่น: {spunResult.playerDmg}</span>
               <span>VS</span>
-              <span>เกณฑ์สุ่มวงล้อ: DMG {spunResult.dmg} | HP {spunResult.hp}</span>
+              <span>สวนกลับ DMG {spunResult.dmg} | ต้องมี WIN DMG {spunResult.hp}</span>
             </div>
           </div>
 
@@ -178,7 +209,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
       )}
 
       {/* Magic Wheel (Compact Responsive Size to fit within 1 screen) */}
-      <div className="relative w-48 h-48 sm:w-52 sm:h-52 md:w-56 md:h-56 flex items-center justify-center p-2 my-1">
+      <div className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 flex items-center justify-center p-2 my-2">
         {/* Outer Runic Magic Aura Rings */}
         <div className="absolute inset-0 rounded-full border-2 border-amber-400/40 shadow-[0_0_25px_rgba(245,158,11,0.3)] pointer-events-none" />
         <div className="absolute inset-1.5 rounded-full border border-purple-500/30 pointer-events-none" />
@@ -192,10 +223,11 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
 
         {/* The Magic Wheel */}
         <div
-          className="w-full h-full rounded-full border-4 border-amber-400/80 relative overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.3),inset_0_0_25px_rgba(0,0,0,0.8)]"
+          className="w-full h-full rounded-full border-4 border-amber-400/80 relative overflow-hidden bg-transparent shadow-[0_0_30px_rgba(245,158,11,0.3)]"
           style={{
+            background: wheelBackground,
             transform: `rotate(${rotation}deg)`,
-            transition: spinning ? "transform 4s cubic-bezier(0.15, 0.9, 0.2, 1)" : "none",
+            transition: spinning ? "transform 4.5s cubic-bezier(0.15, 0.9, 0.2, 1)" : "none",
           }}
         >
           {segments.map((seg, idx) => {
@@ -203,18 +235,20 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
             return (
               <div
                 key={idx}
-                className="absolute w-1/2 h-1/2 top-0 right-0 origin-bottom-left flex items-center justify-center p-1.5 text-[9px] font-black text-white select-none border border-black/40 shadow-inner"
+                className="absolute w-1/2 h-1/2 top-0 right-0 origin-bottom-left flex items-center justify-center p-2 text-[10px] sm:text-[11px] font-black text-white select-none border border-white/30"
                 style={{
-                  backgroundColor: seg.color,
+                  backgroundColor: "transparent",
                   transform: `rotate(${angle}deg)`,
                   clipPath: "polygon(0 0, 100% 0, 0 100%)",
-                  backgroundImage: "radial-gradient(circle at 70% 30%, rgba(255,255,255,0.25), transparent 70%)",
+                  backgroundImage: "none",
                 }}
               >
                 <span
-                  className="transform -rotate-45 translate-x-1.5 -translate-y-1.5 text-center leading-tight font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] tracking-tighter"
+                  className="transform -rotate-45 translate-x-1.5 -translate-y-1.5 px-1 text-center leading-[1.05] font-sans font-bold text-white tracking-tight"
+                  style={{ textShadow: "0 2px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)" }}
                 >
-                  {seg.label}
+                  <span className="block text-[9px] sm:text-[10px]">DMG {seg.getStats().dmg}</span>
+                  <span className="block text-[9px] sm:text-[10px]">WIN {seg.getStats().hp}</span>
                 </span>
               </div>
             );
@@ -224,18 +258,18 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         {/* Center Orb (Spin Trigger or Arcane Core Crystal) */}
         {!spunResult && (
           <button
-            onClick={onSpinComplete ? spinWheel : undefined}
-            disabled={spinning || !onSpinComplete}
+            onClick={onSpinComplete || isBot ? spinWheel : undefined}
+            disabled={spinning || (!onSpinComplete && !isBot)}
             className={`absolute w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 via-purple-600 to-indigo-900 border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.8)] flex items-center justify-center z-20 transition-transform ${
               spinning
                 ? "opacity-80 cursor-wait"
-                : !onSpinComplete
+                : !onSpinComplete && !isBot
                 ? "opacity-70 cursor-not-allowed"
                 : "hover:scale-110 cursor-pointer active:scale-95"
             }`}
           >
             <div className="w-9 h-9 rounded-full bg-amber-400/30 border border-white/60 animate-pulse flex items-center justify-center text-amber-200 font-black text-[10px] uppercase tracking-tighter shadow-inner text-center">
-              {spinning ? "SPIN..." : !onSpinComplete ? "WATCH" : "SPIN"}
+              {spinning ? "SPIN..." : isBot ? "BOT" : !onSpinComplete ? "WATCH" : "SPIN"}
             </div>
           </button>
         )}
@@ -244,10 +278,10 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
       {/* Main Spin Button below wheel (if not spun) */}
       {!spunResult && (
         <button
-          onClick={onSpinComplete ? spinWheel : undefined}
-          disabled={spinning || !onSpinComplete}
+          onClick={onSpinComplete || isBot ? spinWheel : undefined}
+          disabled={spinning || (!onSpinComplete && !isBot)}
           className={`mt-2 w-full py-2.5 px-6 rounded-xl font-black text-xs text-white shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-300/60 transition-all duration-200 tracking-wider uppercase ${
-            spinning || !onSpinComplete
+            spinning || (!onSpinComplete && !isBot)
               ? "bg-slate-800 opacity-60 cursor-not-allowed border-purple-500/30"
               : "bg-gradient-to-r from-purple-700 via-amber-500 to-indigo-700 hover:brightness-110 active:scale-95"
           }`}
@@ -255,6 +289,8 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
           <span className="flex items-center justify-center gap-2">
             {spinning ? (
               <span>Determining Monster Power...</span>
+            ) : isBot ? (
+              <span>Bot Rolling Wheel of Fate...</span>
             ) : !onSpinComplete ? (
               <span>Watching Battle...</span>
             ) : (
@@ -266,4 +302,3 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
     </div>
   );
 }
-

@@ -31,10 +31,38 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
     })
     .filter(Boolean);
 
-  const hasControlledFighter = participants.some(
-    (p) => myPlayerIndex != null && myPlayerIndex >= 0 && p.playerIndex === myPlayerIndex
+  const isOnline = myPlayerIndex !== undefined;
+  const isSpectator = isOnline && (myPlayerIndex == null || myPlayerIndex < 0);
+  const hasControlledFighter = !isSpectator && participants.some(
+    (p) => (isOnline ? p.playerIndex === myPlayerIndex : !p.isBot)
   );
   const isAllBots = participants.length > 0 && participants.every((p) => p.isBot);
+
+  const playersRef = useRef(players);
+  playersRef.current = players;
+  const participantsRef = useRef(participants);
+  participantsRef.current = participants;
+  const selectedSkillsRef = useRef(selectedSkills);
+  selectedSkillsRef.current = selectedSkills;
+  const selectedPotionsRef = useRef(selectedPotions);
+  selectedPotionsRef.current = selectedPotions;
+  const selectedTargetsRef = useRef(selectedTargets);
+  selectedTargetsRef.current = selectedTargets;
+  const selectedAlliancesRef = useRef(selectedAlliances);
+  selectedAlliancesRef.current = selectedAlliances;
+  const onPvpActionRef = useRef(onPvpAction);
+  onPvpActionRef.current = onPvpAction;
+  const hasStartedClashRef = useRef(false);
+  const hasResolvedRef = useRef(false);
+
+  // Reset encounter state when cell changes
+  useEffect(() => {
+    hasStartedClashRef.current = false;
+    hasResolvedRef.current = false;
+    setClashResult(null);
+    setAutoStartCountdown(null);
+    setAutoReturnCountdown(null);
+  }, [cell]);
 
   // Auto-select ready skills and potions for bot participants
   useEffect(() => {
@@ -45,7 +73,13 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
           const readySkillId = p.skills.find((skId) => {
             const sk = SKILLS[skId];
             const cd = p.skillCooldowns?.[skId] || 0;
-            return sk && cd <= 0 && sk.requiresTarget !== "monster";
+            return (
+              sk &&
+              cd <= 0 &&
+              sk.requiresTarget !== "monster" &&
+              sk.effect !== "shuffle_positions" &&
+              sk.id !== "korat_chaos"
+            );
           });
           if (readySkillId) {
             setSelectedSkills((prev) => ({ ...prev, [p.houseId]: prev[p.houseId] || readySkillId }));
@@ -102,7 +136,17 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
 
   // ─── START PVP CLASH CALCULATION ──────────────────────────────
   const handleStartClash = useCallback(() => {
-    let updatedPlayers = [...players];
+    if (hasStartedClashRef.current) return;
+    hasStartedClashRef.current = true;
+
+    const currentPlayers = playersRef.current || [];
+    const currentParticipants = participantsRef.current || [];
+    const currentSkills = selectedSkillsRef.current || {};
+    const currentPotions = selectedPotionsRef.current || {};
+    const currentTargets = selectedTargetsRef.current || {};
+    const currentAlliances = selectedAlliancesRef.current || {};
+
+    let updatedPlayers = [...currentPlayers];
     let logEntries = [];
     let houseClashData = {};
     const directAttacks = [];
@@ -111,7 +155,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
     logEntries.push(`⚔️ PvP Arena battle commenced at cell #${cell}!`);
 
     // 1. Process potions & skills
-    participants.forEach((p) => {
+    currentParticipants.forEach((p) => {
       const hId = p.houseId;
       let playerObj = { ...updatedPlayers[p.playerIndex] };
       let skillBonusDmg = 0;
@@ -119,7 +163,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
 
       if (!playerObj || !playerObj.houseId) return;
 
-      const potionId = selectedPotions[hId];
+      const potionId = currentPotions[hId];
       const potion = potionId ? POTIONS[potionId] : null;
       const potionIndex = potionId ? playerObj.potions?.indexOf(potionId) : -1;
       if (potion && !potion.isTrap && potionId !== "revive" && potionIndex >= 0) {
@@ -143,11 +187,11 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
       }
 
       // House Spell
-      const skId = selectedSkills[hId];
+      const skId = currentSkills[hId];
       const sk = skId ? SKILLS[skId] : null;
       const skillReady = sk && playerObj.skills?.includes(skId) && (playerObj.skillCooldowns?.[skId] || 0) <= 0;
-      const targetIndex = selectedTargets[hId];
-      const targetIsParticipant = participants.some((participant) => participant.playerIndex === targetIndex);
+      const targetIndex = currentTargets[hId];
+      const targetIsParticipant = currentParticipants.some((participant) => participant.playerIndex === targetIndex);
       if (skillReady && sk.requiresTarget === "player" && (!targetIsParticipant || targetIndex === p.playerIndex)) {
         logEntries.push(`🎯 ${playerObj.name} did not specify a valid skill target.`);
       } else if (skillReady && sk.requiresTarget !== "monster") {
@@ -187,20 +231,6 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
             playerObj.potions = [...playerObj.potions, stolenPotion];
             logEntries.push(`🎭 ${playerObj.name} stole a potion from ${target.name}`);
           }
-        } else if (sk.effect === "shuffle_positions") {
-          const positions = participants.map((participant) => updatedPlayers[participant.playerIndex].position);
-          for (let i = positions.length - 1; i > 0; i -= 1) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [positions[i], positions[j]] = [positions[j], positions[i]];
-          }
-          participants.forEach((participant, index) => {
-            updatedPlayers[participant.playerIndex] = {
-              ...updatedPlayers[participant.playerIndex],
-              position: positions[index],
-            };
-          });
-          playerObj.position = updatedPlayers[p.playerIndex].position;
-          logEntries.push(`🌀 ${playerObj.name} shuffled all player positions!`);
         }
       }
 
@@ -215,7 +245,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
         totalPower,
         calcDmg,
         isInvincible: Boolean(playerObj.isInvincible || (skillReady && sk?.effect === "invincible")),
-        allianceWith: selectedAlliances[hId] || null,
+        allianceWith: currentAlliances[hId] || null,
         usedSkillId: skId,
       };
 
@@ -223,13 +253,13 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
     });
 
     // 2. Alliance & Damage Exchange
-    participants.forEach((p) => {
+    currentParticipants.forEach((p) => {
       const hId = p.houseId;
       const pData = houseClashData[hId];
       const playerObj = { ...updatedPlayers[p.playerIndex] };
       let damageTaken = 0;
 
-      participants.forEach((other) => {
+      currentParticipants.forEach((other) => {
         if (other.houseId === hId) return;
         const otherData = houseClashData[other.houseId];
 
@@ -239,7 +269,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
           logEntries.push(`🤝 ${p.name} and ${other.name} formed an alliance! (+15 HP)`);
           playerObj.hp = Math.min(playerObj.maxHp, playerObj.hp + 15);
         } else if (!pData.isInvincible) {
-          const dmgShare = Math.floor(otherData.calcDmg / (participants.length - 1));
+          const dmgShare = Math.floor(otherData.calcDmg / (currentParticipants.length - 1));
           damageTaken += dmgShare;
         }
       });
@@ -264,7 +294,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
 
     // 3. Direct Attack Resolution
     directAttacks.forEach(({ targetIndex, amount, skill }) => {
-      const targetParticipant = participants.find((participant) => participant.playerIndex === targetIndex);
+      const targetParticipant = currentParticipants.find((participant) => participant.playerIndex === targetIndex);
       if (!targetParticipant || houseClashData[targetParticipant.houseId]?.isInvincible) return;
       const target = { ...updatedPlayers[targetIndex] };
       target.hp = Math.max(0, target.hp - amount);
@@ -279,7 +309,7 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
       });
     });
 
-    const hasActiveAlliance = Object.values(selectedAlliances).some(Boolean);
+    const hasActiveAlliance = Object.values(currentAlliances).some(Boolean);
     let highestDmg = -1;
     let winnerName = null;
     let isDraw = false;
@@ -318,58 +348,74 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
       battleSummaryText,
       extraTurnGranted,
     });
-  }, [cell, participants, players, selectedAlliances, selectedPotions, selectedSkills, selectedTargets]);
+  }, [cell]);
 
   const onResolvePvp = useCallback((result) => {
-    if (!result || !onPvpAction) return;
-    onPvpAction({
-      choice: "resolve",
-      updatedPlayers: result.updatedPlayers,
-      logEntries: result.logEntries,
-      extraTurn: result.extraTurnGranted,
-    });
-  }, [onPvpAction]);
-
-  // ── Auto-Start timer for BOT encounters or Spectators (2.5s delay to view stage) ──
-  useEffect(() => {
-    if (clashResult) return undefined;
-
-    if (!hasControlledFighter || isAllBots) {
-      setAutoStartCountdown(3);
-      const interval = setInterval(() => {
-        setAutoStartCountdown((c) => (c != null && c > 1 ? c - 1 : 0));
-      }, 1000);
-
-      const startTimer = setTimeout(() => {
-        handleStartClash();
-      }, 2600);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(startTimer);
-      };
+    if (!result || hasResolvedRef.current) return;
+    hasResolvedRef.current = true;
+    if (onPvpActionRef.current) {
+      onPvpActionRef.current({
+        choice: "resolve",
+        updatedPlayers: result.updatedPlayers,
+        logEntries: result.logEntries,
+        extraTurn: result.extraTurnGranted,
+      });
     }
-    return undefined;
-  }, [clashResult, hasControlledFighter, isAllBots, handleStartClash]);
+  }, []);
 
-  // ── Auto-Resolve countdown after clash (5.5s so players can watch 3D duel) ──
+  // ── Auto-Start timer: 3s for Bot vs Bot, 15s timeout for Human fights ──
   useEffect(() => {
-    if (!clashResult || !onPvpAction) return undefined;
+    if (clashResult || hasStartedClashRef.current) return undefined;
 
-    setAutoReturnCountdown(5);
+    const durationSeconds = (!hasControlledFighter || isAllBots) ? 4 : 18;
+    setAutoStartCountdown(durationSeconds);
+
     const interval = setInterval(() => {
-      setAutoReturnCountdown((c) => (c != null && c > 1 ? c - 1 : 0));
+      setAutoStartCountdown((prev) => {
+        if (prev == null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const startTimer = setTimeout(() => {
+      handleStartClash();
+    }, durationSeconds * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(startTimer);
+    };
+  }, [cell, isAllBots, handleStartClash, !!clashResult]);
+
+  // ── Auto-Resolve countdown after clash (6.5s so players can watch 3D duel) ──
+  useEffect(() => {
+    if (!clashResult) return undefined;
+
+    setAutoReturnCountdown(6);
+    const interval = setInterval(() => {
+      setAutoReturnCountdown((prev) => {
+        if (prev == null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     const resolveTimer = setTimeout(() => {
       onResolvePvp(clashResult);
-    }, 5500);
+    }, 6500);
 
     return () => {
       clearInterval(interval);
       clearTimeout(resolveTimer);
     };
-  }, [clashResult, onPvpAction, onResolvePvp]);
+  }, [!!clashResult, onResolvePvp, clashResult]);
 
   if (participants.length === 0) return null;
 
@@ -400,7 +446,9 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
         <div className="text-[11px] font-black tracking-widest text-amber-300 bg-amber-950/60 border border-amber-500/40 px-3 py-1 rounded-full uppercase shadow-inner">
           {clashResult
             ? (autoReturnCountdown != null ? `Returning in ${autoReturnCountdown}s` : "Duel Finished")
-            : (autoStartCountdown != null ? `Clashing in ${autoStartCountdown}s` : "Select Spells & Alliance")}
+            : (autoStartCountdown != null
+                ? `Clashing in ${autoStartCountdown}s`
+                : (hasControlledFighter ? "Select Spells & Alliance" : "Spectating Duel"))}
         </div>
       </div>
 
@@ -434,8 +482,10 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
         {participants.map((p) => {
           const hId = p.houseId;
           const isSkillSelected = !!selectedSkills[hId];
-          const isMe = myPlayerIndex != null && myPlayerIndex >= 0 && p.playerIndex === myPlayerIndex;
-          const isControlledByMe = myPlayerIndex != null && myPlayerIndex >= 0 ? isMe : true;
+          const isMe = isOnline
+            ? (myPlayerIndex != null && myPlayerIndex >= 0 && p.playerIndex === myPlayerIndex)
+            : !p.isBot;
+          const isControlledByMe = isMe && !p.isBot;
 
           return (
             <div
@@ -503,7 +553,13 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
                             onUse={(id) => isControlledByMe && isReady && handleToggleSkill(hId, id)}
                             size="sm"
                             selected={isSelected}
-                            disabled={!isControlledByMe || !isReady || sk.requiresTarget === "monster"}
+                            disabled={
+                              !isControlledByMe ||
+                              !isReady ||
+                              sk.requiresTarget === "monster" ||
+                              sk.effect === "shuffle_positions" ||
+                              sk.id === "korat_chaos"
+                            }
                           />
                         );
                       })
@@ -618,31 +674,54 @@ export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myP
       {/* ACTION BUTTON & CONTINUE HUB */}
       <div className="relative z-20 flex justify-center pt-2 pointer-events-auto">
         {!clashResult ? (
-          <button
-            type="button"
-            onClick={handleStartClash}
-            className="py-3 px-10 rounded-2xl bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:from-red-500 hover:to-amber-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(239,68,68,0.8)] border-2 border-amber-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-          >
-            <span>⚔️</span>
-            <span>
-              {autoStartCountdown != null
-                ? `Starting Duel (${autoStartCountdown}s)...`
-                : "START DUEL"}
-            </span>
-          </button>
+          hasControlledFighter ? (
+            <button
+              type="button"
+              onClick={handleStartClash}
+              className="py-3 px-10 rounded-2xl bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:from-red-500 hover:to-amber-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(239,68,68,0.8)] border-2 border-amber-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              <span>⚔️</span>
+              <span>START DUEL</span>
+            </button>
+          ) : isAllBots ? (
+            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-purple-500/40 text-purple-200 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
+              <span className="animate-spin">⚡</span>
+              <span>
+                {autoStartCountdown != null
+                  ? `Starting Bot Duel (${autoStartCountdown}s)...`
+                  : "Bots Preparing Duel..."}
+              </span>
+            </div>
+          ) : (
+            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-amber-500/30 text-amber-200/80 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
+              <span>👁️</span>
+              <span>Spectating Magic Duel — Waiting for fighters...</span>
+            </div>
+          )
         ) : (
-          <button
-            type="button"
-            onClick={() => onResolvePvp(clashResult)}
-            className="py-3 px-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(16,185,129,0.8)] border-2 border-emerald-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-          >
-            <span>🏆</span>
-            <span>
-              {autoReturnCountdown != null
-                ? `Continue (${autoReturnCountdown}s)`
-                : "CONTINUE TO BOARD"}
-            </span>
-          </button>
+          (hasControlledFighter || !isOnline) ? (
+            <button
+              type="button"
+              onClick={() => onResolvePvp(clashResult)}
+              className="py-3 px-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(16,185,129,0.8)] border-2 border-emerald-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              <span>🏆</span>
+              <span>
+                {autoReturnCountdown != null
+                  ? `Continue (${autoReturnCountdown}s)`
+                  : "CONTINUE TO BOARD"}
+              </span>
+            </button>
+          ) : (
+            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-emerald-500/40 text-emerald-300 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
+              <span>🏆</span>
+              <span>
+                {autoReturnCountdown != null
+                  ? `Returning to board in ${autoReturnCountdown}s...`
+                  : "Duel Finished"}
+              </span>
+            </div>
+          )
         )}
       </div>
     </div>

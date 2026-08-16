@@ -1,13 +1,32 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NPCS } from "@/lib/gameData";
 import NpcModelPreview from "@/components/board3d/NpcModelPreview";
 
 export default function NpcDoctorModal({ player, grantedPotions = [], onClose }) {
   const npc = NPCS.doctor;
   const [showRewards, setShowRewards] = useState(true);
+  const [countdown, setCountdown] = useState(10);
+
+  useEffect(() => {
+    setCountdown(10);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (typeof onClose === "function") {
+            onClose();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [onClose]);
 
   if (!player) return null;
 
@@ -75,11 +94,12 @@ export default function NpcDoctorModal({ player, grantedPotions = [], onClose })
 
         {/* CONFIRM BUTTON */}
         {showRewards && <button
-          onClick={onClose}
-          className="w-full py-3.5 rounded-xl text-sm font-black tracking-wider uppercase text-white bg-gradient-to-r from-pink-600 via-purple-600 to-pink-600 hover:from-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(236,72,153,0.5)] border border-pink-300/60 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
+          onClick={typeof onClose === "function" ? onClose : undefined}
+          disabled={typeof onClose !== "function"}
+          className={`w-full py-3.5 rounded-xl text-sm font-black tracking-wider uppercase text-white bg-gradient-to-r from-pink-600 via-purple-600 to-pink-600 hover:from-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(236,72,153,0.5)] border border-pink-300/60 transition-all flex items-center justify-center gap-2 ${typeof onClose !== "function" ? "opacity-60 cursor-not-allowed" : "hover:scale-[1.02] active:scale-95"}`}
         >
           <span>🧪</span>
-          <span>รับของรางวัลและลุยต่อ (ตกลง)</span>
+          <span>{typeof onClose === "function" ? `รับของรางวัลและลุยต่อ (${countdown}s)` : "กำลังดำเนินการ..."}</span>
         </button>}
 
       </div>

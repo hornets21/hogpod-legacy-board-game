@@ -2,7 +2,7 @@
 
 // ============================================================
 // PlayerTokens — ตัวหมากผู้เล่น 3D (คริสตัลเรืองแสงสีบ้าน)
-// เดินทีละช่องตามแต้มเต๋า / เทเลพอร์ตเมื่อขึ้นบันได-ลงงู/เกิดใหม่
+// เดินทีละช่องตามแต้มเต๋า / เทเลพอร์ตเมื่อขึ้นบันได-ลงงู/เกิดใหม่/สลับตำแหน่ง
 // Phase 2: เพิ่ม state "hit" (สั่น + แดง) และ "cast" (เรืองแสง)
 // ============================================================
 
@@ -14,7 +14,7 @@ import { cellToWorld, TOKEN_OFFSETS } from "@/lib/boardLayout";
 import { getEmojiTexture } from "./textures";
 import { on, FX_EVENTS } from "@/lib/skillFxBus";
 
-const WALK_SPEED = 6.5; // เพิ่มความเร็วเดินเพื่อก้าวทันครบ 6 ช่องสมบูรณ์
+const WALK_SPEED = 2.8; // ชะลอความเร็วให้ผลเต๋า 1-3 ยังเห็นเส้นทางชัดเจน
 const TELEPORT_SPEED = 5.0;
 
 const PlayerTokens = memo(function PlayerTokens({ players, currentPlayerIndex, phase, onMoveComplete }) {
@@ -61,7 +61,7 @@ const Token = memo(function Token({ player, index, isActive, onMoveComplete }) {
     initialPosition.current = [initialX + offset[0], 0, initialZ + offset[2]];
   }
 
-  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (≤100) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก/RESET
+  // ตรวจการเปลี่ยนช่อง → เดินทีละช่อง (1-12) หรือเทเลพอร์ตเมื่อเกิดใหม่/กับดัก/RESET/Korat Chaos
   useEffect(() => {
     const prev = prevPos.current;
     const next = player.position;
@@ -80,15 +80,15 @@ const Token = memo(function Token({ player, index, isActive, onMoveComplete }) {
 
     const diff = next - prev;
 
-    // ถ้าเป็นการเดินปกติไปข้างหน้า (1-6 ช่อง) ให้คิวเดินทีละช่องจนครบก้าว
-    if (diff > 0 && diff <= 90) {
+    // ถ้าเป็นการเดินปกติไปข้างหน้า (1-12 ช่อง) ให้คิวเดินทีละช่องจนครบก้าว
+    if (diff > 0 && diff <= 12) {
       a.completionCell = null;
       for (let c = prev + 1; c <= next; c++) a.queue.push(c);
       a.segmentDistance = 0;
       a.segmentProgress = 0;
       if (a.mode === "idle") a.mode = "walk";
     } else {
-      // ถ้าเป็นการถอยกลับ (งูเห่า/ตายกลับจุดเริ่มต้น) ให้วาร์ป
+      // ถ้าเป็นการถอยกลับ, วาร์ปบันได/งู, เกิดใหม่, หรือ Korat Chaos สลับตำแหน่งระยะไกล ให้วาร์ปทันที
       a.queue = [];
       a.targetCell = next;
       a.mode = "teleportOut";
@@ -141,7 +141,7 @@ const Token = memo(function Token({ player, index, isActive, onMoveComplete }) {
       const dx = targetX - g.position.x;
       const dz = targetZ - g.position.z;
       const dist = Math.hypot(dx, dz);
-      const step = 8.0 * delta; // ความเร็วก้าวเดินเหมาะสม ก้าวละช่องชัดเจน
+      const step = WALK_SPEED * delta;
 
       // เริ่มรอบกระโดดใหม่ทุกครั้งที่เข้าสู่ช่องถัดไป
       if (a.segmentDistance <= 0) {

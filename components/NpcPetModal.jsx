@@ -112,16 +112,17 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
         {/* ACTION BUTTONS */}
         {showRewards && <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
           <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition"
+            onClick={typeof onClose === "function" ? onClose : undefined}
+            disabled={typeof onClose !== "function"}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
           >
             ยกเลิก (ไม่เปลี่ยน)
           </button>
           <button
-            disabled={!canAfford}
-            onClick={() => onConfirmChangePet(selectedPet)}
+            disabled={!canAfford || typeof onConfirmChangePet !== "function"}
+            onClick={() => typeof onConfirmChangePet === "function" && onConfirmChangePet(selectedPet)}
             className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white transition flex items-center gap-2 ${
-              canAfford
+              canAfford && typeof onConfirmChangePet === "function"
                 ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-[0_0_20px_rgba(16,185,129,0.5)] border border-emerald-300/60 cursor-pointer"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
             }`}

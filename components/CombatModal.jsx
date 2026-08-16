@@ -285,10 +285,18 @@ export default function CombatModal({ combatState, player, onResolveCombat, onUs
               <WheelOfFate
                 monster={monster}
                 player={player}
-                onSpinComplete={(outcome) => {
-                  setHitStop(true);
-                  setTimeout(() => onResolveCombat(outcome), 80);
-                }}
+                onSpinComplete={
+                  typeof onResolveCombat === "function"
+                    ? (outcome) => {
+                        setHitStop(true);
+                        setTimeout(() => {
+                          if (typeof onResolveCombat === "function") {
+                            onResolveCombat(outcome);
+                          }
+                        }, 80);
+                      }
+                    : null
+                }
               />
             </div>
           )}

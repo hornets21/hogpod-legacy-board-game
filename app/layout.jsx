@@ -1,4 +1,5 @@
 import "./globals.css";
+import { I18nProvider } from "@/components/I18nProvider";
 
 export const metadata = {
   title: "ห้องแห่งความลับ — โรงเรียนไสยศาสตร์ฮอกปด",
@@ -33,7 +34,7 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body><I18nProvider>{children}</I18nProvider></body>
     </html>
   );
 }

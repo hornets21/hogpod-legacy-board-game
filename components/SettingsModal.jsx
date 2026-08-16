@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { setSfxVolume, getSfxVolume } from "@/lib/sfx";
+import { useI18n } from "@/components/I18nProvider";
 
 export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolume, onBgmVolumeChange }) {
   const [sfxVol, setSfxVolState] = useState(() => (typeof window !== "undefined" ? getSfxVolume() : 0.8));
+  const { language, toggleLanguage, t } = useI18n();
 
   const handleSfxChange = (e) => {
     const val = parseFloat(e.target.value);
@@ -29,10 +31,10 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
             </div>
             <div>
               <h2 className="font-black text-amber-300 text-lg sm:text-xl tracking-tight">
-                Settings
+                {t("settings")}
               </h2>
               <p className="text-xs text-white/50 font-semibold">
-                Audio &amp; interface preferences
+                {t("settingsDescription")}
               </p>
             </div>
           </div>
@@ -47,7 +49,31 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
         {/* Audio Section */}
         <div className="flex flex-col gap-4">
           <div className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-200/60">
-            Audio
+            {t("audio")}
+          </div>
+
+          {/* Language */}
+          <div className="flex items-center justify-between gap-3 bg-black/40 border border-violet-500/20 rounded-2xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🌐</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-black text-violet-200 uppercase tracking-wider">
+                  {t("languageLabel")}
+                </span>
+                <span className="text-[10px] text-white/50 font-bold">
+                  {t("language")}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="px-3 py-1.5 rounded-xl border border-violet-400/40 bg-violet-950/70 text-violet-200 text-xs font-black transition-all hover:bg-violet-900 hover:border-violet-300"
+              aria-label={t("switchLanguage")}
+              title={t("switchLanguage")}
+            >
+              {language === "th" ? "EN" : "TH"}
+            </button>
           </div>
 
           {/* SFX Volume */}
@@ -56,10 +82,10 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
               <span className="text-base">🔊</span>
               <div className="flex flex-col">
                 <span className="text-xs font-black text-amber-200 uppercase tracking-wider">
-                  SFX Volume
+                  {t("sfxVolume")}
                 </span>
                 <span className="text-[10px] text-white/50 font-bold">
-                  Sound effects (dice, skills, combat)
+                  {t("soundEffectsDescription")}
                 </span>
               </div>
             </div>
@@ -86,10 +112,10 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
               <span className="text-base">{bgmMuted ? "🔇" : "🎵"}</span>
               <div className="flex flex-col">
                 <span className="text-xs font-black text-emerald-200 uppercase tracking-wider">
-                  BGM Volume
+                  {t("bgmVolume")}
                 </span>
                 <span className="text-[10px] text-white/50 font-bold">
-                  Background music theme
+                  {t("backgroundMusicDescription")}
                 </span>
               </div>
             </div>
@@ -117,7 +143,7 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
                     ? "bg-red-950/80 border-red-500/50 text-red-300 hover:bg-red-900"
                     : "bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900"
                 }`}
-                title={bgmMuted ? "Unmute BGM" : "Mute BGM"}
+                title={bgmMuted ? t("unmuteBgm") : t("muteBgm")}
               >
                 {bgmMuted ? "🔇" : "🎵"}
               </button>
@@ -127,7 +153,7 @@ export default function SettingsModal({ onClose, bgmMuted, onToggleBgm, bgmVolum
 
         {/* Footer note */}
         <p className="text-[10px] text-white/40 text-center font-semibold leading-relaxed">
-          Settings are saved to this browser. They apply to both local and online matches.
+          {t("settingsSaved")}
         </p>
       </div>
     </div>

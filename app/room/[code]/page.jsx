@@ -43,6 +43,55 @@ const BoardCanvas = dynamic(() => import("@/components/board3d/BoardCanvas"), {
   ),
 });
 
+function getStateSignature(state) {
+  return JSON.stringify(state, (_, value) => (value instanceof Set ? [...value] : value));
+}
+
+function getPresentationDuration(previous, next) {
+  if (!previous || previous.phase !== next.phase) return 2500;
+  if (next.combatState || previous.combatState) return 10000;
+  if (next.pvpEncounter || previous.pvpEncounter) return 10000;
+  if (previous.players?.some((player, index) => player.position !== next.players?.[index]?.position)) {
+    return 4000;
+  }
+  return 2000;
+}
+
+const BOT_COMBAT_DELAY_MS = 16000;
+const BOT_DECISION_DELAY_MS = 7500;
+const BOT_SHOP_DELAY_MS = 6000;
+const BOT_TELEPORT_CONFIRM_DELAY_MS = 5000;
+const BOT_TELEPORT_RESOLVE_DELAY_MS = 9500;
+const MOVEMENT_SAFETY_DELAY_MS = 9500;
+const HOST_BOT_ACTIONS = new Set([
+  "ROLL_DICE",
+  "MOVE_AND_CHECK",
+  "COMBAT_RESOLVE",
+  "CLOSE_SHOP",
+  "CONFIRM_TELEPORT",
+  "RESOLVE_TELEPORT_LANDING",
+  "PVP_ACTION",
+]);
+const SPECTATOR_ADMIN_ACTIONS = new Set([
+  "START_PLAY",
+  "RESET",
+  "ADMIN_REVIVE_PLAYER",
+  "ADMIN_TELEPORT_TO_BOSS",
+  "ADMIN_REMOVE_ITEM",
+  "ADMIN_GOD_MODE",
+  "ADMIN_ADD_GOLD",
+  "ADMIN_GIVE_ITEM",
+  "GIVE_BINGO_CARD",
+  "GIVE_BINGO_ALL",
+  "REMOVE_BINGO_CARD",
+  "TOGGLE_AUTO_GOLD",
+  "TRIGGER_GOLD_RAIN",
+  "SET_AUTO_GOLD_SETTINGS",
+  "SPAWN_ALL_NPCS",
+  "FORCE_SPAWN_NPC",
+  "TELEPORT_TO_NPC",
+]);
+
 export default function OnlineGameRoom({ params }) {
   const unwrappedParams = use(params);
   const roomCode = (unwrappedParams?.code || "").toUpperCase().trim();
@@ -181,7 +230,10 @@ export default function OnlineGameRoom({ params }) {
         setRole("spectator");
       }
 
-      if (data.gameState) {
+      // Non-host clients receive game state from PlayerGameSync below. Avoid
+      // deserializing it here too: this room listener also fires for presence
+      // changes, which used to send duplicate snapshots to the 3D board.
+      if (data.gameState && data.meta?.hostUid === user.uid) {
         const deserialized = deserializeGameState(data.gameState);
         setSyncedState(deserialized);
         // Hydrate host state on reconnect / refresh so the host can seamlessly re-enter
@@ -201,6 +253,14 @@ export default function OnlineGameRoom({ params }) {
     const sync = new HostGameSync(roomCode, hostDispatch, () => hostStateRef.current);
     sync.start({
       hostUid: user?.uid || null,
+      adminUids: [
+        ...Object.values(roomData?.spectators || {})
+          .filter((spectator) => spectator?.isAdmin && spectator.uid)
+          .map((spectator) => spectator.uid),
+        ...Object.values(roomData?.players || {})
+          .filter((player) => player?.isAdmin && player.uid)
+          .map((player) => player.uid),
+      ],
       onTtlWarning: (mins) => setTtlWarningMinutes(mins),
       onTtlExpired: () => setErrorMessage("ห้องหมดเวลา 3 ชั่วโมง"),
     });
@@ -210,7 +270,7 @@ export default function OnlineGameRoom({ params }) {
       sync.stop();
       hostSyncRef.current = null;
     };
-  }, [role, roomData?.meta?.status, roomCode]);
+  }, [role, roomData?.meta?.status, roomCode, roomData?.spectators, roomData?.players]);
 
   const lastSyncSigRef = useRef(null);
   useEffect(() => {
@@ -251,6 +311,7 @@ export default function OnlineGameRoom({ params }) {
       hostState.usedLadders ? [...hostState.usedLadders] : null,
       hostState.monsterCells ? [...hostState.monsterCells] : null,
       hostState.revealedMonsters ? Object.keys(hostState.revealedMonsters) : null,
+
       hostState.trapCells ? Object.keys(hostState.trapCells) : null,
       npcsSig,
       hostState.bingoWinModalData ? (hostState.bingoWinModalData.id ?? hostState.bingoWinModalData.playerIndex ?? 1) : null,
@@ -284,25 +345,87 @@ export default function OnlineGameRoom({ params }) {
     };
   }, [role, roomData?.meta?.status, hostState?.phase, hostState?.winner, hostState?.autoGoldInterval]);
 
+  const rawActiveState = role === "host" ? hostState : syncedState;
+  const [presentationState, setPresentationState] = useState(null);
+  const presentationQueueRef = useRef([]);
+  const lastQueuedSignatureRef = useRef(null);
+  const lastPresentedStateRef = useRef(null);
+  const presentationUntilRef = useRef(0);
+
+  // Spectators receive a visual playback queue so rapid Firebase snapshots do
+  // not make movement and combat appear to happen all at once. Gameplay state
+  // remains authoritative and immediate for the host and players.
+  useEffect(() => {
+    if (role !== "spectator") {
+      presentationQueueRef.current = [];
+      lastQueuedSignatureRef.current = null;
+      lastPresentedStateRef.current = null;
+      setPresentationState(null);
+      return;
+    }
+    if (!rawActiveState) return;
+
+    const signature = getStateSignature(rawActiveState);
+    if (signature === lastQueuedSignatureRef.current) return;
+    lastQueuedSignatureRef.current = signature;
+
+    if (!lastPresentedStateRef.current) {
+      lastPresentedStateRef.current = rawActiveState;
+      setPresentationState(rawActiveState);
+      return;
+    }
+
+    presentationQueueRef.current.push(rawActiveState);
+    // If a spectator falls far behind, keep the most recent states rather than
+    // building an unbounded queue that could take minutes to catch up.
+    if (presentationQueueRef.current.length > 8) {
+      presentationQueueRef.current = presentationQueueRef.current.slice(-4);
+    }
+  }, [rawActiveState, role]);
+
+  useEffect(() => {
+    if (role !== "spectator") return undefined;
+
+    const timer = setInterval(() => {
+      if (Date.now() < presentationUntilRef.current) return;
+      const nextState = presentationQueueRef.current.shift();
+      if (!nextState) return;
+
+      const previousState = lastPresentedStateRef.current;
+      lastPresentedStateRef.current = nextState;
+      setPresentationState(nextState);
+      presentationUntilRef.current = Date.now() + getPresentationDuration(previousState, nextState);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [role]);
+
+  const activeState = role === "spectator" ? presentationState || rawActiveState : rawActiveState;
+
+  const myHouseId = user?.uid ? roomData?.players?.[user.uid]?.houseId : null;
+  const myPlayerIndex = activeState?.players?.findIndex((p) => {
+    if (user?.uid && p._onlineUid === user.uid) return true;
+    if (myHouseId && p.houseId === myHouseId) return true;
+    if (discordProfile?.id && p.discordId === discordProfile.id) return true;
+    return false;
+  });
+
   useEffect(() => {
     if (role === "host" || roomData?.meta?.status !== "playing" || !user) return;
 
     const sync = new PlayerGameSync(roomCode, user, () => ({
       discordId: discordProfile?.id || null,
-      houseId: user?.uid ? roomData?.players?.[user.uid]?.houseId : null,
+      houseId: (user?.uid && roomData?.players?.[user.uid]?.houseId) || myHouseId || null,
+      playerIndex: myPlayerIndex >= 0 ? myPlayerIndex : null,
     }));
-    sync.start((state) => {
-      setSyncedState(state);
-    });
+    sync.start(setSyncedState);
     playerSyncRef.current = sync;
 
     return () => {
       sync.stop();
       playerSyncRef.current = null;
     };
-  }, [role, roomData?.meta?.status, roomCode, user, discordProfile?.id, roomData?.players]);
-
-  const activeState = role === "host" ? hostState : syncedState;
+  }, [role, roomData?.meta?.status, roomCode, user, discordProfile?.id, user?.uid ? roomData?.players?.[user.uid]?.houseId : null, myHouseId, myPlayerIndex]);
 
   useEffect(() => {
     // Defensive reset: if `diceResult` resolves to null while the previous
@@ -324,21 +447,24 @@ export default function OnlineGameRoom({ params }) {
     return () => clearTimeout(timer);
   }, [activeState?.diceResult]);
 
-  const myHouseId = user?.uid ? roomData?.players?.[user.uid]?.houseId : null;
-  const myPlayerIndex = activeState?.players?.findIndex((p) => {
-    if (user?.uid && p._onlineUid === user.uid) return true;
-    if (myHouseId && p.houseId === myHouseId) return true;
-    if (discordProfile?.id && p.discordId === discordProfile.id) return true;
-    return false;
-  });
-
   const currentPlayer = activeState?.players?.[activeState?.currentPlayerIndex];
+  const isHostSpectator = role === "host" && roomData?.meta?.hostMode === "spectate";
+  const isAdminViewer = Boolean(
+    (isHostSpectator && roomData?.spectators?.[user?.uid]?.isAdmin) ||
+    (role === "spectator" &&
+      discordProfile?.isAdmin &&
+      roomData?.spectators?.[user?.uid]?.isAdmin)
+  );
   const isBotTurn = Boolean(currentPlayer?.isBot);
-  const isMyTurn =
+  const isMyTurn = Boolean(
     !isBotTurn &&
-    myPlayerIndex != null &&
-    myPlayerIndex >= 0 &&
-    activeState?.currentPlayerIndex === myPlayerIndex;
+    role !== "spectator" &&
+    ((myPlayerIndex != null && myPlayerIndex >= 0 && activeState?.currentPlayerIndex === myPlayerIndex) ||
+     (user?.uid && currentPlayer?._onlineUid === user.uid) ||
+     (myHouseId && currentPlayer?.houseId === myHouseId) ||
+     (discordProfile?.id && currentPlayer?.discordId === discordProfile.id))
+  );
+  const canControlGame = (role === "host" && !isHostSpectator) || isMyTurn;
 
   const canRoll = Boolean(
     activeState?.phase === "play" &&
@@ -365,15 +491,42 @@ export default function OnlineGameRoom({ params }) {
 
       if (!actionType) return;
 
+      // A host in spectator mode still owns the authoritative reducer and must
+      // be able to drive bot turns. These actions originate from host timers
+      // / the 3D movement callback, not from the spectator UI.
+      const isHostBotAction = Boolean(
+        role === "host" &&
+        hostStateRef.current?.players?.[hostStateRef.current.currentPlayerIndex]?.isBot &&
+        HOST_BOT_ACTIONS.has(actionType)
+      );
+
+      // Role & Permission Checks:
+      if (role === "spectator") {
+        // Normal spectator or Admin spectator
+        if (!isAdminViewer || !SPECTATOR_ADMIN_ACTIONS.has(actionType)) {
+          return;
+        }
+      } else if (isHostSpectator) {
+        // Host in Spectator Mode: Can drive bot turns, START_PLAY, RESET, and admin panel
+        if (!isHostBotAction && !SPECTATOR_ADMIN_ACTIONS.has(actionType)) {
+          return;
+        }
+      } else if (role === "player") {
+        // Guest Player: cannot dispatch spectator admin cheats unless admin
+        if (!isAdminViewer && SPECTATOR_ADMIN_ACTIONS.has(actionType)) {
+          return;
+        }
+      }
+
       if (role === "host") {
         hostDispatch({ type: actionType, ...payload });
       } else if (playerSyncRef.current) {
         playerSyncRef.current.emitAction(actionType, payload);
       }
     },
-    [role]
+    [isAdminViewer, isHostSpectator, role]
   );
-
+  
   const handleRollDice = useCallback(() => {
     if (!canRoll) return;
     dispatchAction("ROLL_DICE");
@@ -450,15 +603,24 @@ export default function OnlineGameRoom({ params }) {
   }, []);
 
   // Universal safety timer on host: If diceResult is set and movement is not
-  // resolved within 3.5s (due to background tab, lag, or dropped callback),
+  // resolved within 5s (due to background tab, lag, or dropped callback),
   // forcefully resolve movement so the game never freezes.
   useEffect(() => {
     if (role !== "host" || roomData?.meta?.status !== "playing" || !hostState) return;
     if (hostState.winner || hostState.phase !== "play") return;
-    if (hostState.diceResult != null && !hostState.shopOpen && !hostState.combatState && !hostState.teleportModalData) {
+    if (
+      hostState.diceResult != null &&
+      !hostState.shopOpen &&
+      !hostState.combatState &&
+      !hostState.teleportModalData &&
+      !hostState.doctorModalData &&
+      !hostState.skillModalPlayer &&
+      !hostState.petModalPlayer &&
+      !hostState.pvpEncounter
+    ) {
       const timer = setTimeout(() => {
         dispatchAction("MOVE_AND_CHECK");
-      }, 3500);
+      }, MOVEMENT_SAFETY_DELAY_MS);
       return () => clearTimeout(timer);
     }
   }, [
@@ -469,11 +631,16 @@ export default function OnlineGameRoom({ params }) {
     hostState?.shopOpen,
     hostState?.combatState,
     hostState?.teleportModalData,
+    hostState?.doctorModalData,
+    hostState?.skillModalPlayer,
+    hostState?.petModalPlayer,
+    hostState?.pvpEncounter,
     hostState?.winner,
     dispatchAction,
   ]);
 
-  // Host turn automation: Bots take action fast (2.5s); Inactive human players auto-roll on timeout (46.5s)
+  // Host turn automation: Bots pause long enough for spectators to read each
+  // action; inactive human players still auto-roll on timeout (46.5s).
   useEffect(() => {
     if (role !== "host" || roomData?.meta?.status !== "playing" || !hostState) return;
     if (hostState.winner || (hostState.phase !== "play" && hostState.phase !== "combat")) return;
@@ -485,24 +652,45 @@ export default function OnlineGameRoom({ params }) {
       if (hostState.combatState) {
         const timer = setTimeout(() => {
           dispatchAction("COMBAT_RESOLVE", { combatResult: {} });
-        }, 1500);
+        }, BOT_COMBAT_DELAY_MS);
         return () => clearTimeout(timer);
       }
 
       if (hostState.shopOpen) {
         const timer = setTimeout(() => {
           dispatchAction("CLOSE_SHOP");
-        }, 1200);
+        }, BOT_SHOP_DELAY_MS);
+        return () => clearTimeout(timer);
+      }
+
+      if (hostState.doctorModalData) {
+        const timer = setTimeout(() => {
+          dispatchAction("CLOSE_DOCTOR_MODAL");
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+
+      if (hostState.skillModalPlayer) {
+        const timer = setTimeout(() => {
+          dispatchAction("CLOSE_SKILL_MODAL");
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+
+      if (hostState.petModalPlayer) {
+        const timer = setTimeout(() => {
+          dispatchAction("CLOSE_PET_MODAL");
+        }, 1500);
         return () => clearTimeout(timer);
       }
 
       if (hostState.teleportModalData) {
         const confirmTimer = setTimeout(() => {
           dispatchAction("CONFIRM_TELEPORT");
-        }, 1200);
+        }, BOT_TELEPORT_CONFIRM_DELAY_MS);
         const resolveTimer = setTimeout(() => {
           dispatchAction("RESOLVE_TELEPORT_LANDING");
-        }, 2600);
+        }, BOT_TELEPORT_RESOLVE_DELAY_MS);
         return () => {
           clearTimeout(confirmTimer);
           clearTimeout(resolveTimer);
@@ -513,15 +701,31 @@ export default function OnlineGameRoom({ params }) {
         return undefined;
       }
 
-      if (hostState.diceResult == null && !hostState.combatState && !hostState.shopOpen) {
+      if (
+        hostState.diceResult == null &&
+        !hostState.combatState &&
+        !hostState.shopOpen &&
+        !hostState.doctorModalData &&
+        !hostState.skillModalPlayer &&
+        !hostState.petModalPlayer
+      ) {
         const timer = setTimeout(() => {
           dispatchAction("ROLL_DICE");
-        }, 2500);
+        }, BOT_DECISION_DELAY_MS);
         return () => clearTimeout(timer);
       }
     } else {
-      // Human player (Guest or Host): Authoritative host timeout fallback if client is unresponsive
-      if (hostState.diceResult == null && !hostState.combatState && !hostState.shopOpen && !hostState.teleportModalData && !hostState.pvpEncounter) {
+      // Human player (Guest or Host): Inactivity timeout only when waiting for dice roll
+      if (
+        hostState.diceResult == null &&
+        !hostState.combatState &&
+        !hostState.shopOpen &&
+        !hostState.teleportModalData &&
+        !hostState.doctorModalData &&
+        !hostState.skillModalPlayer &&
+        !hostState.petModalPlayer &&
+        !hostState.pvpEncounter
+      ) {
         const timer = setTimeout(() => {
           dispatchAction("ROLL_DICE");
         }, 46500);
@@ -539,6 +743,10 @@ export default function OnlineGameRoom({ params }) {
     hostState?.combatState,
     hostState?.shopOpen,
     hostState?.teleportModalData,
+    hostState?.doctorModalData,
+    hostState?.skillModalPlayer,
+    hostState?.petModalPlayer,
+    hostState?.bingoWinModalData,
     hostState?.pvpEncounter,
     hostState?.winner,
     dispatchAction,
@@ -732,8 +940,10 @@ export default function OnlineGameRoom({ params }) {
           focusCell={activeState.combatState?.monster?.cell || activeState.pvpEncounter?.cell || null}
           isCombatActive={activeState.phase === "combat" || !!activeState.pvpEncounter}
           onMoveComplete={() => {
-            // Both the active player AND the host can trigger move completion
-            if (isMyTurn || role === "host") {
+            // The host must always resolve movement locally, including host
+            // spectator mode, because it owns the authoritative game state
+            // and drives bot turns. Human players may resolve their own turn.
+            if (role === "host" || isMyTurn) {
               dispatchAction("MOVE_AND_CHECK");
             }
           }}
@@ -824,11 +1034,7 @@ export default function OnlineGameRoom({ params }) {
             Settings
           </button>
 
-          {(role === "host" ||
-            role === "spectator" ||
-            discordProfile?.isAdmin ||
-            roomData?.spectators?.[user?.uid]?.isAdmin ||
-            roomData?.players?.[user?.uid]?.isAdmin) && (
+          {isAdminViewer && (
             <button
               type="button"
               onClick={() => setAdminOpen(true)}
@@ -839,10 +1045,7 @@ export default function OnlineGameRoom({ params }) {
             </button>
           )}
 
-          {(role === "host" ||
-            role === "spectator" ||
-            discordProfile?.isAdmin ||
-            roomData?.spectators?.[user?.uid]?.isAdmin) && (
+          {(role === "host" || isAdminViewer) && (
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
@@ -969,7 +1172,7 @@ export default function OnlineGameRoom({ params }) {
           )}
         </div>
 
-        <div className="absolute top-20 right-4 bottom-6 z-40 w-72 pointer-events-auto max-h-[60vh] flex flex-col">
+        <div className="absolute top-20 right-4 bottom-6 z-40 w-72 pointer-events-none max-h-[60vh] flex flex-col items-end">
           <GameLog
             log={activeState.log || []}
             collapsed={logCollapsed}
@@ -984,17 +1187,14 @@ export default function OnlineGameRoom({ params }) {
           online room so audio settings in the Settings modal take effect for all roles. */}
       <BgmPlayer isMuted={bgmMuted} volume={bgmVolume} hideFloatingButton />
 
+
       {activeState.phase === "initiative" && activeState.initiativeRolls && (
         <InitiativeModal
           initiativeRolls={activeState.initiativeRolls}
           isHost={role === "host"}
-          onStartPlay={() => dispatchAction("START_PLAY")}
+          onStartPlay={role === "host" ? () => dispatchAction("START_PLAY") : null}
           onOpenAdmin={
-            role === "host" ||
-            role === "spectator" ||
-            discordProfile?.isAdmin ||
-            roomData?.spectators?.[user?.uid]?.isAdmin ||
-            roomData?.players?.[user?.uid]?.isAdmin
+            isAdminViewer
               ? () => setAdminOpen(true)
               : null
           }
@@ -1006,7 +1206,7 @@ export default function OnlineGameRoom({ params }) {
           combatState={activeState.combatState}
           player={activeState.players?.[activeState.combatState.playerIndex ?? activeState.currentPlayerIndex] || currentPlayer}
           onResolveCombat={
-            isMyTurn || role === "host"
+            isMyTurn
               ? (combatResult) => dispatchAction("COMBAT_RESOLVE", { combatResult })
               : null
           }
@@ -1030,80 +1230,70 @@ export default function OnlineGameRoom({ params }) {
           players={activeState.players}
           myPlayerIndex={myPlayerIndex}
           onPvpAction={
-            (Boolean(
+            Boolean(
               (myPlayerIndex != null &&
                 myPlayerIndex >= 0 &&
                 activeState.pvpEncounter.participantIndices?.includes(myPlayerIndex)) ||
-                isMyTurn ||
-                role === "host"
-            ))
+                (role === "host" &&
+                  (activeState.pvpEncounter.participantIndices || []).every(
+                    (idx) => activeState.players?.[idx]?.isBot
+                  ))
+            )
               ? (actionPayload) => dispatchAction("PVP_ACTION", actionPayload)
               : null
           }
         />
       )}
 
-      {activeState.shopOpen && (
+      {activeState.shopOpen && isMyTurn && (
         <ShopModal
           player={activeState.players?.[activeState.currentPlayerIndex] || currentPlayer}
-          onBuy={
-            isMyTurn
-              ? (itemType, itemId) => {
-                  dispatchAction("BUY_ITEM", { itemType, itemId });
-                }
-              : null
-          }
-          onClose={isMyTurn || role === "host" ? () => dispatchAction("CLOSE_SHOP") : null}
+          onBuy={(itemType, itemId) => {
+            dispatchAction("BUY_ITEM", { itemType, itemId });
+          }}
+          onClose={() => dispatchAction("CLOSE_SHOP")}
         />
       )}
 
-      {activeState.teleportModalData && (
+      {activeState.teleportModalData && (isMyTurn || (user?.uid && activeState.teleportModalData?.player?._onlineUid === user.uid) || (myHouseId && activeState.teleportModalData?.player?.houseId === myHouseId)) && (
         <TeleportModal
           modalData={activeState.teleportModalData}
-          onConfirm={isMyTurn || role === "host" ? handleConfirmTeleport : null}
+          onConfirm={handleConfirmTeleport}
         />
       )}
 
-      {activeState.doctorModalData && (
+      {activeState.doctorModalData && (isMyTurn || (user?.uid && activeState.doctorModalData?.player?._onlineUid === user.uid) || (myHouseId && activeState.doctorModalData?.player?.houseId === myHouseId)) && (
         <NpcDoctorModal
           player={activeState.doctorModalData.player}
           grantedPotions={activeState.doctorModalData.grantedPotions}
-          onClose={isMyTurn || role === "host" ? () => dispatchAction("CLOSE_DOCTOR_MODAL") : null}
+          onClose={() => dispatchAction("CLOSE_DOCTOR_MODAL")}
         />
       )}
 
-      {activeState.skillModalPlayer && (
+      {activeState.skillModalPlayer && (isMyTurn || (user?.uid && activeState.skillModalPlayer?._onlineUid === user.uid) || (myHouseId && activeState.skillModalPlayer?.houseId === myHouseId)) && (
         <NpcSkillModal
           player={activeState.skillModalPlayer}
-          onConfirmSwap={
-            isMyTurn
-              ? (oldSkillId, newSkill) => {
-                  dispatchAction("SWAP_NPC_SKILL", { oldSkillId, newSkill });
-                }
-              : null
-          }
-          onClose={isMyTurn || role === "host" ? () => dispatchAction("CLOSE_SKILL_MODAL") : null}
+          onConfirmSwap={(oldSkillId, newSkill) => {
+            dispatchAction("SWAP_NPC_SKILL", { oldSkillId, newSkill });
+          }}
+          onClose={() => dispatchAction("CLOSE_SKILL_MODAL")}
         />
       )}
 
-      {activeState.petModalPlayer && (
+      {activeState.petModalPlayer && (isMyTurn || (user?.uid && activeState.petModalPlayer?._onlineUid === user.uid) || (myHouseId && activeState.petModalPlayer?.houseId === myHouseId)) && (
         <NpcPetModal
           player={activeState.petModalPlayer}
-          onConfirmChangePet={
-            isMyTurn
-              ? (newPet) => {
-                  dispatchAction("CHANGE_NPC_PET", { newPet });
-                }
-              : null
-          }
-          onClose={isMyTurn || role === "host" ? () => dispatchAction("CLOSE_PET_MODAL") : null}
+          onConfirmChangePet={(newPet) => {
+            dispatchAction("CHANGE_NPC_PET", { newPet });
+          }}
+          onClose={() => dispatchAction("CLOSE_PET_MODAL")}
         />
       )}
 
-      {activeState.bingoWinModalData && (
+      {activeState.bingoWinModalData && isMyTurn && (
         <BingoWinModal
           modalData={activeState.bingoWinModalData}
-          onClose={isMyTurn || role === "host" ? () => dispatchAction("CLOSE_BINGO_WIN_MODAL") : null}
+          onClose={() => dispatchAction("CLOSE_BINGO_WIN_MODAL")}
         />
       )}
 
@@ -1114,7 +1304,7 @@ export default function OnlineGameRoom({ params }) {
           <div className="win-title text-3xl font-black text-amber-400 mt-2">{activeState.winner.name}</div>
           <div className="text-xl text-white/80 font-bold mt-1">Winner!</div>
           <div className="text-white/50 text-sm mt-1">Successfully defeated the Grand Sorcerer Boss!</div>
-          {(role === "host" || role === "spectator" || discordProfile?.isAdmin) && (
+          {(role === "host" || isAdminViewer) && (
             <button
               onClick={() => dispatchAction("RESET")}
               className="btn-primary mt-6 text-base px-10 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-2xl shadow-xl transition-all"
@@ -1125,7 +1315,7 @@ export default function OnlineGameRoom({ params }) {
         </div>
       )}
 
-      {adminOpen && (
+      {adminOpen && isAdminViewer && (
         <AdminModal
           state={activeState}
           players={activeState.players}
@@ -1154,7 +1344,6 @@ export default function OnlineGameRoom({ params }) {
         onConfirm={handleSkillConfirm}
         onCancel={handleSkillCancel}
       />
-
       {/* ── Poison Trap Placement Picker Modal ───────────────── */}
       <TrapCellPicker
         open={Boolean(pendingTrap)}

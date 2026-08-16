@@ -1,6 +1,9 @@
 "use client";
 
+import { useI18n } from "@/components/I18nProvider";
+
 export default function TitleScreen({ onStartNewGame, onPlayOnline }) {
+  const { t } = useI18n();
   return (
     <main className="fixed inset-0 z-50 overflow-hidden bg-[#050407] text-white select-none">
       <div className="absolute inset-0 bg-[#050407]">
@@ -30,7 +33,7 @@ export default function TitleScreen({ onStartNewGame, onPlayOnline }) {
             <div className="mt-4 h-0.5 w-44 bg-gradient-to-r from-[#e51b4b] via-[#f2c75c] to-transparent" />
           </div>
 
-          <nav aria-label="Main menu" className="flex flex-col items-start gap-4">
+          <nav aria-label={t("mainMenu")} className="flex flex-col items-start gap-4">
             <button
               type="button"
               onClick={onStartNewGame}
@@ -39,7 +42,7 @@ export default function TitleScreen({ onStartNewGame, onPlayOnline }) {
               <span className="text-[#e51b4b] transition-transform group-hover:rotate-45" aria-hidden="true">
                 ✦
               </span>
-              <span className="drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]">Local Game</span>
+              <span className="drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]">{t("localGame")}</span>
             </button>
 
             <button
@@ -50,7 +53,7 @@ export default function TitleScreen({ onStartNewGame, onPlayOnline }) {
               <span className="text-[#f2c75c] transition-transform group-hover:rotate-45" aria-hidden="true">
                 ✦
               </span>
-              <span className="drop-shadow-[0_0_12px_rgba(242,199,92,0.45)]">Online Multiplayer</span>
+              <span className="drop-shadow-[0_0_12px_rgba(242,199,92,0.45)]">{t("onlineMultiplayer")}</span>
             </button>
           </nav>
 

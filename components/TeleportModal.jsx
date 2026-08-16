@@ -4,17 +4,19 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function TeleportModal({ modalData, onConfirm }) {
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(4);
 
   useEffect(() => {
     if (!modalData) return;
-    setCountdown(3);
+    setCountdown(4);
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          onConfirm();
+          if (typeof onConfirm === "function") {
+            onConfirm();
+          }
           return 0;
         }
         return prev - 1;
@@ -133,7 +135,7 @@ export default function TeleportModal({ modalData, onConfirm }) {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={onConfirm}
+              onClick={typeof onConfirm === "function" ? onConfirm : undefined}
               className={`w-full py-3.5 px-6 rounded-2xl font-black text-base tracking-wider transition-all duration-200 shadow-lg flex items-center justify-center gap-2 ${
                 isLadder
                   ? "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-900/40"
@@ -154,7 +156,7 @@ export default function TeleportModal({ modalData, onConfirm }) {
                 <motion.div
                   initial={{ width: "100%" }}
                   animate={{ width: "0%" }}
-                  transition={{ duration: 3, ease: "linear" }}
+                  transition={{ duration: 4, ease: "linear" }}
                   className={`h-full ${isLadder ? "bg-emerald-400" : "bg-rose-400"}`}
                 />
               </div>

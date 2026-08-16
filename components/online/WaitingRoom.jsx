@@ -60,16 +60,29 @@ export default function WaitingRoom({
 
       // 2. Ensure Host is assigned to a house if not explicitly picked
       let updatedPlayerList = [...playerList];
-      const hostEntry = updatedPlayerList.find((p) => p.uid === user.uid);
-      if (hostEntry && !hostEntry.houseId) {
-        const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
-        const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id));
-        if (freeHouse) {
+      const hostEntry = updatedPlayerList.find((p) => p.uid === user?.uid);
+      if (hostEntry) {
+        if (!hostEntry.houseId) {
+          const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
+          const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id)) || HOUSE_LIST[0];
           hostEntry.houseId = freeHouse.id;
           try {
             await selectHouse(roomCode, user.uid, freeHouse.id);
           } catch {}
         }
+      } else if (user?.uid && role !== "spectator") {
+        const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
+        const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id)) || HOUSE_LIST[0];
+        const newHostEntry = {
+          uid: user.uid,
+          displayName: user.displayName || meta.hostName || "Host",
+          avatar: user.photoURL || null,
+          houseId: freeHouse.id,
+        };
+        updatedPlayerList.push(newHostEntry);
+        try {
+          await selectHouse(roomCode, user.uid, freeHouse.id);
+        } catch {}
       }
 
       // 3. Map online players to their chosen house
@@ -135,12 +148,12 @@ export default function WaitingRoom({
     }
   };
 
-  // Validation: Ready to start as long as at least 1 player has picked a house
+  // Validation: Ready to start as long as at least 1 player has picked a house or Host is present
   const assignedHousesCount = HOUSE_LIST.filter((house) =>
     playerList.some((p) => p.houseId === house.id)
   ).length;
-  const canStartGame = assignedHousesCount >= 1;
-  const botCount = 4 - assignedHousesCount;
+  const canStartGame = isHost || assignedHousesCount >= 1;
+  const botCount = Math.max(0, 4 - Math.max(1, assignedHousesCount));
 
   return (
     <main className="fixed inset-0 z-50 flex items-center justify-center bg-[#050407] text-white p-4 select-none overflow-y-auto">
@@ -328,7 +341,7 @@ export default function WaitingRoom({
               Leave Room
             </button>
 
-            {(isHost || role === "spectator" || spectators[user?.uid]?.isAdmin) && onDelete && (
+            {(isHost || spectators[user?.uid]?.isAdmin) && onDelete && (
               <button
                 type="button"
                 onClick={onDelete}

@@ -31,8 +31,10 @@
 
   --house-color: #ffffff;
 
-  --font-harry: "HarryP", "Kanit", sans-serif;
-  --font: "HarryP", "Kanit", "Inter", system-ui, sans-serif;
+  --font-harry: "HarryP", "Inter", sans-serif;
+  --font-en: "HarryP", "Inter", system-ui, sans-serif;
+  --font-th: "Kanit", system-ui, sans-serif;
+  --font: var(--font-en);
 }
 
 /* ─── Reset & Custom Cursor ───────────────────────────────── */
@@ -79,6 +81,36 @@ html, body {
   overflow: hidden;
   font-family: var(--font);
   cursor: url("/images/system/main_cursor.cur"), auto;
+}
+
+html[data-language="th"] body {
+  font-family: var(--font-th);
+}
+
+html[data-language="en"] body {
+  font-family: var(--font-en);
+}
+
+.language-toggle {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  min-width: 2.75rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid rgba(240, 184, 91, 0.5);
+  border-radius: 0.6rem;
+  color: #f8d58b;
+  background: rgba(6, 8, 16, 0.78);
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(0.5rem);
+}
+
+.language-toggle:hover {
+  background: rgba(240, 184, 91, 0.16);
 }
 
 /* Custom pointer cursor for interactive elements */
@@ -252,10 +284,11 @@ a, button, [role="button"], input[type="button"], input[type="submit"], .cursor-
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  height: 100%;
-  min-height: 120px;
-  padding: 12px 0;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -279,9 +312,10 @@ a, button, [role="button"], input[type="button"], input[type="submit"], .cursor-
 @media (max-width: 1023px) {
   .game-log-collapsed {
     flex-direction: row;
+    width: 100%;
     min-height: 0;
     height: 44px;
-    padding: 0 14px;
+    padding: 0;
     justify-content: center;
   }
   .game-log-collapsed-text { writing-mode: horizontal-tb; flex: none; }

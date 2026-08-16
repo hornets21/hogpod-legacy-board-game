@@ -17,7 +17,7 @@ export default function BingoWinModal({ modalData, onClose }) {
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in pointer-events-auto select-none"
-      onClick={onClose}
+      onClick={typeof onClose === "function" ? onClose : undefined}
     >
       <div
         className="relative w-full max-w-lg rounded-3xl bg-gradient-to-b from-[#2d1e17] via-[#1a110e] to-[#0b0604] border-2 border-amber-500/60 shadow-[0_0_80px_rgba(245,158,11,0.5)] p-6 text-white flex flex-col items-center text-center overflow-hidden animate-scale-up"
@@ -85,10 +85,11 @@ export default function BingoWinModal({ modalData, onClose }) {
 
         {/* Action Close Button */}
         <button
-          onClick={onClose}
-          className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-slate-950 font-black text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(245,158,11,0.6)] hover:scale-102 transition-all active:scale-98 border border-yellow-200"
+          onClick={typeof onClose === "function" ? onClose : undefined}
+          disabled={typeof onClose !== "function"}
+          className={`w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-slate-950 font-black text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(245,158,11,0.6)] transition-all border border-yellow-200 ${typeof onClose !== "function" ? "opacity-60 cursor-not-allowed" : "hover:scale-102 active:scale-98"}`}
         >
-          🏆 รับรางวัล & ลุยต่อ!
+          🏆 {typeof onClose === "function" ? "รับรางวัล & ลุยต่อ!" : "กำลังดำเนินการ..."}
         </button>
       </div>
     </div>

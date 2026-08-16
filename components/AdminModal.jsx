@@ -18,11 +18,12 @@ import { getTotalDmg } from "@/lib/gameEngine";
 
 import { setSfxVolume, getSfxVolume } from "@/lib/sfx";
 
-export default function AdminModal({ state, players, onDispatch, onClose, isBgmMuted, onToggleBgm, bgmVolume = 0.2, onBgmVolumeChange, onConfirmSetup }) {
+export default function AdminModal({ state, players, onDispatch, onClose, isBgmMuted, onToggleBgm, bgmVolume = 0.2, onBgmVolumeChange, onConfirmSetup, onBackToTitle }) {
   const [selectedHouseIdx, setSelectedHouseIdx] = useState(0);
   const [activeCategory, setActiveCategory] = useState("gold"); // gold | wand | armor | amulet | potion | skill | pet
   const [sfxVol, setSfxVolState] = useState(() => (typeof window !== "undefined" ? getSfxVolume() : 0.8));
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showBackToTitleConfirm, setShowBackToTitleConfirm] = useState(false);
 
   const handleSfxChange = (e) => {
     const val = parseFloat(e.target.value);
@@ -75,6 +76,47 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
                 className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs shadow-[0_0_20px_rgba(229,27,75,0.4)] border border-red-400 transition-all hover:scale-105"
               >
                 CONFIRM RESET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBackToTitleConfirm && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="max-w-md w-full bg-slate-950 border-2 border-amber-500/80 rounded-3xl p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)] text-center text-white flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-950/80 border-2 border-amber-500 flex items-center justify-center text-2xl shadow-lg">
+              🏠
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-amber-400 uppercase tracking-wide">
+                RETURN TO TITLE?
+              </h3>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed font-semibold">
+                The current game will be paused. Your saved game will be kept so you can continue later.
+              </p>
+            </div>
+
+            <div className="w-full flex items-center gap-3 mt-3">
+              <button
+                type="button"
+                onClick={() => setShowBackToTitleConfirm(false)}
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs border border-white/10 transition-all hover:scale-105"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBackToTitleConfirm(false);
+                  onClose();
+                  onBackToTitle();
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.35)] border border-amber-300 transition-all hover:scale-105"
+              >
+                CONFIRM
               </button>
             </div>
           </div>
@@ -915,12 +957,23 @@ export default function AdminModal({ state, players, onDispatch, onClose, isBgmM
 
             {/* Bottom Footer Actions */}
             <div className="pt-3 border-t border-white/10 mt-3 flex items-center justify-between flex-shrink-0">
-              <button
-                onClick={() => setShowResetConfirm(true)}
-                className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-black text-xs transition-all flex items-center gap-2"
-              >
-                RESET GAME
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-black text-xs transition-all flex items-center gap-2"
+                >
+                  RESET GAME
+                </button>
+                {onBackToTitle && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBackToTitleConfirm(true)}
+                    className="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-white/15 text-slate-200 font-black text-xs transition-all"
+                  >
+                    BACK TO TITLE
+                  </button>
+                )}
+              </div>
               
               {onConfirmSetup ? (
                 <button

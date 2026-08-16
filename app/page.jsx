@@ -13,6 +13,7 @@ import PvpCombatModal from "@/components/PvpCombatModal";
 import BgmPlayer from "@/components/BgmPlayer";
 import GameLog from "@/components/GameLog";
 import AdminModal from "@/components/AdminModal";
+import SettingsModal from "@/components/SettingsModal";
 import SkillTargetPicker from "@/components/SkillTargetPicker";
 import TrapCellPicker from "@/components/TrapCellPicker";
 import MobaAutoGoldWidget from "@/components/MobaAutoGoldWidget";
@@ -64,6 +65,7 @@ import {
 
 import { useRouter } from "next/navigation";
 import { gameReducer, skillNeedsTarget } from "@/lib/gameReducer";
+import { POTIONS } from "@/lib/gameData";
 
 // ─── Component ────────────────────────────────────────────────
 export default function Home() {
@@ -127,6 +129,7 @@ export default function Home() {
   const [logCollapsed, setLogCollapsed] = useState(false);
   const [playersCollapsed, setPlayersCollapsed] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(false);
   const [bgmVolume, setBgmVolume] = useState(() => {
     if (typeof window === "undefined") return 0.2;
@@ -366,15 +369,21 @@ export default function Home() {
 
           {/* ── Top Floating Bar: Action Buttons + Admin + Game Title + BGM Controller ────────────── */}
           <div className="flex items-center justify-between w-full gap-2 pointer-events-auto">
-            {/* Left side: NPC Spawn & MOBA Gold */}
-            <div className="flex items-center gap-2">
+            {/* Right side: NPC Spawn, MOBA Gold, BGM, Admin & Game Title */}
+            <div className="flex items-center gap-2 ml-auto">
               <NpcSpawnWidget state={state} />
               <MobaAutoGoldWidget state={state} onDispatch={dispatch} />
-            </div>
-
-            {/* Right side: BGM, Admin, Game Title */}
-            <div className="flex items-center gap-2">
               <BgmPlayer isMuted={bgmMuted} volume={bgmVolume} hideFloatingButton={true} />
+
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold transition-all duration-200 backdrop-blur-md bg-slate-950/80 border border-white/15 text-slate-300 hover:border-amber-400/50 hover:bg-amber-500/10 hover:scale-105 shadow-lg"
+                title="Audio & settings"
+                aria-label="Open settings"
+              >
+                ⚙️
+              </button>
 
               {/* Admin Floating Button */}
               <button
@@ -478,7 +487,7 @@ export default function Home() {
         </div>
 
         {/* ── Right Floating Layer: Floating Game Log (History) ด้านขวา ─ */}
-        <div className="absolute top-20 right-4 bottom-6 z-10 w-72 pointer-events-auto max-h-[60vh] flex flex-col">
+        <div className="absolute top-20 right-4 bottom-6 z-10 w-72 pointer-events-none max-h-[60vh] flex flex-col items-end">
           <GameLog
             log={state.log}
             collapsed={logCollapsed}
@@ -504,6 +513,7 @@ export default function Home() {
           players={state.players}
           onDispatch={dispatch}
           onClose={() => setAdminOpen(false)}
+          onBackToTitle={() => dispatch({ type: "START_TITLE" })}
           isBgmMuted={bgmMuted}
           onToggleBgm={() => setBgmMuted((m) => !m)}
           bgmVolume={bgmVolume}
@@ -513,6 +523,16 @@ export default function Home() {
               ? () => dispatch({ type: "COMPLETE_SETUP", players: state.players })
               : null
           }
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          bgmMuted={bgmMuted}
+          onToggleBgm={() => setBgmMuted((m) => !m)}
+          bgmVolume={bgmVolume}
+          onBgmVolumeChange={setBgmVolume}
         />
       )}
 

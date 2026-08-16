@@ -111,7 +111,12 @@ const SingleNpc = memo(function SingleNpc({ npcState, npcInfo }) {
       <Html position={[0, 1.55, 0]} center distanceFactor={12} zIndexRange={[100, 0]} prepend>
         <div
           className="flex items-center px-2.5 py-1 rounded-full text-xs font-bold shadow-[0_0_12px_rgba(0,0,0,0.8)] border pointer-events-none whitespace-nowrap"
-          style={{ backgroundColor: "rgba(10, 15, 30, 0.92)", borderColor: auraColor, color: auraColor }}
+          style={{
+            backgroundColor: "rgba(10, 15, 30, 0.92)",
+            borderColor: auraColor,
+            color: auraColor,
+            fontFamily: '"HarryP", sans-serif',
+          }}
         >
           <span>{npcInfo?.nameEn || npcInfo?.name}</span>
         </div>

@@ -18,7 +18,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end select-none overflow-hidden animate-fade-in pointer-events-auto">
       {/* Dynamic Dark Vignette Backdrop (คลิกปิดได้) */}
-      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] transition-opacity" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] transition-opacity" onClick={typeof onClose === "function" ? onClose : undefined} />
 
       {/* SLIDE-IN RIGHT DRAWER SHOP PANEL */}
       <div
@@ -42,12 +42,14 @@ export default function ShopModal({ player, onBuy, onClose }) {
               <span className="text-xs text-amber-400 font-bold">💰</span>
               <span className="text-sm font-black text-amber-400">{player.gold.toLocaleString()}</span>
             </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-red-600/80 border border-white/20 text-white font-black flex items-center justify-center text-sm transition-all hover:scale-110"
-            >
-              ✕
-            </button>
+            {typeof onClose === "function" && (
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-red-600/80 border border-white/20 text-white font-black flex items-center justify-center text-sm transition-all hover:scale-110"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -344,7 +346,8 @@ function CategoryTab({ active, icon, label, onClick }) {
 
 function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disabled = false, onBuy, itemData }) {
   const canAfford = gold >= price;
-  const isDisabled = disabled || (!owned && !canAfford);
+  const isActionAllowed = typeof onBuy === "function";
+  const isDisabled = disabled || (!owned && !canAfford) || !isActionAllowed;
 
   const tooltipItem = itemData || {
     name: title,
@@ -356,7 +359,7 @@ function ShopShelfCard({ title, sub, price, gold, icon, img, owned = false, disa
 
   const cardContent = (
     <div
-      onClick={!isDisabled && !owned ? onBuy : undefined}
+      onClick={!isDisabled && !owned && isActionAllowed ? onBuy : undefined}
       className={`group flex flex-col justify-between p-3 rounded-2xl border transition-all relative overflow-hidden h-full ${
         owned
           ? "border-emerald-500/60 bg-emerald-950/30 text-emerald-300"

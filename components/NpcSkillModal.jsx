@@ -106,14 +106,16 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
         {/* ACTION BUTTONS */}
         {showRewards && <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
           <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition"
+            onClick={typeof onClose === "function" ? onClose : undefined}
+            disabled={typeof onClose !== "function"}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
           >
             ไม่เปลี่ยนสกิล (ข้าม)
           </button>
           <button
-            onClick={() => onConfirmSwap(selectedOldSkillId, newSkill)}
-            className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-300/60 transition flex items-center gap-2"
+            onClick={() => typeof onConfirmSwap === "function" && onConfirmSwap(selectedOldSkillId, newSkill)}
+            disabled={typeof onConfirmSwap !== "function"}
+            className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-300/60 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span>🔄</span>
             <span>ยืนยันเปลี่ยนสกิล</span>
