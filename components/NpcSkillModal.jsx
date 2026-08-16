@@ -12,6 +12,7 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
   const getSkillId = (s) => (typeof s === "string" ? s : s?.id);
   const ownedIds = new Set(player?.skills?.map(getSkillId).filter(Boolean) || []);
   const unownedSkills = SKILL_LIST.filter((s) => !ownedIds.has(s.id));
+  const isNewSlot = (player?.skills || []).length < 2;
   
   const [newSkill] = useState(() => {
     if (unownedSkills.length > 0) {
@@ -37,8 +38,12 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
               <p className="text-xs text-blue-200/80 mt-0.5">{npc.description}</p>
             </div>
           </div>
-          <span className="text-xs font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-3 py-1 rounded-full shrink-0">
-            สกิลเต็ม {(player.skills || []).length} สกิล
+          <span className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 border ${
+            isNewSlot
+              ? "text-emerald-300 bg-emerald-950/80 border-emerald-500/40 animate-pulse"
+              : "text-amber-300 bg-amber-950/70 border-amber-500/40"
+          }`}>
+            {isNewSlot ? "✨ ปลดล็อกสกิลใหม่ฟรี (ช่อง 2/2)" : `สกิลเต็ม ${(player.skills || []).length}/2`}
           </span>
         </div>
 
@@ -54,7 +59,9 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
 
         {/* NEW OFFERED SKILL SHOWCASE */}
         {showRewards && <div className="bg-blue-950/40 border border-blue-500/40 rounded-2xl p-4 flex flex-col gap-2">
-          <span className="text-xs font-bold text-blue-300 uppercase tracking-wider">✨ สกิลใหม่ที่สุ่มได้:</span>
+          <span className="text-xs font-bold text-blue-300 uppercase tracking-wider">
+            {isNewSlot ? "🎉 สกิลใหม่ที่คุณได้รับฟรี:" : "✨ สกิลใหม่ที่สุ่มได้:"}
+          </span>
           <div className="flex items-center gap-3 bg-blue-900/40 p-3 rounded-xl border border-blue-400/30">
             <div className="text-3xl shrink-0">📜</div>
             <div className="flex-1">
@@ -69,8 +76,8 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
           </div>
         </div>}
 
-        {/* CHOOSE OLD SKILL TO REPLACE */}
-        {showRewards && <div className="flex flex-col gap-2.5">
+        {/* CHOOSE OLD SKILL TO REPLACE (ONLY IF FULL 2/2 SKILLS) */}
+        {showRewards && !isNewSlot && <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">
             เลือกสกิลเดิม 1 สกิลที่จะให้ NPC สลับแทนที่:
           </label>
@@ -105,20 +112,22 @@ export default function NpcSkillModal({ player, onConfirmSwap, onClose }) {
 
         {/* ACTION BUTTONS */}
         {showRewards && <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+          {!isNewSlot && (
+            <button
+              onClick={typeof onClose === "function" ? onClose : undefined}
+              disabled={typeof onClose !== "function"}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
+            >
+              ไม่เปลี่ยนสกิล (ข้าม)
+            </button>
+          )}
           <button
-            onClick={typeof onClose === "function" ? onClose : undefined}
-            disabled={typeof onClose !== "function"}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
-          >
-            ไม่เปลี่ยนสกิล (ข้าม)
-          </button>
-          <button
-            onClick={() => typeof onConfirmSwap === "function" && onConfirmSwap(selectedOldSkillId, newSkill)}
+            onClick={() => typeof onConfirmSwap === "function" && onConfirmSwap(isNewSlot ? null : selectedOldSkillId, newSkill)}
             disabled={typeof onConfirmSwap !== "function"}
             className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-300/60 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>🔄</span>
-            <span>ยืนยันเปลี่ยนสกิล</span>
+            <span>{isNewSlot ? "✨" : "🔄"}</span>
+            <span>{isNewSlot ? "รับสกิลใหม่ (ช่อง 2/2 ฟรี!)" : "ยืนยันเปลี่ยนสกิล"}</span>
           </button>
         </div>}
 

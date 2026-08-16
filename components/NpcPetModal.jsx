@@ -7,16 +7,17 @@ import NpcModelPreview from "@/components/board3d/NpcModelPreview";
 
 export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
   const npc = NPCS.pet_trainer;
-  const fee = NPC_CONFIG.PET_CHANGE_FEE;
+  const isFirstPet = !player?.pet;
+  const fee = isFirstPet ? 0 : NPC_CONFIG.PET_CHANGE_FEE;
   const [showRewards, setShowRewards] = useState(true);
   
   const currentPetId = player?.pet?.id;
-  const availablePets = PET_LIST.filter((p) => p.id !== currentPetId);
+  const availablePets = isFirstPet ? PET_LIST : PET_LIST.filter((p) => p.id !== currentPetId);
   const [selectedPet, setSelectedPet] = useState(availablePets[0] || PET_LIST[0]);
 
   if (!player) return null;
 
-  const canAfford = player.gold >= fee;
+  const canAfford = isFirstPet || player.gold >= fee;
 
   return (
     <div className="npc-encounter-dock npc-encounter-dock--pet animate-fade-in">
@@ -33,8 +34,12 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
           </div>
           <div className="flex items-center gap-2 text-xs shrink-0">
             <span className="text-amber-300 font-bold">💰 {player.gold} Gold</span>
-            <span className="text-emerald-300 font-bold bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 rounded-full">
-              ค่าเปลี่ยน: {fee} Gold
+            <span className={`font-bold px-2.5 py-1 rounded-full border ${
+              isFirstPet
+                ? "text-emerald-300 bg-emerald-950/80 border-emerald-500/40 animate-pulse"
+                : "text-emerald-300 bg-emerald-950/80 border-emerald-500/40"
+            }`}>
+              {isFirstPet ? "✨ สัตว์เลี้ยงฟรีตัวแรก!" : `ค่าเปลี่ยน: ${fee} Gold`}
             </span>
           </div>
         </div>
@@ -49,8 +54,8 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
           </div>
         )}
 
-        {/* CURRENT PET INFO */}
-        {showRewards && <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+        {/* CURRENT PET INFO (ONLY IF ALREADY HAS PET) */}
+        {showRewards && player.pet && <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {player.pet?.image ? (
               <img src={player.pet.image} alt={player.pet.name} className="w-10 h-10 object-contain rounded-lg border border-amber-400/40 bg-black/40 p-0.5" />
@@ -68,7 +73,7 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
         {/* CHOOSE NEW PET */}
         {showRewards && <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-            เลือกสัตว์เลี้ยงวิเศษตัวใหม่ที่ต้องการเปลี่ยน:
+            {isFirstPet ? "🎉 เลือกสัตว์เลี้ยงคู่หูตัวแรกของคุณ (ฟรี!):" : "เลือกสัตว์เลี้ยงวิเศษตัวใหม่ที่ต้องการเปลี่ยน:"}
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
             {availablePets.map((pet) => {
@@ -111,13 +116,15 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
 
         {/* ACTION BUTTONS */}
         {showRewards && <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-          <button
-            onClick={typeof onClose === "function" ? onClose : undefined}
-            disabled={typeof onClose !== "function"}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
-          >
-            ยกเลิก (ไม่เปลี่ยน)
-          </button>
+          {!isFirstPet && (
+            <button
+              onClick={typeof onClose === "function" ? onClose : undefined}
+              disabled={typeof onClose !== "function"}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50"
+            >
+              ยกเลิก (ไม่เปลี่ยน)
+            </button>
+          )}
           <button
             disabled={!canAfford || typeof onConfirmChangePet !== "function"}
             onClick={() => typeof onConfirmChangePet === "function" && onConfirmChangePet(selectedPet)}
@@ -128,7 +135,7 @@ export default function NpcPetModal({ player, onConfirmChangePet, onClose }) {
             }`}
           >
             <span>🐾</span>
-            <span>ยืนยันเปลี่ยนสัตว์เลี้ยง</span>
+            <span>{isFirstPet ? `รับสัตว์เลี้ยงตัวนี้ (ฟรี!)` : `ยืนยันเปลี่ยนสัตว์เลี้ยง (${fee.toLocaleString()} Gold)`}</span>
           </button>
         </div>}
 

@@ -22,7 +22,10 @@ export default function WaitingRoom({
   const [errorMsg, setErrorMsg] = useState("");
 
   const isHost = role === "host";
-  const myPlayer = players[user?.uid];
+  const isSpectatingHost = isHost && meta?.hostMode === "spectate";
+  const isSpectator = role === "spectator" || isSpectatingHost;
+
+  const myPlayer = players[user?.uid] || Object.values(players || {}).find((p) => p.uid === user?.uid || (user?.id && p.discordId === user.id));
   const myHouseId = myPlayer?.houseId || null;
 
   const playerList = Object.values(players || {});
@@ -39,10 +42,10 @@ export default function WaitingRoom({
   };
 
   const handleSelectHouse = async (houseId) => {
-    if (role === "spectator") return;
+    if (isSpectator) return;
     setErrorMsg("");
     try {
-      await selectHouse(roomCode, user.uid, houseId);
+      await selectHouse(roomCode, user?.uid, houseId);
     } catch (err) {
       setErrorMsg(err.message);
     }
@@ -58,31 +61,35 @@ export default function WaitingRoom({
       const initialState = createInitialGameState();
       initialState.phase = "play";
 
-      // 2. Ensure Host is assigned to a house if not explicitly picked
+      // 2. Ensure Host is assigned to a house ONLY if playing (not spectating)
       let updatedPlayerList = [...playerList];
-      const hostEntry = updatedPlayerList.find((p) => p.uid === user?.uid);
-      if (hostEntry) {
-        if (!hostEntry.houseId) {
+      const isSpectatingHost = meta?.hostMode === "spectate" || role === "spectator";
+
+      if (!isSpectatingHost) {
+        const hostEntry = updatedPlayerList.find((p) => p.uid === user?.uid);
+        if (hostEntry) {
+          if (!hostEntry.houseId) {
+            const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
+            const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id)) || HOUSE_LIST[0];
+            hostEntry.houseId = freeHouse.id;
+            try {
+              await selectHouse(roomCode, user.uid, freeHouse.id);
+            } catch {}
+          }
+        } else if (user?.uid) {
           const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
           const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id)) || HOUSE_LIST[0];
-          hostEntry.houseId = freeHouse.id;
+          const newHostEntry = {
+            uid: user.uid,
+            displayName: user.displayName || meta.hostName || "Host",
+            avatar: user.photoURL || null,
+            houseId: freeHouse.id,
+          };
+          updatedPlayerList.push(newHostEntry);
           try {
             await selectHouse(roomCode, user.uid, freeHouse.id);
           } catch {}
         }
-      } else if (user?.uid && role !== "spectator") {
-        const takenHouses = new Set(updatedPlayerList.map((p) => p.houseId).filter(Boolean));
-        const freeHouse = HOUSE_LIST.find((h) => !takenHouses.has(h.id)) || HOUSE_LIST[0];
-        const newHostEntry = {
-          uid: user.uid,
-          displayName: user.displayName || meta.hostName || "Host",
-          avatar: user.photoURL || null,
-          houseId: freeHouse.id,
-        };
-        updatedPlayerList.push(newHostEntry);
-        try {
-          await selectHouse(roomCode, user.uid, freeHouse.id);
-        } catch {}
       }
 
       // 3. Map online players to their chosen house
@@ -200,7 +207,7 @@ export default function WaitingRoom({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {HOUSE_LIST.map((house) => {
               const occupant = playerList.find((p) => p.houseId === house.id);
-              const isSelectedByMe = occupant?.uid === user?.uid;
+              const isSelectedByMe = occupant?.uid === user?.uid || (user?.id && occupant?.discordId === user.id);
               const isOccupied = Boolean(occupant);
 
               return (
@@ -246,7 +253,7 @@ export default function WaitingRoom({
                     <div className="mt-auto w-full flex flex-col gap-2">
                       <button
                         type="button"
-                        disabled={!Boolean(players[user?.uid])}
+                        disabled={isSpectator}
                         onClick={() => handleSelectHouse(house.id)}
                         className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl border border-white/10 transition-colors disabled:opacity-50"
                       >
