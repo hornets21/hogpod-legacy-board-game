@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js Magic Battle - Target Lock Demo</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #090714;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas { display: block; }
+
+    .topbar {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .player-card {
+      min-width: 150px;
+      padding: 9px 11px;
+      border-radius: 10px;
+      background: rgba(10, 10, 28, .78);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.15);
+      backdrop-filter: blur(6px);
+    }
+
+    .player-card.active {
+      box-shadow: 0 0 18px rgba(255,255,255,.45);
+      transform: translateY(2px);
+    }
+
+    .name {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .hp-bg {
+      height: 9px;
+      border-radius: 99px;
+      background: #2b2b35;
+      overflow: hidden;
+    }
+
+    .hp {
+      height: 100%;
+      width: 100%;
+      background: #54dc72;
+      transition: width .3s ease;
+    }
+
+    .hp-text {
+      font-size: 11px;
+      opacity: .85;
+      margin-top: 5px;
+    }
+
+    .battle-ui {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      z-index: 20;
+      width: min(680px, calc(100% - 24px));
+      background: rgba(10, 9, 28, .88);
+      border: 1px solid rgba(176, 121, 255, .35);
+      border-radius: 16px;
+      padding: 14px;
+      color: white;
+      backdrop-filter: blur(8px);
+    }
+
+    .turn-text {
+      text-align: center;
+      margin-bottom: 10px;
+      font-weight: 700;
+      color: #e6d7ff;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      color: white;
+      background: #5e36c8;
+    }
+
+    button:hover { filter: brightness(1.15); }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+
+    .target-btn {
+      background: #a83c4d;
+    }
+
+    .log {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 13px;
+      min-height: 18px;
+      color: #d7cfe8;
+    }
+
+    .hint {
+      position: fixed;
+      left: 14px;
+      bottom: 14px;
+      color: #c7bfd7;
+      font-size: 12px;
+      z-index: 9;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar" id="topbar"></div>
+
+<div class="battle-ui">
+  <div class="turn-text" id="turnText">Turn</div>
+  <div class="controls" id="controls"></div>
+  <div class="log" id="battleLog">เลือกเป้าหมายแล้วกด ATTACK เพื่อเริ่ม Magic Battle</div>
+</div>
+
+<div class="hint">Drag = Rotate · Scroll = Zoom</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// =========================================================
+// SCENE
+// =========================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0820);
+scene.fog = new THREE.Fog(0x0b0820, 28, 65);
+
+const camera = new THREE.PerspectiveCamera(
+  42,
+  innerWidth / innerHeight,
+  0.1,
+  200
+);
+
+camera.position.set(0, 17, 23);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: "high-performance"
+});
+
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1, 0);
+controls.minDistance = 16;
+controls.maxDistance = 30;
+controls.minPolarAngle = THREE.MathUtils.degToRad(38);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(68);
+
+// =========================================================
+// LIGHT
+// =========================================================
+scene.add(new THREE.HemisphereLight(0x98b8ff, 0x25152f, 2.2));
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+sun.position.set(-8, 18, 10);
+sun.castShadow = true;
+scene.add(sun);
+
+const purple = new THREE.PointLight(0x864cff, 20, 30, 2);
+purple.position.set(0, 7, -8);
+scene.add(purple);
+
+function flatMat(color) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.82,
+    metalness: 0.03,
+    flatShading: true
+  });
+}
+
+// =========================================================
+// MAP
+// =========================================================
+const island = new THREE.Mesh(
+  new THREE.CylinderGeometry(13, 13.6, 1.5, 32),
+  flatMat(0x39323f)
+);
+island.position.y = -0.7;
+island.receiveShadow = true;
+scene.add(island);
+
+const arena = new THREE.Mesh(
+  new THREE.CircleGeometry(10.5, 48),
+  flatMat(0x514a59)
+);
+arena.rotation.x = -Math.PI / 2;
+arena.receiveShadow = true;
+scene.add(arena);
+
+[
+  [8.3, 8.7, 0x786981],
+  [5.7, 5.95, 0x6f6078],
+  [3.3, 3.5, 0x8d72a0]
+].forEach(([inner, outer, color]) => {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(inner, outer, 48),
+    flatMat(color)
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.025;
+  scene.add(ring);
+});
+
+// center magic circle
+const magicMat = new THREE.MeshBasicMaterial({
+  color: 0xb46cff,
+  transparent: true,
+  opacity: .75,
+  side: THREE.DoubleSide
+});
+
+const magicCircle = new THREE.Mesh(
+  new THREE.RingGeometry(2.15, 2.28, 64),
+  magicMat
+);
+magicCircle.rotation.x = -Math.PI / 2;
+magicCircle.position.y = .07;
+scene.add(magicCircle);
+
+// crystals
+function crystal(x, z, color = 0x9358ff) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(
+      new THREE.ConeGeometry(.25, 1.2 + i * .25, 5),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 1.2,
+        flatShading: true
+      })
+    );
+    m.position.set((i - 1) * .32, .6 + i * .1, 0);
+    m.castShadow = true;
+    g.add(m);
+  }
+  g.position.set(x,0,z);
+  scene.add(g);
+}
+
+[[-9,-4],[-9,5],[9,-4],[9,5],[-5,-9],[5,-9]].forEach(
+  ([x,z],i) => crystal(x,z,i%2 ? 0x4fa7ff : 0x9c5cff)
+);
+
+// =========================================================
+// BATTLE DATA
+// =========================================================
+const fighters = [
+  {
+    id: "P1",
+    name: "Azure Fox",
+    color: 0x338cff,
+    maxHp: 100,
+    hp: 100,
+    attack: 24,
+    position: new THREE.Vector3(0,0,6.6)
+  },
+  {
+    id: "P2",
+    name: "Crimson Drake",
+    color: 0xff5348,
+    maxHp: 100,
+    hp: 100,
+    attack: 22,
+    position: new THREE.Vector3(-6.6,0,0)
+  },
+  {
+    id: "P3",
+    name: "Verdant Beast",
+    color: 0x65db63,
+    maxHp: 100,
+    hp: 100,
+    attack: 20,
+    position: new THREE.Vector3(6.6,0,0)
+  },
+  {
+    id: "P4",
+    name: "Solar Lynx",
+    color: 0xffbf35,
+    maxHp: 100,
+    hp: 100,
+    attack: 23,
+    position: new THREE.Vector3(0,0,-6.6)
+  }
+];
+
+function createMonster(f) {
+  const group = new THREE.Group();
+  group.position.copy(f.position);
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(.82, 1.08, 32),
+    new THREE.MeshBasicMaterial({
+      color: f.color,
+      transparent: true,
+      opacity: .95,
+      side: THREE.DoubleSide
+    })
+  );
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = .06;
+
+  const body = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.72,0),
+    flatMat(f.color)
+  );
+  body.position.y = .85;
+  body.scale.set(1.15,.95,1.35);
+  body.castShadow = true;
+
+  const head = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.48,0),
+    flatMat(f.color)
+  );
+  head.position.set(0,1.35,-.45);
+  head.castShadow = true;
+
+  const horn1 = new THREE.Mesh(
+    new THREE.ConeGeometry(.12,.55,5),
+    flatMat(0xe8dcff)
+  );
+  horn1.position.set(-.25,1.7,-.5);
+  horn1.rotation.x = -.25;
+
+  const horn2 = horn1.clone();
+  horn2.position.x = .25;
+
+  const light = new THREE.PointLight(f.color, 6, 4, 2);
+  light.position.y = 1;
+
+  group.add(ring, body, head, horn1, horn2, light);
+  group.lookAt(0,.7,0);
+
+  scene.add(group);
+
+  f.group = group;
+  f.home = f.position.clone();
+  return group;
+}
+
+fighters.forEach(createMonster);
+
+// =========================================================
+// FX
+// =========================================================
+const fxGroup = new THREE.Group();
+scene.add(fxGroup);
+
+function createCastRing(position, color) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(.38,.58,32),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 1,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    })
+  );
+
+  ring.position.copy(position);
+  ring.position.y += 1.05;
+  ring.rotation.x = -Math.PI / 2;
+  fxGroup.add(ring);
+
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min((now-start)/420,1);
+    ring.scale.setScalar(.65 + p*1.9);
+    ring.rotation.z += .16;
+    ring.material.opacity = 1-p;
+    if (p < 1) requestAnimationFrame(tick);
+    else {
+      fxGroup.remove(ring);
+      ring.geometry.dispose();
+      ring.material.dispose();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function launchMagicProjectile(from, to, color) {
+  return new Promise(resolve=>{
+    const orb = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(.22,1),
+      new THREE.MeshBasicMaterial({ color })
+    );
+
+    const glow = new THREE.PointLight(color, 12, 5, 2);
+    orb.add(glow);
+
+    const startPos = from.clone();
+    startPos.y += 1.15;
+    const endPos = to.clone();
+    endPos.y += 1.0;
+    orb.position.copy(startPos);
+    fxGroup.add(orb);
+
+    const start = performance.now();
+    const duration = 430;
+
+    function tick(now) {
+      const p = Math.min((now-start)/duration,1);
+      const t = p*p*(3-2*p);
+      orb.position.lerpVectors(startPos,endPos,t);
+      orb.position.y += Math.sin(p*Math.PI)*1.15;
+      orb.scale.setScalar(1 + Math.sin(p*Math.PI*6)*.12);
+
+      if (p < 1) requestAnimationFrame(tick);
+      else {
+        fxGroup.remove(orb);
+        orb.geometry.dispose();
+        orb.material.dispose();
+        resolve();
+      }
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function createHitBurst(position, color) {
+  const count = 18;
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(count*3);
+  const velocities = [];
+
+  for (let i=0;i<count;i++) {
+    positions[i*3] = 0;
+    positions[i*3+1] = 0;
+    positions[i*3+2] = 0;
+    velocities.push(
+      new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(.11),
+        THREE.MathUtils.randFloat(.03,.13),
+        THREE.MathUtils.randFloatSpread(.11)
+      )
+    );
+  }
+
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions,3));
+
+  const points = new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({
+      color,
+      size: .11,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    })
+  );
+
+  points.position.copy(position);
+  points.position.y += 1;
+  scene.add(points);
+
+  let frame = 0;
+  function tick() {
+    frame++;
+    const arr = geometry.attributes.position.array;
+    velocities.forEach((v,i)=>{
+      arr[i*3] += v.x;
+      arr[i*3+1] += v.y;
+      arr[i*3+2] += v.z;
+      v.y -= .004;
+    });
+
+    geometry.attributes.position.needsUpdate = true;
+    points.material.opacity = 1 - frame/28;
+
+    if (frame < 28) requestAnimationFrame(tick);
+    else {
+      scene.remove(points);
+      geometry.dispose();
+      points.material.dispose();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// =========================================================
+// UI
+// =========================================================
+const topbar = document.getElementById("topbar");
+const controlsEl = document.getElementById("controls");
+const turnText = document.getElementById("turnText");
+const battleLog = document.getElementById("battleLog");
+
+function buildCards() {
+  topbar.innerHTML = "";
+
+  fighters.forEach((f,i)=>{
+    const el = document.createElement("div");
+    el.className = "player-card";
+    el.id = `card-${i}`;
+
+    const pct = Math.max(0,(f.hp/f.maxHp)*100);
+
+    el.innerHTML = `
+      <div class="name">
+        <span>${f.id} · ${f.name}</span>
+        <span>${f.hp > 0 ? "" : "☠"}</span>
+      </div>
+      <div class="hp-bg">
+        <div class="hp" style="width:${pct}%"></div>
+      </div>
+      <div class="hp-text">${Math.max(0,f.hp)} / ${f.maxHp} HP</div>
+    `;
+
+    topbar.appendChild(el);
+  });
+}
+
+function updateCards() {
+  fighters.forEach((f,i)=>{
+    const card = document.getElementById(`card-${i}`);
+    if (!card) return;
+
+    card.classList.toggle("active", i === currentTurn && f.hp > 0);
+
+    const hp = card.querySelector(".hp");
+    const text = card.querySelector(".hp-text");
+
+    const pct = Math.max(0,(f.hp/f.maxHp)*100);
+    hp.style.width = pct + "%";
+
+    if (pct <= 25) hp.style.background = "#ff4d55";
+    else if (pct <= 50) hp.style.background = "#f6ba38";
+    else hp.style.background = "#54dc72";
+
+    text.textContent = `${Math.max(0,f.hp)} / ${f.maxHp} HP`;
+  });
+}
+
+buildCards();
+
+// =========================================================
+// TURN SYSTEM
+// =========================================================
+let currentTurn = 0;
+let battleLocked = false;
+let selectingTarget = false;
+let lockedTargetIndex = null;
+
+function aliveFighters() {
+  return fighters.filter(f=>f.hp>0);
+}
+
+function getAvailableTargetIndexes(attackerIndex) {
+  return fighters
+    .map((fighter,index)=>({ fighter,index }))
+    .filter(({fighter,index})=>index !== attackerIndex && fighter.hp > 0)
+    .map(({index})=>index);
+}
+
+function nextTurn() {
+  if (aliveFighters().length <= 1) {
+    finishBattle();
+    return;
+  }
+
+  let next = currentTurn;
+
+  do {
+    next = (next + 1) % fighters.length;
+  } while (fighters[next].hp <= 0);
+
+  currentTurn = next;
+  selectingTarget = false;
+  lockedTargetIndex = null;
+  battleLocked = false;
+
+  renderBattleControls();
+}
+
+function renderBattleControls() {
+  updateCards();
+
+  const attacker = fighters[currentTurn];
+  const targetIndexes = getAvailableTargetIndexes(currentTurn);
+
+  if (aliveFighters().length <= 1) {
+    finishBattle();
+    return;
+  }
+
+  turnText.textContent = `TURN: ${attacker.id} · ${attacker.name}`;
+  controlsEl.innerHTML = "";
+
+  // มีเป้าเดียว: ATTACK ยิงทันที ไม่ต้องเข้าโหมดเลือกเป้า
+  if (targetIndexes.length === 1) {
+    lockedTargetIndex = targetIndexes[0];
+
+    const attackButton = document.createElement("button");
+    attackButton.textContent = `✨ ATTACK ${fighters[lockedTargetIndex].id}`;
+    attackButton.disabled = battleLocked;
+    attackButton.onclick = ()=>battleExchange(currentTurn,lockedTargetIndex);
+    controlsEl.appendChild(attackButton);
+
+    battleLog.textContent = battleLocked
+      ? battleLog.textContent
+      : `Target locked: ${fighters[lockedTargetIndex].name}`;
+    return;
+  }
+
+  // มีหลายเป้า: ต้องเลือก/ล็อกเป้าก่อน
+  if (!selectingTarget && lockedTargetIndex === null) {
+    const lockButton = document.createElement("button");
+    lockButton.textContent = "🎯 SELECT TARGET";
+    lockButton.disabled = battleLocked;
+    lockButton.onclick = ()=>{
+      selectingTarget = true;
+      battleLog.textContent = "เลือกเป้าหมายที่จะล็อก";
+      renderBattleControls();
+    };
+    controlsEl.appendChild(lockButton);
+    return;
+  }
+
+  if (selectingTarget) {
+    targetIndexes.forEach(index=>{
+      const target = fighters[index];
+      const btn = document.createElement("button");
+      btn.className = "target-btn";
+      btn.textContent = `🎯 ${target.id} · ${target.name}`;
+      btn.disabled = battleLocked;
+      btn.onclick = ()=>{
+        lockedTargetIndex = index;
+        selectingTarget = false;
+        battleLog.textContent = `Locked target: ${target.name}`;
+        renderBattleControls();
+      };
+      controlsEl.appendChild(btn);
+    });
+
+    const cancel = document.createElement("button");
+    cancel.textContent = "ยกเลิก";
+    cancel.onclick = ()=>{
+      selectingTarget = false;
+      renderBattleControls();
+    };
+    controlsEl.appendChild(cancel);
+    return;
+  }
+
+  const target = fighters[lockedTargetIndex];
+  if (!target || target.hp <= 0 || lockedTargetIndex === currentTurn) {
+    lockedTargetIndex = null;
+    renderBattleControls();
+    return;
+  }
+
+  const attackButton = document.createElement("button");
+  attackButton.textContent = `✨ ATTACK → ${target.id}`;
+  attackButton.disabled = battleLocked;
+  attackButton.onclick = ()=>battleExchange(currentTurn,lockedTargetIndex);
+  controlsEl.appendChild(attackButton);
+
+  const changeTarget = document.createElement("button");
+  changeTarget.textContent = "🎯 CHANGE TARGET";
+  changeTarget.disabled = battleLocked;
+  changeTarget.onclick = ()=>{
+    selectingTarget = true;
+    renderBattleControls();
+  };
+  controlsEl.appendChild(changeTarget);
+}
+
+function finishBattle() {
+  battleLocked = true;
+  controlsEl.innerHTML = "";
+
+  const winner = fighters.find(f=>f.hp>0);
+
+  if (winner) {
+    turnText.textContent = `🏆 ${winner.id} · ${winner.name} WINS`;
+    battleLog.textContent = "Battle finished";
+  } else {
+    turnText.textContent = "DRAW";
+  }
+
+  updateCards();
+}
+
+// =========================================================
+// MAGIC ATTACK + COUNTER ATTACK
+// =========================================================
+function wait(ms) {
+  return new Promise(resolve=>setTimeout(resolve,ms));
+}
+
+async function hitShake(fighter) {
+  const original = fighter.group.position.clone();
+  fighter.group.position.x += .18;
+  await wait(55);
+  fighter.group.position.x -= .34;
+  await wait(55);
+  fighter.group.position.copy(original);
+}
+
+function applyDamage(attacker,target) {
+  const variation = THREE.MathUtils.randInt(-4,4);
+  const damage = Math.max(8,attacker.attack + variation);
+  target.hp = Math.max(0,target.hp-damage);
+  updateCards();
+  return damage;
+}
+
+function markDefeated(fighter) {
+  fighter.group.scale.y = .35;
+  fighter.group.position.y = -.25;
+}
+
+async function castMagic(attacker,target,label = "โจมตี") {
+  if (attacker.hp <= 0 || target.hp <= 0) return false;
+
+  const attackerPos = attacker.group.position.clone();
+  const targetPos = target.group.position.clone();
+
+  attacker.group.lookAt(targetPos.x,.8,targetPos.z);
+  target.group.lookAt(attackerPos.x,.8,attackerPos.z);
+
+  battleLog.textContent = `${attacker.name} ${label} ${target.name}`;
+
+  // wind-up / cast pose แบบไม่ต้องวิ่งชนกัน
+  const baseScale = attacker.group.scale.clone();
+  attacker.group.scale.set(baseScale.x*1.08,baseScale.y*.92,baseScale.z*1.08);
+  createCastRing(attackerPos,attacker.color);
+  await wait(180);
+  attacker.group.scale.copy(baseScale);
+
+  await launchMagicProjectile(attackerPos,targetPos,attacker.color);
+  createHitBurst(targetPos,attacker.color);
+  await hitShake(target);
+
+  const damage = applyDamage(attacker,target);
+  battleLog.textContent = `${attacker.name} ${label} ${target.name} -${damage} HP`;
+
+  if (target.hp <= 0) {
+    markDefeated(target);
+    battleLog.textContent = `${target.name} ถูกกำจัด!`;
+    await wait(350);
+    return false;
+  }
+
+  await wait(330);
+  return true;
+}
+
+async function battleExchange(attackerIndex,targetIndex) {
+  if (battleLocked) return;
+
+  const attacker = fighters[attackerIndex];
+  const target = fighters[targetIndex];
+  if (!attacker || !target || attacker.hp <= 0 || target.hp <= 0) return;
+
+  battleLocked = true;
+  selectingTarget = false;
+  lockedTargetIndex = targetIndex;
+  renderBattleControls();
+
+  // One click = ผู้เล่นยิงเวท -> target ที่ล็อกไว้สวนกลับ
+  const canCounter = await castMagic(attacker,target,"ร่ายเวทใส่");
+
+  if (canCounter && attacker.hp > 0) {
+    battleLog.textContent = `${target.name} เตรียมสวนกลับ!`;
+    await wait(300);
+    await castMagic(target,attacker,"สวนกลับใส่");
+  }
+
+  attacker.group.lookAt(0,.7,0);
+  if (target.hp > 0) target.group.lookAt(0,.7,0);
+
+  await wait(420);
+  nextTurn();
+}
+
+// =========================================================
+// KEYBOARD DEBUG
+// =========================================================
+window.addEventListener("keydown",(e)=>{
+  const index = Number(e.key)-1;
+  if (index >= 0 && index < fighters.length && index !== currentTurn && fighters[index].hp > 0) {
+    lockedTargetIndex = index;
+    selectingTarget = false;
+    renderBattleControls();
+  }
+});
+
+// =========================================================
+// LOOP
+// =========================================================
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const t = clock.getElapsedTime();
+
+  magicCircle.material.opacity =
+    .55 + Math.sin(t*2.1)*.16;
+
+  fighters.forEach((f,i)=>{
+    if (f.hp <= 0) return;
+
+    const ring = f.group.children[0];
+    const pulse = 1 + Math.sin(t*2+i)*.04;
+    ring.scale.setScalar(pulse);
+  });
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+
+renderBattleControls();
+animate();
+
+window.addEventListener("resize",()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+
+</body>
+</html>

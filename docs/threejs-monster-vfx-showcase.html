@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Three.js Monster VFX Showcase</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080612;font-family:Arial,sans-serif}
+canvas{display:block}
+.hud{position:fixed;top:12px;left:12px;z-index:10;color:#fff;background:#0b0a1ddd;border:1px solid #ffffff20;padding:11px 13px;border-radius:12px;line-height:1.4}
+.panel{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:20;width:min(1180px,calc(100% - 18px));max-height:40vh;overflow:auto;padding:11px;background:#0b0a1df0;border:1px solid #ffffff22;border-radius:14px}
+.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px}
+button{border:0;border-radius:9px;padding:10px 7px;background:#523aa0;color:#fff;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(1.15)}
+button:disabled{opacity:.35}
+</style>
+</head>
+<body>
+<div class="hud"><b>Monster VFX Showcase</b><br>Low-poly Three.js • reusable monster attack templates</div>
+<div class="panel"><div class="buttons" id="buttons"></div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "three/addons/controls/OrbitControls.js";
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x090716);
+scene.fog=new THREE.Fog(0x090716,25,55);
+
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,150);
+camera.position.set(0,10,18);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;
+controls.target.set(0,1,0);
+
+scene.add(new THREE.HemisphereLight(0xb7c8ff,0x25152d,2.4));
+const sun=new THREE.DirectionalLight(0xffffff,2.5);sun.position.set(-8,15,10);sun.castShadow=true;scene.add(sun);
+
+function mat(c,e=0,int=0){return new THREE.MeshStandardMaterial({color:c,emissive:e,emissiveIntensity:int,roughness:.8,flatShading:true})}
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+function dispose(m){m.geometry?.dispose();if(m.material){Array.isArray(m.material)?m.material.forEach(x=>x.dispose()):m.material.dispose()}}
+function world(o,y=1){const p=new THREE.Vector3();o.getWorldPosition(p);p.y+=y;return p}
+
+const arena=new THREE.Mesh(new THREE.CircleGeometry(9,40),mat(0x4c4654));arena.rotation.x=-Math.PI/2;arena.receiveShadow=true;scene.add(arena);
+const ring=new THREE.Mesh(new THREE.RingGeometry(7.2,7.5,40),mat(0x74677d));ring.rotation.x=-Math.PI/2;ring.position.y=.02;scene.add(ring);
+
+function monster(color,x,type="beast"){
+ const g=new THREE.Group();
+ const body=new THREE.Mesh(new THREE.IcosahedronGeometry(.9,0),mat(color));body.position.y=1;body.scale.set(1.25,1,1.45);body.castShadow=true;
+ const head=new THREE.Mesh(new THREE.IcosahedronGeometry(.52,0),mat(color));head.position.set(0,1.55,-.5);head.castShadow=true;
+ const horn1=new THREE.Mesh(new THREE.ConeGeometry(.13,.6,5),mat(0xe7dcff));horn1.position.set(-.28,1.98,-.52);
+ const horn2=horn1.clone();horn2.position.x=.28;
+ const tail=new THREE.Mesh(new THREE.CylinderGeometry(.1,.16,1.5,6),mat(color));tail.position.set(0,.85,.95);tail.rotation.x=Math.PI/3;
+ g.add(body,head,horn1,horn2,tail);g.position.set(x,0,0);scene.add(g);return g;
+}
+const attacker=monster(0x438cff,-4.8);
+const target=monster(0xff5a55,4.8);
+attacker.lookAt(target.position);target.lookAt(attacker.position);attacker.home=attacker.position.clone();
+
+const fx=new THREE.Group();scene.add(fx);
+
+function tween(obj,from,to,dur){
+ return new Promise(resolve=>{const s=performance.now();function f(now){const p=Math.min((now-s)/dur,1),t=p*p*(3-2*p);obj.position.lerpVectors(from,to,t);if(p<1)requestAnimationFrame(f);else resolve()}requestAnimationFrame(f)})
+}
+
+function burst(p,color=0xffffff,count=24,size=.11){
+ const geo=new THREE.BufferGeometry(),arr=new Float32Array(count*3),vel=[];
+ for(let i=0;i<count;i++)vel.push(new THREE.Vector3(THREE.MathUtils.randFloatSpread(.18),THREE.MathUtils.randFloat(.02,.18),THREE.MathUtils.randFloatSpread(.18)));
+ geo.setAttribute("position",new THREE.BufferAttribute(arr,3));
+ const pts=new THREE.Points(geo,new THREE.PointsMaterial({color,size,transparent:true,opacity:1,depthWrite:false}));
+ pts.position.copy(p);fx.add(pts);let n=0;
+ function tick(){n++;const a=geo.attributes.position.array;vel.forEach((v,i)=>{a[i*3]+=v.x;a[i*3+1]+=v.y;a[i*3+2]+=v.z;v.y-=.005});geo.attributes.position.needsUpdate=true;pts.material.opacity=1-n/30;if(n<30)requestAnimationFrame(tick);else{fx.remove(pts);geo.dispose();pts.material.dispose()}}
+ requestAnimationFrame(tick);
+}
+function ringFx(p,color=0xffffff,max=3){
+ const m=new THREE.Mesh(new THREE.RingGeometry(.22,.35,32),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9,side:THREE.DoubleSide}));
+ m.rotation.x=-Math.PI/2;m.position.copy(p);fx.add(m);const s=performance.now();
+ function tick(now){const t=Math.min((now-s)/450,1);m.scale.setScalar(.5+t*max);m.material.opacity=1-t;if(t<1)requestAnimationFrame(tick);else{fx.remove(m);dispose(m)}}requestAnimationFrame(tick);
+}
+function arcFx(p,color=0xffffff,scale=1){
+ const m=new THREE.Mesh(new THREE.TorusGeometry(.8*scale,.07*scale,6,28,Math.PI*1.3),new THREE.MeshBasicMaterial({color,transparent:true,opacity:1}));
+ m.position.copy(p);m.rotation.set(Math.PI/2,0,Math.PI/4);fx.add(m);const s=performance.now();
+ function tick(now){const t=Math.min((now-s)/280,1);m.scale.setScalar(.45+t);m.material.opacity=1-t;if(t<1)requestAnimationFrame(tick);else{fx.remove(m);dispose(m)}}requestAnimationFrame(tick);
+}
+function trail(p,color,size=.08){
+ const m=new THREE.Mesh(new THREE.OctahedronGeometry(size,0),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9}));
+ m.position.copy(p);fx.add(m);const s=performance.now();
+ function tick(now){const t=Math.min((now-s)/300,1);m.scale.setScalar(1-t);m.material.opacity=1-t;m.position.y+=.006;if(t<1)requestAnimationFrame(tick);else{fx.remove(m);dispose(m)}}requestAnimationFrame(tick);
+}
+async function shake(amount=.18,duration=160){
+ const base=camera.position.clone(),s=performance.now();
+ return new Promise(resolve=>{function f(now){const p=Math.min((now-s)/duration,1);camera.position.set(base.x+THREE.MathUtils.randFloatSpread(amount),base.y+THREE.MathUtils.randFloatSpread(amount),base.z+THREE.MathUtils.randFloatSpread(amount));if(p<1)requestAnimationFrame(f);else{camera.position.copy(base);resolve()}}requestAnimationFrame(f)})
+}
+async function reaction(power=.25){const b=target.position.clone();target.position.x+=power;target.rotation.z=-.15;await wait(80);target.position.copy(b);target.rotation.z=0}
+async function approach(d=1.8){const a=attacker.position.clone(),b=target.position.clone(),dir=new THREE.Vector3().subVectors(b,a).normalize(),stop=b.clone().addScaledVector(dir,-d);await tween(attacker,a,stop,240);return stop}
+async function home(){await tween(attacker,attacker.position.clone(),attacker.home,280);attacker.lookAt(target.position)}
+
+async function bite(){await approach(1.6);const p=world(target,1.45);for(let i=0;i<2;i++){arcFx(p,0xffe8c0,.65);await wait(80)}burst(p,0xffd27d,18);await reaction(.25);await home()}
+async function doubleBite(){await approach(1.6);for(let i=0;i<2;i++){const p=world(target,1.45);arcFx(p,i?0xff9f6b:0xffdf92,.7);burst(p,0xffc46b,12);await reaction(.16);await wait(120)}await home()}
+async function claw(){await approach();const p=world(target,1.2);arcFx(p,0xd9f1ff,1);await wait(80);arcFx(p,0xd9f1ff,1);burst(p,0xbde6ff,20);await reaction(.28);await home()}
+async function crossSlash(){await approach();const p=world(target,1.25);arcFx(p,0xffffff,1.15);await wait(70);const a=new THREE.Mesh(new THREE.TorusGeometry(.85,.065,6,28,Math.PI*1.3),new THREE.MeshBasicMaterial({color:0x9ddcff,transparent:true,opacity:1}));a.position.copy(p);a.rotation.set(Math.PI/2,0,-Math.PI/4);fx.add(a);setTimeout(()=>{fx.remove(a);dispose(a)},260);burst(p,0xc9efff,28);await reaction(.35);await home()}
+async function hornCharge(){const start=attacker.position.clone(),back=start.clone();back.x-=.8;await tween(attacker,start,back,130);await approach(1.25);const p=world(target,1.25);burst(p,0xffd384,32);ringFx(new THREE.Vector3(target.position.x,.05,target.position.z),0xffd384,3);await shake(.28,220);await reaction(.5);await home()}
+async function pounce(){const start=attacker.position.clone(),end=target.position.clone().add(new THREE.Vector3(-1.4,0,0));const s=performance.now();await new Promise(resolve=>{function f(now){let p=Math.min((now-s)/550,1),t=p*p*(3-2*p);attacker.position.lerpVectors(start,end,t);attacker.position.y=Math.sin(p*Math.PI)*3;if(p<1)requestAnimationFrame(f);else resolve()}requestAnimationFrame(f)});burst(world(target,.8),0xffffff,30);ringFx(new THREE.Vector3(target.position.x,.05,target.position.z),0xffffff,2.4);await shake(.25,190);await reaction(.35);await home()}
+async function tailWhip(){await approach(2.0);attacker.rotation.y+=Math.PI*.8;const p=world(target,.9);arcFx(p,0x9ed6ff,1.4);burst(p,0x9ed6ff,22);await reaction(.4);attacker.rotation.y-=Math.PI*.8;await home()}
+async function tailSmash(){await approach(1.9);const p=new THREE.Vector3(target.position.x,.05,target.position.z);ringFx(p,0xffad6b,3.6);burst(world(target,.5),0xffad6b,34);await shake(.3,230);await reaction(.5);await home()}
+async function roar(){const p=world(attacker,1.4);for(let i=0;i<3;i++){const r=new THREE.Mesh(new THREE.TorusGeometry(.45+i*.25,.05,6,32),new THREE.MeshBasicMaterial({color:0xb7d7ff,transparent:true,opacity:.8}));r.position.copy(p);r.rotation.y=Math.PI/2;fx.add(r);setTimeout(()=>{fx.remove(r);dispose(r)},500+i*100);await wait(90)}ringFx(new THREE.Vector3(target.position.x,.05,target.position.z),0xb7d7ff,2.8);await reaction(.5)}
+async function fireBreath(){const start=world(attacker,1.55),end=world(target,1.3);const group=[];for(let i=0;i<55;i++){const m=new THREE.Mesh(new THREE.TetrahedronGeometry(THREE.MathUtils.randFloat(.06,.14),0),new THREE.MeshBasicMaterial({color:i%2?0xff6a28:0xffc14a,transparent:true,opacity:.9}));m.position.copy(start);fx.add(m);group.push({m,offset:new THREE.Vector3(0,THREE.MathUtils.randFloatSpread(.5),THREE.MathUtils.randFloatSpread(.5))})}
+ const s=performance.now();await new Promise(resolve=>{function f(now){let p=Math.min((now-s)/850,1);group.forEach((o,i)=>{let q=Math.min(1,Math.max(0,p-i/150));o.m.position.lerpVectors(start,end,q);o.m.position.addScaledVector(o.offset,q);o.m.material.opacity=1-q*.6});if(p<1)requestAnimationFrame(f);else resolve()}requestAnimationFrame(f)});burst(end,0xff6a28,36);group.forEach(o=>{fx.remove(o.m);dispose(o.m)});await reaction(.28)}
+async function iceBreath(){const start=world(attacker,1.55),end=world(target,1.3);for(let i=0;i<35;i++){const p=start.clone().lerp(end,i/35);p.add(new THREE.Vector3(0,THREE.MathUtils.randFloatSpread(.7),THREE.MathUtils.randFloatSpread(.7)));trail(p,0x83d8ff,.11)}await wait(600);burst(end,0x9de5ff,38,.13);await reaction(.2)}
+async function poisonBreath(){const start=world(attacker,1.55),end=world(target,1.2);for(let i=0;i<45;i++){const p=start.clone().lerp(end,i/45);p.add(new THREE.Vector3(0,THREE.MathUtils.randFloatSpread(.9),THREE.MathUtils.randFloatSpread(.9)));trail(p,i%2?0x7ee56d:0xb5f15a,.12)}await wait(650);burst(end,0x7edf67,30);await reaction(.18)}
+async function sting(){await approach(1.7);const p=world(target,.95);const m=new THREE.Mesh(new THREE.ConeGeometry(.12,1.2,5),new THREE.MeshBasicMaterial({color:0x96ef62}));m.position.copy(p);m.rotation.z=Math.PI/2;fx.add(m);await wait(180);burst(p,0x86e85c,22);fx.remove(m);dispose(m);await reaction(.2);await home()}
+async function webShot(){const start=world(attacker,1.4),end=world(target,1.25);const lineMat=new THREE.LineBasicMaterial({color:0xffffff});for(let i=0;i<8;i++){const mid=start.clone().lerp(end,.5).add(new THREE.Vector3(0,THREE.MathUtils.randFloatSpread(.7),THREE.MathUtils.randFloatSpread(.7)));const geo=new THREE.BufferGeometry().setFromPoints([start,mid,end]);const l=new THREE.Line(geo,lineMat.clone());fx.add(l);setTimeout(()=>{fx.remove(l);geo.dispose();l.material.dispose()},650)}await wait(500);ringFx(new THREE.Vector3(target.position.x,.05,target.position.z),0xffffff,1.8)}
+async function acidSpit(){await projectileCustom(0x8be34f,650,.55)}
+async function spikeShot(){const start=world(attacker,1.4),end=world(target,1.2);const spikes=[];for(let i=0;i<7;i++){const s=new THREE.Mesh(new THREE.ConeGeometry(.1,.7,5),new THREE.MeshBasicMaterial({color:0xd6d6d6}));s.position.copy(start);s.rotation.z=Math.PI/2;fx.add(s);spikes.push(s)}
+ const t0=performance.now();await new Promise(resolve=>{function f(now){let p=Math.min((now-t0)/600,1);spikes.forEach((s,i)=>{const e=end.clone().add(new THREE.Vector3(0,(i-3)*.18,(i-3)*.12));s.position.lerpVectors(start,e,p)});if(p<1)requestAnimationFrame(f);else resolve()}requestAnimationFrame(f)});burst(end,0xdadada,28);spikes.forEach(s=>{fx.remove(s);dispose(s)});await reaction(.22)}
+async function wingSlash(){const p=world(target,1.2);arcFx(p,0xb8edff,1.5);await wait(80);arcFx(p,0x8ddfff,1.5);burst(p,0xa9e8ff,24);await reaction(.38)}
+async function gust(){const p=world(target,1);for(let i=0;i<4;i++){ringFx(new THREE.Vector3(target.position.x-.6+i*.35,.25,target.position.z),0xbdefff,1.5+i*.25);await wait(80)}await reaction(.55)}
+async function ghostRush(){const clone=attacker.clone();clone.traverse(o=>{if(o.material)o.material=o.material.clone(),o.material.transparent=true,o.material.opacity=.35});clone.position.copy(attacker.position);scene.add(clone);await approach(1.3);const p=world(target,1.1);burst(p,0xb487ff,36);await shake(.22,180);scene.remove(clone);await reaction(.4);await home()}
+async function projectileCustom(color,duration=700,arc=.8){const orb=new THREE.Mesh(new THREE.OctahedronGeometry(.3,1),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:2.5,flatShading:true}));const s=world(attacker,1.4),e=world(target,1.25);orb.position.copy(s);fx.add(orb);const t0=performance.now();await new Promise(resolve=>{function f(now){let p=Math.min((now-t0)/duration,1),t=p*p*(3-2*p);orb.position.lerpVectors(s,e,t);orb.position.y+=Math.sin(p*Math.PI)*arc;trail(orb.position.clone(),color,.07);if(p<1)requestAnimationFrame(f);else resolve()}requestAnimationFrame(f)});burst(e,color,30);fx.remove(orb);dispose(orb)}
+async function megaBreath(){const start=world(attacker,1.55),end=world(target,1.3);const dir=new THREE.Vector3().subVectors(end,start),len=dir.length(),mid=start.clone().add(end).multiplyScalar(.5);const beam=new THREE.Mesh(new THREE.CylinderGeometry(.45,.8,len,10),new THREE.MeshBasicMaterial({color:0xe6a4ff,transparent:true,opacity:.85}));beam.position.copy(mid);beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.clone().normalize());fx.add(beam);for(let i=0;i<40;i++)trail(start.clone().lerp(end,Math.random()),0xca74ff,.1);await shake(.35,400);await wait(500);burst(end,0xd889ff,55,.16);fx.remove(beam);dispose(beam)}
+async function beastRampage(){await approach();for(let i=0;i<6;i++){const p=world(target,1+Math.random()*.7);i%2?arcFx(p,0xffffff,1):burst(p,0xffd38a,14);await reaction(.12);await wait(90)}ringFx(new THREE.Vector3(target.position.x,.05,target.position.z),0xffc87a,3);await shake(.35,260);await home()}
+
+const demos=[
+["🦷 Bite",bite],["🦷 Double Bite",doubleBite],["🐾 Claw",claw],["❌ Cross Slash",crossSlash],
+["🐏 Horn Charge",hornCharge],["🐺 Pounce",pounce],["🦂 Tail Whip",tailWhip],["💥 Tail Smash",tailSmash],
+["🦁 Roar",roar],["🔥 Fire Breath",fireBreath],["❄ Ice Breath",iceBreath],["☠ Poison Breath",poisonBreath],
+["🦂 Sting",sting],["🕷 Web Shot",webShot],["🧪 Acid Spit",acidSpit],["🦔 Spike Shot",spikeShot],
+["🪽 Wing Slash",wingSlash],["🌪 Gust",gust],["👻 Ghost Rush",ghostRush],
+["🐲 Mega Breath",megaBreath],["⚡ Beast Rampage",beastRampage]
+];
+
+let busy=false;const buttons=document.getElementById("buttons");
+demos.forEach(([name,fn])=>{const b=document.createElement("button");b.textContent=name;b.onclick=async()=>{if(busy)return;busy=true;[...buttons.children].forEach(x=>x.disabled=true);try{await fn()}finally{busy=false;[...buttons.children].forEach(x=>x.disabled=false)}};buttons.appendChild(b)});
+
+function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>

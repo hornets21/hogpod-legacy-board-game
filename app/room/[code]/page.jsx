@@ -1220,7 +1220,11 @@ export default function OnlineGameRoom({ params }) {
               ? (potionId) => dispatchAction("USE_POTION", { potionId, playerIndex: myPlayerIndex })
               : null
           }
-          onFlee={isMyTurn ? () => dispatchAction("FLEE_COMBAT") : null}
+          onFlee={
+            isMyTurn && activeState.players?.[activeState.currentPlayerIndex]?.pet?.effect === "dodge_once" && !activeState.players?.[activeState.currentPlayerIndex]?.dodgeUsed
+              ? () => dispatchAction("FLEE_COMBAT")
+              : null
+          }
         />
       )}
 

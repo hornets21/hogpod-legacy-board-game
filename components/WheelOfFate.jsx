@@ -1,16 +1,30 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { getTotalDmg } from "@/lib/gameEngine";
 
-export default function WheelOfFate({ monster, player, onSpinComplete }) {
+const WheelOfFate = forwardRef(function WheelOfFate(
+  { monster, player, onSpinComplete, spinTrigger, onSpinStateChange, autoSpin = false },
+  ref
+) {
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [spunResult, setSpunResult] = useState(null);
 
   const onSpinCompleteRef = useRef(onSpinComplete);
   onSpinCompleteRef.current = onSpinComplete;
+  const onSpinStateChangeRef = useRef(onSpinStateChange);
+  onSpinStateChangeRef.current = onSpinStateChange;
   const isBot = Boolean(player?.isBot);
+
+  useEffect(() => {
+    if (autoSpin && !spinning && !spunResult) {
+      const timer = setTimeout(() => {
+        spinWheel();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [autoSpin]);
 
   const playerDmg = getTotalDmg(player);
   const playerHp = Math.max(1, player?.hp || 1);
@@ -86,10 +100,34 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
     .map((seg, idx) => `${seg.color} ${idx * segmentDegree}deg ${(idx + 1) * segmentDegree}deg`)
     .join(", ")})`;
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      spin: () => {
+        if (!spinning && !spunResult) {
+          spinWheel();
+        }
+      },
+      isSpinning: spinning,
+      hasResult: Boolean(spunResult),
+    }),
+    [spinning, spunResult]
+  );
+
+  useEffect(() => {
+    if (spinTrigger && !spinning && !spunResult) {
+      spinWheel();
+    }
+  }, [spinTrigger, spinning, spunResult]);
+
   function spinWheel() {
     if (spinning || spunResult) return;
 
     setSpinning(true);
+    if (typeof onSpinStateChangeRef.current === "function") {
+      onSpinStateChangeRef.current({ spinning: true, spunResult: null });
+    }
+
     // Random spin: 5 to 10 full turns + random segment angle
     const selectedIndex = Math.floor(Math.random() * segments.length);
     const segDegree = 360 / segments.length;
@@ -112,7 +150,7 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
       const remainingMonsterHp = Math.max(0, monsterHp - damageDealt);
       const outcome = isWinClash ? "win" : "lose";
 
-      setSpunResult({
+      const res = {
         ...selectedSeg,
         dmg: rolledDmg,
         hp: rolledHpThreshold,
@@ -121,7 +159,12 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
         playerHp: currentHp,
         damageDealt,
         remainingMonsterHp,
-      });
+      };
+
+      setSpunResult(res);
+      if (typeof onSpinStateChangeRef.current === "function") {
+        onSpinStateChangeRef.current({ spinning: false, spunResult: res });
+      }
     }, 4500);
   }
 
@@ -177,8 +220,8 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
             </div>
             <div className="text-[11px] font-bold text-white/90 truncate mt-0.5">
               {spunResult.outcome === "win"
-                ? `⚔️ ชนะการปะทะ! สร้าง ${spunResult.damageDealt} ดาเมจใส่ ${monster?.name || "มอนสเตอร์"}`
-                : `💥 แพ้การปะทะ! โดนโจมตีสวนกลับ ${spunResult.dmg} ดาเมจ`}
+                ? `ชนะการปะทะ! สร้าง ${spunResult.damageDealt} ดาเมจใส่ ${monster?.name || "มอนสเตอร์"}`
+                : `แพ้การปะทะ! โดนโจมตีสวนกลับ ${spunResult.dmg} ดาเมจ`}
             </div>
             <div className="text-[10px] font-black text-amber-300 mt-1 flex justify-center gap-3 bg-black/50 py-1 px-3 rounded-lg border border-white/10">
               <span>พลังโจมตีผู้เล่น: {spunResult.playerDmg}</span>
@@ -301,4 +344,6 @@ export default function WheelOfFate({ monster, player, onSpinComplete }) {
       )}
     </div>
   );
-}
+});
+
+export default WheelOfFate;

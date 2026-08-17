@@ -1,729 +1,850 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+// ============================================================
+// PvpCombatModal — Fullscreen 3D PvP Arena with Monster Dock UI
+// Pure 3D Canvas Background, Monster Combat Button Style,
+// 1-Attack Target Selection per Player, Strict Zero Emojis
+// ============================================================
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { SKILLS, POTIONS } from "@/lib/gameData";
 import { getTotalDmg } from "@/lib/gameEngine";
 import { emitSkillCast, emitDamageDealt, emitHeal } from "@/lib/skillFxBus";
-import SkillButton from "@/components/fx/SkillButton";
+import ItemTooltip from "@/components/fx/ItemTooltip";
 import Pvp3dBattleStage from "@/components/board3d/Pvp3dBattleStage";
 
-export default function PvpCombatModal({ pvpEncounter, players, onPvpAction, myPlayerIndex }) {
-  const [selectedSkills, setSelectedSkills] = useState({}); // { houseId: skillId }
-  const [selectedPotions, setSelectedPotions] = useState({}); // { houseId: potionId }
-  const [selectedTargets, setSelectedTargets] = useState({}); // { houseId: targetPlayerIndex }
-  const [selectedAlliances, setSelectedAlliances] = useState({}); // { houseId: alliedHouseId }
-  const [clashResult, setClashResult] = useState(null);
-  const [autoStartCountdown, setAutoStartCountdown] = useState(null);
-  const [autoReturnCountdown, setAutoReturnCountdown] = useState(null);
-
+export default function PvpCombatModal({
+  pvpEncounter,
+  players,
+  onPvpAction,
+  myPlayerIndex,
+}) {
   if (!pvpEncounter) return null;
 
   const cell = pvpEncounter.cell || 1;
-  const participants = (pvpEncounter.participants ||
-    (pvpEncounter.participantIndices
-      ? pvpEncounter.participantIndices.map((idx) => ({ ...players[idx], playerIndex: idx }))
-      : [])
-  )
-    .map((p) => {
-      if (!p) return null;
-      const playerIndex = p.playerIndex ?? players.findIndex((player) => player.houseId === p.houseId);
-      return playerIndex >= 0 ? { ...p, playerIndex } : null;
-    })
-    .filter(Boolean);
+
+  // Extract initial fighters
+  const initialFighters = useMemo(() => {
+    const rawList =
+      pvpEncounter.participants ||
+      (pvpEncounter.participantIndices
+        ? pvpEncounter.participantIndices.map((idx) => ({
+            ...players[idx],
+            playerIndex: idx,
+          }))
+        : []);
+
+    return rawList
+      .map((p) => {
+        if (!p) return null;
+        const playerIndex =
+          p.playerIndex ??
+          players.findIndex((player) => player.houseId === p.houseId);
+        if (playerIndex < 0) return null;
+        const basePlayer = players[playerIndex] || p;
+        return {
+          id: `P${playerIndex + 1}`,
+          playerIndex,
+          houseId: basePlayer.houseId,
+          name: basePlayer.name || `Player ${playerIndex + 1}`,
+          color: basePlayer.color || "#f59e0b",
+          maxHp: basePlayer.maxHp || 100,
+          hp: Math.max(0, basePlayer.hp ?? 100),
+          baseDmg: getTotalDmg(basePlayer) || 20,
+          skills: basePlayer.skills || [],
+          skillCooldowns: { ...(basePlayer.skillCooldowns || {}) },
+          potions: [...(basePlayer.potions || [])],
+          isBot: Boolean(basePlayer.isBot),
+          isInvincible: Boolean(basePlayer.isInvincible),
+        };
+      })
+      .filter(Boolean);
+  }, [pvpEncounter, players]);
+
+  // Mutable fighter list inside duel
+  const [fighters, setFighters] = useState(initialFighters);
+  const [currentTurn, setCurrentTurn] = useState(0);
+  const [completedTurns, setCompletedTurns] = useState([]);
+  const [damageDealtMap, setDamageDealtMap] = useState({});
+
+  const [lockedTargetIndex, setLockedTargetIndex] = useState(null);
+  const [battleLocked, setBattleLocked] = useState(false);
+  const [battleLog, setBattleLog] = useState("Select an opponent and attack to initiate clash");
+  const [logHistory, setLogHistory] = useState([]);
+
+  // Drawers for Monster Combat Button Dock
+  const [showSkillDrawer, setShowSkillDrawer] = useState(false);
+  const [showItemDrawer, setShowItemDrawer] = useState(false);
+
+  // Active VFX states for 3D Stage
+  const [activeCast, setActiveCast] = useState(null);
+  const [activeProjectile, setActiveProjectile] = useState(null);
+  const [activeHit, setActiveHit] = useState(null);
+
+  // Selected spells/potions for active turn
+  const [selectedSkillId, setSelectedSkillId] = useState(null);
+  const [selectedPotionId, setSelectedPotionId] = useState(null);
+
+  // Duel completion state
+  const [duelFinished, setDuelFinished] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const [autoReturnCountdown, setAutoReturnCountdown] = useState(null);
+
+  // Refs for async animation queue
+  const fightersRef = useRef(fighters);
+  fightersRef.current = fighters;
+  const currentTurnRef = useRef(currentTurn);
+  currentTurnRef.current = currentTurn;
+  const completedTurnsRef = useRef(completedTurns);
+  completedTurnsRef.current = completedTurns;
+  const damageDealtMapRef = useRef(damageDealtMap);
+  damageDealtMapRef.current = damageDealtMap;
+  const battleLockedRef = useRef(battleLocked);
+  battleLockedRef.current = battleLocked;
+  const isResolvingRef = useRef(false);
+  const onPvpActionRef = useRef(onPvpAction);
+  onPvpActionRef.current = onPvpAction;
 
   const isOnline = myPlayerIndex !== undefined;
   const isSpectator = isOnline && (myPlayerIndex == null || myPlayerIndex < 0);
-  const hasControlledFighter = !isSpectator && participants.some(
-    (p) => (isOnline ? p.playerIndex === myPlayerIndex : !p.isBot)
-  );
-  const isAllBots = participants.length > 0 && participants.every((p) => p.isBot);
+  const currentAttacker = fighters[currentTurn] || fighters[0];
 
-  const playersRef = useRef(players);
-  playersRef.current = players;
-  const participantsRef = useRef(participants);
-  participantsRef.current = participants;
-  const selectedSkillsRef = useRef(selectedSkills);
-  selectedSkillsRef.current = selectedSkills;
-  const selectedPotionsRef = useRef(selectedPotions);
-  selectedPotionsRef.current = selectedPotions;
-  const selectedTargetsRef = useRef(selectedTargets);
-  selectedTargetsRef.current = selectedTargets;
-  const selectedAlliancesRef = useRef(selectedAlliances);
-  selectedAlliancesRef.current = selectedAlliances;
-  const onPvpActionRef = useRef(onPvpAction);
-  onPvpActionRef.current = onPvpAction;
-  const hasStartedClashRef = useRef(false);
-  const hasResolvedRef = useRef(false);
+  const isMyTurn = useMemo(() => {
+    if (!currentAttacker || currentAttacker.hp <= 0) return false;
+    if (isOnline) {
+      return (
+        myPlayerIndex != null &&
+        myPlayerIndex >= 0 &&
+        currentAttacker.playerIndex === myPlayerIndex
+      );
+    }
+    return !currentAttacker.isBot;
+  }, [currentAttacker, isOnline, myPlayerIndex]);
 
-  // Reset encounter state when cell changes
+  // Target indices of other living fighters
+  const availableTargetIndices = useMemo(() => {
+    return fighters
+      .map((f, idx) => ({ f, idx }))
+      .filter(({ f, idx }) => idx !== currentTurn && f.hp > 0)
+      .map(({ idx }) => idx);
+  }, [fighters, currentTurn]);
+
+  // Default target if none locked
+  const activeTargetIndex = useMemo(() => {
+    if (lockedTargetIndex !== null && availableTargetIndices.includes(lockedTargetIndex)) {
+      return lockedTargetIndex;
+    }
+    return availableTargetIndices[0] ?? null;
+  }, [lockedTargetIndex, availableTargetIndices]);
+
+  // Reset encounter state on new cell encounter
   useEffect(() => {
-    hasStartedClashRef.current = false;
-    hasResolvedRef.current = false;
-    setClashResult(null);
-    setAutoStartCountdown(null);
+    setFighters(initialFighters);
+    setCurrentTurn(0);
+    setCompletedTurns([]);
+    setDamageDealtMap({});
+    setLockedTargetIndex(null);
+    setBattleLocked(false);
+    setShowSkillDrawer(false);
+    setShowItemDrawer(false);
+    setSelectedSkillId(null);
+    setSelectedPotionId(null);
+    setDuelFinished(false);
+    setWinner(null);
     setAutoReturnCountdown(null);
-  }, [cell]);
+    setLogHistory([]);
+    isResolvingRef.current = false;
+  }, [cell, initialFighters]);
 
-  // Auto-select ready skills and potions for bot participants
-  useEffect(() => {
-    if (!participants || participants.length === 0) return;
-    participants.forEach((p) => {
-      if (p.isBot) {
-        if (p.skills && p.skills.length > 0) {
-          const readySkillId = p.skills.find((skId) => {
-            const sk = SKILLS[skId];
-            const cd = p.skillCooldowns?.[skId] || 0;
-            return (
-              sk &&
-              cd <= 0 &&
-              sk.requiresTarget !== "monster" &&
-              sk.effect !== "shuffle_positions" &&
-              sk.id !== "korat_chaos"
-            );
-          });
-          if (readySkillId) {
-            setSelectedSkills((prev) => ({ ...prev, [p.houseId]: prev[p.houseId] || readySkillId }));
-            const sk = SKILLS[readySkillId];
-            if (sk?.requiresTarget === "player") {
-              const other = participants.find((o) => o.playerIndex !== p.playerIndex);
-              if (other) {
-                setSelectedTargets((prev) => ({ ...prev, [p.houseId]: other.playerIndex }));
-              }
-            }
-          }
-        }
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-        if (p.potions && p.potions.length > 0) {
-          const usablePotionId = p.potions.find((potId) => {
-            const pot = POTIONS[potId];
-            return pot && !pot.isTrap && potId !== "revive";
-          });
-          if (usablePotionId) {
-            setSelectedPotions((prev) => ({ ...prev, [p.houseId]: prev[p.houseId] || usablePotionId }));
-          }
-        }
+  // ─── RESOLVE PVP DUEL & SEND FINAL STATE TO REDUCER / FIREBASE ──
+  const resolveDuel = useCallback(
+    (customWinner = winner) => {
+      if (isResolvingRef.current) return;
+      isResolvingRef.current = true;
+
+      const currentFighters = fightersRef.current;
+      const updatedPlayers = players.map((p, idx) => {
+        const f = currentFighters.find((item) => item.playerIndex === idx);
+        if (!f) return p;
+        return {
+          ...p,
+          hp: f.hp,
+          potions: f.potions,
+          skillCooldowns: f.skillCooldowns,
+          isInvincible: f.isInvincible,
+        };
+      });
+
+      const winnerText = customWinner
+        ? `[PVP] Clash Winner: ${customWinner.name} (${customWinner.id})`
+        : "[PVP] Clash ended in a Draw";
+
+      const finalLogs = [
+        `[PVP] Magic Clash finished at cell #${cell}`,
+        ...logHistory,
+        winnerText,
+      ];
+
+      if (onPvpActionRef.current) {
+        onPvpActionRef.current({
+          choice: "resolve",
+          updatedPlayers,
+          logEntries: finalLogs,
+          extraTurn: false,
+        });
       }
-    });
-  }, [cell]);
+    },
+    [cell, logHistory, players, winner]
+  );
 
-  // Toggle Skill
-  const handleToggleSkill = (houseId, skillId) => {
-    setSelectedSkills((prev) => ({
-      ...prev,
-      [houseId]: prev[houseId] === skillId ? null : skillId,
-    }));
-  };
+  // ─── EXECUTE 1 ATTACK TURN (1 ATTACK PER FIGHTER IN CLASH) ─────
+  const executeExchange = useCallback(
+    async (attackerIdx, targetIdx) => {
+      if (battleLockedRef.current || isResolvingRef.current) return;
+      setBattleLocked(true);
+      setShowSkillDrawer(false);
+      setShowItemDrawer(false);
+      setLockedTargetIndex(targetIdx);
 
-  // Toggle Potion
-  const handleTogglePotion = (houseId, potionId) => {
-    setSelectedPotions((prev) => ({
-      ...prev,
-      [houseId]: prev[houseId] === potionId ? null : potionId,
-    }));
-  };
+      const list = [...fightersRef.current];
+      const attacker = { ...list[attackerIdx] };
+      const target = { ...list[targetIdx] };
 
-  // Toggle Alliance
-  const handleToggleAlliance = (houseId, allianceHouseId) => {
-    setSelectedAlliances((prev) => ({
-      ...prev,
-      [houseId]: prev[houseId] === allianceHouseId ? null : allianceHouseId,
-    }));
-  };
+      if (!attacker || !target || attacker.hp <= 0 || target.hp <= 0) {
+        setBattleLocked(false);
+        return;
+      }
 
-  const handleSelectTarget = (houseId, targetIndex) => {
-    setSelectedTargets((prev) => ({ ...prev, [houseId]: Number(targetIndex) }));
-  };
-
-  // ─── START PVP CLASH CALCULATION ──────────────────────────────
-  const handleStartClash = useCallback(() => {
-    if (hasStartedClashRef.current) return;
-    hasStartedClashRef.current = true;
-
-    const currentPlayers = playersRef.current || [];
-    const currentParticipants = participantsRef.current || [];
-    const currentSkills = selectedSkillsRef.current || {};
-    const currentPotions = selectedPotionsRef.current || {};
-    const currentTargets = selectedTargetsRef.current || {};
-    const currentAlliances = selectedAlliancesRef.current || {};
-
-    let updatedPlayers = [...currentPlayers];
-    let logEntries = [];
-    let houseClashData = {};
-    const directAttacks = [];
-    let extraTurnGranted = false;
-
-    logEntries.push(`⚔️ PvP Arena battle commenced at cell #${cell}!`);
-
-    // 1. Process potions & skills
-    currentParticipants.forEach((p) => {
-      const hId = p.houseId;
-      let playerObj = { ...updatedPlayers[p.playerIndex] };
       let skillBonusDmg = 0;
       let potionBonusDmg = 0;
 
-      if (!playerObj || !playerObj.houseId) return;
-
-      const potionId = currentPotions[hId];
-      const potion = potionId ? POTIONS[potionId] : null;
-      const potionIndex = potionId ? playerObj.potions?.indexOf(potionId) : -1;
-      if (potion && !potion.isTrap && potionId !== "revive" && potionIndex >= 0) {
-        playerObj.potions = playerObj.potions.filter((_, index) => index !== potionIndex);
-        if (potionId === "heal") {
-          const amount = potion.healAmount || 30;
-          playerObj.hp = Math.min(playerObj.maxHp, playerObj.hp + amount);
-          logEntries.push(`🧪 ${playerObj.name} used Healing Potion (+${amount} HP)`);
-          emitHeal({ targetIndex: p.playerIndex, amount });
-        } else if (potionId === "cooldown") {
-          const cooldowns = { ...(playerObj.skillCooldowns || {}) };
-          Object.keys(cooldowns).forEach((skillId) => {
-            cooldowns[skillId] = Math.max(0, cooldowns[skillId] - (potion.cdReduce || 2));
-          });
-          playerObj.skillCooldowns = cooldowns;
-          logEntries.push(`⏱️ ${playerObj.name} reduced skill cooldowns by ${potion.cdReduce || 2} turns`);
-        } else if (potionId === "damage") {
-          potionBonusDmg = potion.dmgBonus || 100;
-          logEntries.push(`⚡ ${playerObj.name} used Damage Potion (+${potionBonusDmg} DMG)`);
-        }
-      }
-
-      // House Spell
-      const skId = currentSkills[hId];
-      const sk = skId ? SKILLS[skId] : null;
-      const skillReady = sk && playerObj.skills?.includes(skId) && (playerObj.skillCooldowns?.[skId] || 0) <= 0;
-      const targetIndex = currentTargets[hId];
-      const targetIsParticipant = currentParticipants.some((participant) => participant.playerIndex === targetIndex);
-      if (skillReady && sk.requiresTarget === "player" && (!targetIsParticipant || targetIndex === p.playerIndex)) {
-        logEntries.push(`🎯 ${playerObj.name} did not specify a valid skill target.`);
-      } else if (skillReady && sk.requiresTarget !== "monster") {
-        const cdBase = sk.cooldown || 3;
-        const cdActual = playerObj.pet?.effect === "reduce_cooldown" ? Math.max(1, cdBase - 1) : cdBase;
-        playerObj.skillCooldowns = { ...(playerObj.skillCooldowns || {}), [skId]: cdActual };
-        logEntries.push(`✨ ${playerObj.name} cast house spell "${sk.name}"!`);
-        emitSkillCast({
-          playerId: p.playerIndex,
-          skillId: skId,
-          skillData: sk,
-          visualContext: "pvp",
-        });
-
-        if (sk.dmg && sk.target === "player") {
-          directAttacks.push({ targetIndex, amount: sk.dmg, skill: sk });
-        } else if (sk.dmg) {
-          skillBonusDmg += sk.dmg;
-        }
-
-        if (sk.effect === "invincible") {
-          playerObj.isInvincible = true;
-          playerObj.invincibleTurns = sk.duration || 2;
-        } else if (sk.effect === "lock_dice") {
-          playerObj.nextRollOverride = 6;
-        } else if (sk.effect === "steal_turn") {
-          extraTurnGranted = true;
-        } else if (sk.effect === "steal_potion") {
-          const target = updatedPlayers[targetIndex];
-          if (target?.potions?.length && playerObj.potions.length < 5) {
-            const stolenIndex = Math.floor(Math.random() * target.potions.length);
-            const stolenPotion = target.potions[stolenIndex];
-            updatedPlayers[targetIndex] = {
-              ...target,
-              potions: target.potions.filter((_, index) => index !== stolenIndex),
-            };
-            playerObj.potions = [...playerObj.potions, stolenPotion];
-            logEntries.push(`🎭 ${playerObj.name} stole a potion from ${target.name}`);
+      // 1. Process Potion Buff if selected
+      if (selectedPotionId) {
+        const pot = POTIONS[selectedPotionId];
+        const pIndex = attacker.potions.indexOf(selectedPotionId);
+        if (pot && pIndex >= 0) {
+          attacker.potions = attacker.potions.filter((_, i) => i !== pIndex);
+          if (selectedPotionId === "heal") {
+            const healAmt = pot.healAmount || 30;
+            attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmt);
+            emitHeal({ targetIndex: attacker.playerIndex, amount: healAmt });
+            setBattleLog(`${attacker.name} used Healing Potion (+${healAmt} HP)`);
+          } else if (selectedPotionId === "damage") {
+            potionBonusDmg = pot.dmgBonus || 25;
+            setBattleLog(`${attacker.name} used Damage Potion (+${potionBonusDmg} DMG)`);
           }
+          await wait(260);
         }
       }
 
-      const baseDmg = getTotalDmg(playerObj);
-      const totalPower = baseDmg + skillBonusDmg + potionBonusDmg;
-      const calcDmg = Math.floor(totalPower * (0.9 + Math.random() * 0.2));
-
-      houseClashData[hId] = {
-        name: playerObj.name,
-        baseDmg,
-        skillBonusDmg,
-        totalPower,
-        calcDmg,
-        isInvincible: Boolean(playerObj.isInvincible || (skillReady && sk?.effect === "invincible")),
-        allianceWith: currentAlliances[hId] || null,
-        usedSkillId: skId,
-      };
-
-      updatedPlayers[p.playerIndex] = playerObj;
-    });
-
-    // 2. Alliance & Damage Exchange
-    currentParticipants.forEach((p) => {
-      const hId = p.houseId;
-      const pData = houseClashData[hId];
-      const playerObj = { ...updatedPlayers[p.playerIndex] };
-      let damageTaken = 0;
-
-      currentParticipants.forEach((other) => {
-        if (other.houseId === hId) return;
-        const otherData = houseClashData[other.houseId];
-
-        const isAllied = pData.allianceWith === other.houseId || otherData.allianceWith === hId;
-
-        if (isAllied) {
-          logEntries.push(`🤝 ${p.name} and ${other.name} formed an alliance! (+15 HP)`);
-          playerObj.hp = Math.min(playerObj.maxHp, playerObj.hp + 15);
-        } else if (!pData.isInvincible) {
-          const dmgShare = Math.floor(otherData.calcDmg / (currentParticipants.length - 1));
-          damageTaken += dmgShare;
+      // 2. Process Skill Buff if selected
+      if (selectedSkillId) {
+        const sk = SKILLS[selectedSkillId];
+        if (sk && (attacker.skillCooldowns?.[selectedSkillId] || 0) <= 0) {
+          attacker.skillCooldowns = {
+            ...attacker.skillCooldowns,
+            [selectedSkillId]: sk.cooldown || 3,
+          };
+          emitSkillCast({
+            playerId: attacker.playerIndex,
+            skillId: selectedSkillId,
+            skillData: sk,
+            visualContext: "pvp",
+          });
+          if (sk.dmg) skillBonusDmg = sk.dmg;
+          if (sk.effect === "invincible") attacker.isInvincible = true;
+          setBattleLog(`${attacker.name} casts house spell ${sk.name}`);
+          await wait(260);
         }
+      }
+
+      // 3. Step 1: Attacker Wind-up & Cast Ring at feet
+      setActiveCast({
+        attackerIndex: attackerIdx,
+        targetIndex: targetIdx,
+        color: attacker.color,
+      });
+      setBattleLog(`${attacker.name} attacks ${target.name}`);
+      await wait(260);
+      setActiveCast(null);
+
+      // 4. Step 2: High-Arc Flying Projectile Animation
+      const flightDuration = 420;
+      const flightStart = performance.now();
+      await new Promise((res) => {
+        function tick(now) {
+          const p = Math.min((now - flightStart) / flightDuration, 1);
+          setActiveProjectile({
+            attackerIndex: attackerIdx,
+            targetIndex: targetIdx,
+            color: attacker.color,
+            progress: p,
+          });
+          if (p < 1) requestAnimationFrame(tick);
+          else res();
+        }
+        requestAnimationFrame(tick);
+      });
+      setActiveProjectile(null);
+
+      // 5. Step 3: Impact Burst on Target & Damage Registration
+      setActiveHit({
+        targetIndex: targetIdx,
+        color: attacker.color,
       });
 
-      if (pData.isInvincible) {
-        logEntries.push(`🛡️ ${p.name} was invincible and deflected all damage!`);
-      } else if (damageTaken > 0) {
-        playerObj.hp = Math.max(0, playerObj.hp - damageTaken);
-        logEntries.push(`💥 ${p.name} took -${damageTaken} HP damage in the clash (HP remaining: ${playerObj.hp})`);
-        emitDamageDealt({
-          targetIndex: p.playerIndex,
-          amount: damageTaken,
-          type: "pvp",
-          visualContext: "pvp",
-        });
-      } else {
-        logEntries.push(`🛡️ ${p.name} took no damage during the duel.`);
-      }
+      const variation = Math.floor(Math.random() * 9) - 4; // -4 .. +4
+      const rawDmg = Math.max(8, attacker.baseDmg + skillBonusDmg + potionBonusDmg + variation);
+      const actualDmg = target.isInvincible ? 0 : rawDmg;
 
-      updatedPlayers[p.playerIndex] = playerObj;
-    });
+      target.hp = Math.max(0, target.hp - actualDmg);
+      list[attackerIdx] = attacker;
+      list[targetIdx] = target;
+      setFighters([...list]);
 
-    // 3. Direct Attack Resolution
-    directAttacks.forEach(({ targetIndex, amount, skill }) => {
-      const targetParticipant = currentParticipants.find((participant) => participant.playerIndex === targetIndex);
-      if (!targetParticipant || houseClashData[targetParticipant.houseId]?.isInvincible) return;
-      const target = { ...updatedPlayers[targetIndex] };
-      target.hp = Math.max(0, target.hp - amount);
-      updatedPlayers[targetIndex] = target;
-      logEntries.push(`🔥 ${skill.name} dealt ${amount} direct damage to ${target.name}`);
+      // Record damage dealt by this attacker in this clash
+      const updatedDmgMap = {
+        ...damageDealtMapRef.current,
+        [attackerIdx]: (damageDealtMapRef.current[attackerIdx] || 0) + actualDmg,
+      };
+      setDamageDealtMap(updatedDmgMap);
+
       emitDamageDealt({
-        targetIndex,
-        amount,
+        targetIndex: target.playerIndex,
+        amount: actualDmg,
         type: "pvp",
-        sourceId: skill.id,
         visualContext: "pvp",
       });
-    });
 
-    const hasActiveAlliance = Object.values(currentAlliances).some(Boolean);
-    let highestDmg = -1;
-    let winnerName = null;
-    let isDraw = false;
+      const hitLog = target.isInvincible
+        ? `${target.name} is invincible and deflected all damage!`
+        : `${attacker.name} deals ${actualDmg} damage to ${target.name}`;
+      setBattleLog(hitLog);
+      setLogHistory((prev) => [...prev, hitLog]);
+      await wait(360);
+      setActiveHit(null);
 
-    Object.entries(houseClashData).forEach(([, d]) => {
-      if (d.calcDmg > highestDmg) {
-        highestDmg = d.calcDmg;
-        winnerName = d.name;
-        isDraw = false;
-      } else if (d.calcDmg === highestDmg) {
-        isDraw = true;
+      if (target.hp <= 0) {
+        const defeatLog = `${target.name} was defeated!`;
+        setBattleLog(defeatLog);
+        setLogHistory((prev) => [...prev, defeatLog]);
+        await wait(350);
       }
-    });
 
-    if (hasActiveAlliance) {
-      isDraw = true;
-    }
+      // Reset choices for this turn
+      setSelectedSkillId(null);
+      setSelectedPotionId(null);
 
-    let battleSummaryText = "";
-    if (isDraw && hasActiveAlliance) {
-      battleSummaryText = "🤝 The duel ended in an ALLIANCE DRAW!";
-    } else if (isDraw) {
-      battleSummaryText = "⚖️ The duel ended in a DRAW!";
-    } else {
-      battleSummaryText = `🏆 Arena Duel Winner: ${winnerName}!`;
-    }
+      // 6. Record turn completion for this fighter
+      const updatedCompleted = [...completedTurnsRef.current, attackerIdx];
+      setCompletedTurns(updatedCompleted);
 
-    logEntries.push(battleSummaryText);
+      // Check if all alive fighters have taken their 1 attack turn
+      const remainingToAct = list
+        .map((f, i) => i)
+        .filter((i) => list[i].hp > 0 && !updatedCompleted.includes(i));
 
-    setClashResult({
-      updatedPlayers,
-      logEntries,
-      houseClashData,
-      winnerName,
-      isDraw,
-      battleSummaryText,
-      extraTurnGranted,
-    });
-  }, [cell]);
+      if (remainingToAct.length === 0 || list.filter((f) => f.hp > 0).length <= 1) {
+        // ── ALL PARTICIPANTS HAVE ATTACKED (CLASH ROUND COMPLETE) ──
+        let highestDmg = -1;
+        let bestFighterIdx = null;
+        let isDraw = false;
 
-  const onResolvePvp = useCallback((result) => {
-    if (!result || hasResolvedRef.current) return;
-    hasResolvedRef.current = true;
-    if (onPvpActionRef.current) {
-      onPvpActionRef.current({
-        choice: "resolve",
-        updatedPlayers: result.updatedPlayers,
-        logEntries: result.logEntries,
-        extraTurn: result.extraTurnGranted,
-      });
-    }
-  }, []);
+        Object.entries(updatedDmgMap).forEach(([fIdx, dmg]) => {
+          if (dmg > highestDmg) {
+            highestDmg = dmg;
+            bestFighterIdx = Number(fIdx);
+            isDraw = false;
+          } else if (dmg === highestDmg) {
+            isDraw = true;
+          }
+        });
 
-  // ── Auto-Start timer: 3s for Bot vs Bot, 15s timeout for Human fights ──
+        const clashWinner = !isDraw && bestFighterIdx !== null ? list[bestFighterIdx] : null;
+        setDuelFinished(true);
+        setWinner(clashWinner);
+
+        const summaryText = clashWinner
+          ? `CLASH WINNER: ${clashWinner.id} ${clashWinner.name} (${highestDmg} DMG)`
+          : `CLASH TIED: DRAW (${highestDmg} DMG)`;
+
+        setBattleLog(summaryText);
+        setLogHistory((prev) => [...prev, summaryText]);
+        setAutoReturnCountdown(4);
+        return;
+      }
+
+      // 7. Advance to the next player who has not attacked yet
+      const nextTurnIdx = remainingToAct[0];
+      setCurrentTurn(nextTurnIdx);
+      setLockedTargetIndex(null);
+      setBattleLocked(false);
+      setBattleLog(`TURN: ${list[nextTurnIdx].id} ${list[nextTurnIdx].name} - Select target to attack`);
+    },
+    [selectedPotionId, selectedSkillId]
+  );
+
+  // ─── AUTO-ATTACK FOR BOTS & INACTIVE PLAYERS (12s timer) ────
   useEffect(() => {
-    if (clashResult || hasStartedClashRef.current) return undefined;
+    if (duelFinished || battleLocked) return undefined;
 
-    const durationSeconds = (!hasControlledFighter || isAllBots) ? 4 : 18;
-    setAutoStartCountdown(durationSeconds);
+    const currentFighter = fighters[currentTurn];
+    if (!currentFighter || currentFighter.hp <= 0) return undefined;
 
-    const interval = setInterval(() => {
-      setAutoStartCountdown((prev) => {
-        if (prev == null) return null;
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
+    const targets = fighters
+      .map((f, i) => ({ f, i }))
+      .filter(({ f, i }) => i !== currentTurn && f.hp > 0)
+      .map(({ i }) => i);
+
+    if (targets.length === 0) return undefined;
+
+    const chosenTarget =
+      activeTargetIndex !== null && targets.includes(activeTargetIndex)
+        ? activeTargetIndex
+        : targets[Math.floor(Math.random() * targets.length)];
+
+    // If bot, execute after 1.2s delay
+    if (currentFighter.isBot) {
+      const botTimer = setTimeout(() => {
+        executeExchange(currentTurn, chosenTarget);
+      }, 1200);
+      return () => clearTimeout(botTimer);
+    }
+
+    // If human in online/spectator mode taking too long, auto-execute in 14s
+    const timeoutTimer = setTimeout(() => {
+      executeExchange(currentTurn, chosenTarget);
+    }, 14000);
+
+    return () => clearTimeout(timeoutTimer);
+  }, [currentTurn, battleLocked, duelFinished, fighters, activeTargetIndex, executeExchange]);
+
+  // ─── AUTO-RESOLVE COUNTDOWN AFTER CLASH FINISHED ─────────────
+  useEffect(() => {
+    if (!duelFinished || autoReturnCountdown === null) return undefined;
+
+    if (autoReturnCountdown <= 0) {
+      resolveDuel(winner);
+      return undefined;
+    }
+
+    const timer = setInterval(() => {
+      setAutoReturnCountdown((prev) => (prev != null ? prev - 1 : null));
     }, 1000);
 
-    const startTimer = setTimeout(() => {
-      handleStartClash();
-    }, durationSeconds * 1000);
+    return () => clearInterval(timer);
+  }, [duelFinished, autoReturnCountdown, resolveDuel, winner]);
 
-    return () => {
-      clearInterval(interval);
-      clearTimeout(startTimer);
-    };
-  }, [cell, isAllBots, handleStartClash, !!clashResult]);
+  // Usable skills/potions for active turn fighter
+  const usableCombatSkills = useMemo(() => {
+    if (!currentAttacker) return [];
+    return (currentAttacker.skills || [])
+      .map((id) => SKILLS[id])
+      .filter((sk) => sk && sk.requiresTarget !== "monster");
+  }, [currentAttacker]);
 
-  // ── Auto-Resolve countdown after clash (6.5s so players can watch 3D duel) ──
-  useEffect(() => {
-    if (!clashResult) return undefined;
-
-    setAutoReturnCountdown(6);
-    const interval = setInterval(() => {
-      setAutoReturnCountdown((prev) => {
-        if (prev == null) return null;
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    const resolveTimer = setTimeout(() => {
-      onResolvePvp(clashResult);
-    }, 6500);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(resolveTimer);
-    };
-  }, [!!clashResult, onResolvePvp, clashResult]);
-
-  if (participants.length === 0) return null;
+  const usableCombatPotions = useMemo(() => {
+    if (!currentAttacker) return [];
+    return Array.from(new Set(currentAttacker.potions || [])).filter(
+      (potId) => POTIONS[potId] && !POTIONS[potId].isTrap && potId !== "revive"
+    );
+  }, [currentAttacker]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-3 md:p-5 text-white pointer-events-none bg-slate-950 bg-cover bg-center"
-      style={{ backgroundImage: "url('/images/system/arena_bg.jpg')" }}
-    >
-      {/* Arena backdrop */}
-      <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[1px] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(2,6,23,0.8)_0%,_rgba(2,6,23,0.18)_42%,_rgba(2,6,23,0.9)_100%)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_18%,_rgba(2,6,23,0.72)_100%)] pointer-events-none" />
-
-      {/* TOP HEADER HUD */}
-      <div className="relative z-20 w-full max-w-4xl mx-auto flex items-center justify-between bg-slate-900/90 border border-amber-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md shadow-xl shrink-0 pointer-events-auto">
-        <div className="flex items-center gap-3">
-          <span className="text-xl animate-pulse">⚔️</span>
-          <div>
-            <h1 className="text-amber-400 font-black text-xs md:text-sm tracking-[0.2em] uppercase">
-              PVP ARENA — Cell #{cell}
-            </h1>
-            <p className="text-[10px] text-white/60 font-bold">
-              Magic Duel between {participants.length} Houses
-            </p>
-          </div>
-        </div>
-
-        <div className="text-[11px] font-black tracking-widest text-amber-300 bg-amber-950/60 border border-amber-500/40 px-3 py-1 rounded-full uppercase shadow-inner">
-          {clashResult
-            ? (autoReturnCountdown != null ? `Returning in ${autoReturnCountdown}s` : "Duel Finished")
-            : (autoStartCountdown != null
-                ? `Clashing in ${autoStartCountdown}s`
-                : (hasControlledFighter ? "Select Spells & Alliance" : "Spectating Duel"))}
-        </div>
+    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden text-white bg-slate-950">
+      {/* ─── FULLSCREEN 3D MAGIC ARENA STAGE (No 2D Image Background) ─── */}
+      <div className="absolute inset-0 z-0 w-full h-full">
+        <Pvp3dBattleStage
+          fighters={fighters}
+          activeCast={activeCast}
+          activeProjectile={activeProjectile}
+          activeHit={activeHit}
+          currentTurn={currentTurn}
+          lockedTargetIndex={activeTargetIndex}
+        />
       </div>
 
-      {/* CENTER REAL 3D BATTLE CANVAS */}
-      <div className="relative z-10 flex-1 my-2 w-full max-w-5xl mx-auto overflow-hidden flex flex-col items-center justify-center pointer-events-auto">
-        <div className="w-full flex-1 relative flex items-center justify-center min-h-[240px]">
-          <Pvp3dBattleStage
-            participants={participants}
-            clashResult={clashResult}
-            selectedSkills={selectedSkills}
-          />
-        </div>
+      {/* Subtle top & bottom shadow gradient for UI readability */}
+      <div className="absolute top-0 inset-x-0 h-28 bg-gradient-to-b from-slate-950/80 via-slate-950/30 to-transparent pointer-events-none z-10" />
+      <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none z-10" />
 
-        {/* BATTLE RESULT ANNOUNCEMENT BANNER */}
-        {clashResult && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 bg-slate-950/95 border-2 border-amber-400 px-8 py-4 rounded-3xl shadow-[0_0_50px_rgba(245,158,11,0.8)] text-center animate-bounce">
-            <h2 className="text-xl md:text-2xl font-black text-amber-300">
-              {clashResult.battleSummaryText}
-            </h2>
-            {autoReturnCountdown != null && (
-              <p className="text-xs text-slate-300 mt-1 font-bold">
-                Returning to board in {autoReturnCountdown}s...
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+      {/* ─── 1. TOPBAR: PLAYER STATUS CARDS ──────────────────────────── */}
+      <div className="relative z-20 w-full max-w-4xl mx-auto pt-3 px-3 flex items-center justify-center gap-2.5 md:gap-4 flex-wrap pointer-events-auto shrink-0">
+        {fighters.map((f, idx) => {
+          const isTurn = idx === currentTurn && f.hp > 0 && !duelFinished;
+          const isTarget = idx === activeTargetIndex && f.hp > 0;
+          const hasAttacked = completedTurns.includes(idx);
+          const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
 
-      {/* BOTTOM CONTROLS: FIGHTER CARDS */}
-      <div className="relative z-20 w-full max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 items-end shrink-0 pointer-events-auto">
-        {participants.map((p) => {
-          const hId = p.houseId;
-          const isSkillSelected = !!selectedSkills[hId];
-          const isMe = isOnline
-            ? (myPlayerIndex != null && myPlayerIndex >= 0 && p.playerIndex === myPlayerIndex)
-            : !p.isBot;
-          const isControlledByMe = isMe && !p.isBot;
+          const barColor =
+            hpPct > 50 ? "bg-emerald-500" : hpPct > 25 ? "bg-amber-400" : "bg-rose-500";
 
           return (
             <div
-              key={hId}
-              className={`bg-slate-950/90 backdrop-blur-xl border-2 rounded-2xl p-3 shadow-xl flex flex-col justify-between transition-all duration-300 ${
-                isSkillSelected
-                  ? "ring-2 ring-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-[1.02]"
-                  : ""
-              } ${isMe ? "border-amber-400 shadow-amber-500/20" : ""}`}
-              style={{ borderColor: isMe ? "#f59e0b" : `${p.color || "#f59e0b"}70` }}
+              key={f.houseId || idx}
+              className={`min-w-[140px] md:min-w-[170px] px-3.5 py-2.5 rounded-xl border backdrop-blur-md transition-all duration-300 ${
+                isTurn
+                  ? "bg-slate-900/95 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.45)] -translate-y-0.5"
+                  : isTarget
+                  ? "bg-slate-900/90 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.35)]"
+                  : "bg-slate-950/80 border-white/15 opacity-85"
+              } ${f.hp <= 0 ? "opacity-40 grayscale" : ""}`}
             >
-              {/* HEADER: NAME, ROLE & HP */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2 gap-1">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="font-black text-xs text-white truncate">{p.name}</span>
-                  {isMe && (
-                    <span className="text-[8px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-black shrink-0">
-                      YOU
-                    </span>
-                  )}
-                  {p.isBot && (
-                    <span className="text-[8px] bg-purple-950/80 text-purple-300 border border-purple-500/40 px-1 py-0.5 rounded font-bold shrink-0">
-                      BOT
-                    </span>
-                  )}
-                  {!isMe && !p.isBot && myPlayerIndex != null && (
-                    <span className="text-[8px] bg-slate-800 text-white/50 border border-white/10 px-1 py-0.5 rounded shrink-0">
-                      PLAYER
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-bold text-emerald-400 shrink-0">HP {Math.max(0, p.hp)}</span>
+              <div className="flex items-center justify-between text-xs font-black mb-1.5">
+                <span className="truncate text-white">
+                  {f.id} · {f.name}
+                </span>
+                {f.hp <= 0 ? (
+                  <span className="text-[9px] bg-rose-950 text-rose-300 border border-rose-500/40 px-1 py-0.2 rounded uppercase font-bold">
+                    DEFEATED
+                  </span>
+                ) : isTurn ? (
+                  <span className="text-[9px] bg-amber-400 text-black px-1.5 py-0.2 rounded font-black uppercase">
+                    TURN
+                  </span>
+                ) : hasAttacked ? (
+                  <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1 py-0.2 rounded uppercase font-bold">
+                    ATTACKED
+                  </span>
+                ) : null}
               </div>
 
-              {/* ACTIVE SPELL BADGE */}
-              {isSkillSelected && SKILLS[selectedSkills[hId]] && (
-                <div className="mb-2 px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/50 text-[10px] font-black text-amber-300 flex items-center justify-between animate-pulse">
-                  <span className="truncate">✨ {SKILLS[selectedSkills[hId]].name}</span>
-                  <span className="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-extrabold uppercase">Ready</span>
-                </div>
-              )}
+              {/* Health Progress Bar */}
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-white/10">
+                <div
+                  className={`h-full ${barColor} transition-all duration-300`}
+                  style={{ width: `${hpPct}%` }}
+                />
+              </div>
 
-              {!clashResult ? (
-                <div className="space-y-2">
-                  {/* 1. SELECT HOUSE SKILL */}
-                  <div>
-                    <div className="text-[9px] font-black text-yellow-400 mb-1 uppercase tracking-wider">
-                      ✨ Spell Selection
-                    </div>
-                    {p.skills && p.skills.length > 0 ? (
-                      p.skills.map((skId) => {
-                        const sk = SKILLS[skId];
-                        if (!sk) return null;
-                        const cd = p.skillCooldowns?.[skId] || 0;
-                        const isSelected = selectedSkills[hId] === skId;
-                        const isReady = cd === 0;
-
-                        return (
-                          <SkillButton
-                            key={skId}
-                            skillId={skId}
-                            playerIndex={p.playerIndex}
-                            playerId={p.playerIndex}
-                            cooldown={cd}
-                            onUse={(id) => isControlledByMe && isReady && handleToggleSkill(hId, id)}
-                            size="sm"
-                            selected={isSelected}
-                            disabled={
-                              !isControlledByMe ||
-                              !isReady ||
-                              sk.requiresTarget === "monster" ||
-                              sk.effect === "shuffle_positions" ||
-                              sk.id === "korat_chaos"
-                            }
-                          />
-                        );
-                      })
-                    ) : (
-                      <div className="text-[9px] text-white/40 italic text-center">No Spells</div>
-                    )}
-                  </div>
-
-                  {/* 2. SELECT INVENTORY POTIONS */}
-                  <div>
-                    <div className="text-[9px] font-black text-cyan-400 mb-1 uppercase tracking-wider">
-                      🧪 Potions
-                    </div>
-                    {p.potions && p.potions.length > 0 ? (
-                      <div className="space-y-1">
-                        {Array.from(new Set(p.potions)).filter((potId) => !POTIONS[potId]?.isTrap && potId !== "revive").map((potId) => {
-                          const pot = POTIONS[potId];
-                          if (!pot) return null;
-                          const isSelected = selectedPotions[hId] === potId;
-
-                          return (
-                            <button
-                              key={potId}
-                              type="button"
-                              disabled={!isControlledByMe}
-                              onClick={() => isControlledByMe && handleTogglePotion(hId, potId)}
-                              className={`w-full p-1 rounded-lg border text-left text-[9px] font-bold transition-all flex items-center justify-between ${
-                                isSelected
-                                  ? "bg-cyan-500/30 border-cyan-400 text-cyan-200"
-                                  : "bg-slate-900 border-white/10 text-white/70 hover:bg-slate-800"
-                              } ${!isControlledByMe ? "opacity-60 cursor-not-allowed" : ""}`}
-                            >
-                              <span className="truncate">🧪 {pot.name}</span>
-                              <span className={`px-1 py-0.2 rounded text-[8px] font-black ${isSelected ? "bg-cyan-400 text-black" : "bg-cyan-500/20 text-cyan-300"}`}>
-                                {isSelected ? "ACTIVE" : "USE"}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-[9px] text-white/40 italic text-center">No Potions</div>
-                    )}
-                  </div>
-
-                  {/* 3. SELECT ALLIANCE */}
-                  {selectedSkills[hId] && SKILLS[selectedSkills[hId]]?.requiresTarget === "player" && (
-                    <select
-                      disabled={!isControlledByMe}
-                      value={selectedTargets[hId] ?? ""}
-                      onChange={(event) => isControlledByMe && handleSelectTarget(hId, event.target.value)}
-                      className={`w-full rounded-lg border border-red-400/40 bg-slate-900 px-2 py-1 text-[10px] font-bold text-white ${!isControlledByMe ? "opacity-60 cursor-not-allowed" : ""}`}
-                    >
-                      <option value="">Select Target Player</option>
-                      {participants
-                        .filter((other) => other.houseId !== hId)
-                        .map((other) => (
-                          <option key={other.playerIndex} value={other.playerIndex}>{other.name}</option>
-                        ))}
-                    </select>
-                  )}
-
-                  {participants.length > 1 && (
-                    <div>
-                      <div className="text-[9px] font-black text-emerald-400 mb-1 uppercase tracking-wider">
-                        🤝 Alliance
-                      </div>
-                      <div className="grid grid-cols-1 gap-1">
-                        {participants
-                          .filter((other) => other.houseId !== hId)
-                          .map((other) => {
-                            const isAlliedWithOther = selectedAlliances[hId] === other.houseId;
-                            return (
-                              <button
-                                key={other.houseId}
-                                type="button"
-                                disabled={!isControlledByMe}
-                                onClick={() => isControlledByMe && handleToggleAlliance(hId, other.houseId)}
-                                className={`p-1 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-between ${
-                                  isAlliedWithOther
-                                    ? "bg-emerald-500/30 border-emerald-400 text-emerald-200"
-                                    : "bg-slate-900 border-white/10 text-white/60 hover:bg-slate-800"
-                                } ${!isControlledByMe ? "opacity-60 cursor-not-allowed" : ""}`}
-                              >
-                                <span className="truncate">🤝 {other.name}</span>
-                                <span className={`px-1 py-0.2 rounded text-[8px] font-black ${isAlliedWithOther ? "bg-emerald-400 text-black" : "bg-white/10"}`}>
-                                  {isAlliedWithOther ? "ALLIED" : "ALLY"}
-                                </span>
-                              </button>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* RESULT SUMMARY FOR THIS HOUSE */
-                <div className="py-2 text-center space-y-1">
-                  <div className="text-xs font-black text-amber-300">
-                    💥 {clashResult.houseClashData[hId]?.calcDmg || 0} DMG
-                  </div>
-                  {selectedAlliances[hId] && (
-                    <div className="text-[9px] text-emerald-300 font-bold">🤝 Alliance (+15 HP)</div>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center justify-between text-[10px] text-white/70 font-bold mt-1">
+                <span>HP</span>
+                <span>
+                  {Math.max(0, f.hp)} / {f.maxHp}
+                </span>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* ACTION BUTTON & CONTINUE HUB */}
-      <div className="relative z-20 flex justify-center pt-2 pointer-events-auto">
-        {!clashResult ? (
-          hasControlledFighter ? (
+      {/* ─── 2. CENTER CLASH RESULT ANNOUNCEMENT BANNER ──────────────── */}
+      {duelFinished && (
+        <div className="relative z-30 my-auto flex flex-col items-center justify-center pointer-events-auto">
+          <div className="bg-slate-950/95 border-2 border-amber-400 px-8 py-6 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.85)] text-center animate-bounce max-w-md">
+            <h2 className="text-xl md:text-2xl font-black text-amber-300 tracking-wider uppercase">
+              {winner ? `CLASH WINNER: ${winner.id} ${winner.name}` : "CLASH TIED: DRAW"}
+            </h2>
+            <p className="text-xs text-slate-300 mt-2 font-bold">
+              {autoReturnCountdown != null
+                ? `Returning to board in ${autoReturnCountdown}s...`
+                : "Clash Finished"}
+            </p>
             <button
               type="button"
-              onClick={handleStartClash}
-              className="py-3 px-10 rounded-2xl bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:from-red-500 hover:to-amber-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(239,68,68,0.8)] border-2 border-amber-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+              onClick={() => resolveDuel(winner)}
+              className="mt-4 py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs tracking-wider uppercase shadow-lg border border-emerald-300 transition-all hover:scale-105 active:scale-95"
             >
-              <span>⚔️</span>
-              <span>START DUEL</span>
+              CONTINUE TO BOARD
             </button>
-          ) : isAllBots ? (
-            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-purple-500/40 text-purple-200 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
-              <span className="animate-spin">⚡</span>
-              <span>
-                {autoStartCountdown != null
-                  ? `Starting Bot Duel (${autoStartCountdown}s)...`
-                  : "Bots Preparing Duel..."}
+          </div>
+        </div>
+      )}
+
+      {/* Spacer when not finished */}
+      {!duelFinished && <div className="flex-1 pointer-events-none" />}
+
+      {/* ─── 3. MONSTER-STYLE BOTTOM ACTION DOCK (Components/CombatModal.jsx) ─── */}
+      {!duelFinished && (
+        <div className="relative z-30 w-full max-w-2xl mx-auto px-4 pb-4 flex flex-col items-center pointer-events-auto">
+          {/* Target Selection Pills (when multiple opponents) */}
+          {availableTargetIndices.length > 1 && (
+            <div className="flex items-center justify-center gap-2 mb-2.5 flex-wrap">
+              <span className="text-[11px] font-black text-purple-300 uppercase tracking-wide">
+                SELECT TARGET:
               </span>
+              {availableTargetIndices.map((idx) => {
+                const target = fighters[idx];
+                const isSelected = idx === activeTargetIndex;
+                return (
+                  <button
+                    key={target.playerIndex}
+                    type="button"
+                    disabled={battleLocked || !isMyTurn}
+                    onClick={() => {
+                      setLockedTargetIndex(idx);
+                      setBattleLog(`Locked target: ${target.name}`);
+                    }}
+                    className={`py-1 px-3 rounded-full text-xs font-black uppercase transition-all border shadow-sm ${
+                      isSelected
+                        ? "bg-rose-600 text-white border-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.6)] scale-105"
+                        : "bg-slate-900/90 text-slate-300 border-white/20 hover:bg-slate-800"
+                    }`}
+                  >
+                    TARGET {target.id} ({target.name})
+                  </button>
+                );
+              })}
             </div>
-          ) : (
-            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-amber-500/30 text-amber-200/80 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
-              <span>👁️</span>
-              <span>Spectating Magic Duel — Waiting for fighters...</span>
+          )}
+
+          {/* Active Target Banner when 1 opponent */}
+          {availableTargetIndices.length === 1 && activeTargetIndex !== null && (
+            <div className="text-[11px] font-black text-rose-300 uppercase tracking-wide mb-2 bg-rose-950/60 border border-rose-500/30 px-3 py-0.5 rounded-full">
+              TARGET: {fighters[activeTargetIndex]?.id} ({fighters[activeTargetIndex]?.name})
             </div>
-          )
-        ) : (
-          (hasControlledFighter || !isOnline) ? (
-            <button
-              type="button"
-              onClick={() => onResolvePvp(clashResult)}
-              className="py-3 px-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm tracking-[0.2em] uppercase shadow-[0_0_35px_rgba(16,185,129,0.8)] border-2 border-emerald-300 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-            >
-              <span>🏆</span>
-              <span>
-                {autoReturnCountdown != null
-                  ? `Continue (${autoReturnCountdown}s)`
-                  : "CONTINUE TO BOARD"}
-              </span>
-            </button>
-          ) : (
-            <div className="py-3 px-8 rounded-2xl bg-slate-900/90 border border-emerald-500/40 text-emerald-300 font-bold text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg">
-              <span>🏆</span>
-              <span>
-                {autoReturnCountdown != null
-                  ? `Returning to board in ${autoReturnCountdown}s...`
-                  : "Duel Finished"}
-              </span>
+          )}
+
+          {/* Main Action Container */}
+          <div className="relative w-full bg-slate-950/90 border border-purple-500/40 rounded-2xl p-3 sm:p-4 backdrop-blur-xl shadow-2xl flex flex-col items-center">
+            {/* FLOATING SKILL DRAWER (OPENS ABOVE DOCK) */}
+            <AnimatePresence>
+              {showSkillDrawer && (
+                <motion.div
+                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[92vw] max-w-sm sm:max-w-md bg-slate-950/95 backdrop-blur-xl border border-purple-500/50 rounded-2xl p-4 shadow-2xl z-50"
+                >
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
+                    <div className="flex items-center gap-2 text-purple-300 text-xs font-black tracking-wider uppercase">
+                      <span>COMBAT SKILLS</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSkillDrawer(false)}
+                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
+                    >
+                      CLOSE ✕
+                    </button>
+                  </div>
+
+                  {usableCombatSkills.length === 0 ? (
+                    <div className="text-center py-4 text-xs font-bold text-slate-400">
+                      No usable combat skills available
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                      {usableCombatSkills.map((sk) => {
+                        const cd = currentAttacker?.skillCooldowns?.[sk.id] || 0;
+                        const isCoolingDown = cd > 0;
+                        const isSelected = selectedSkillId === sk.id;
+
+                        return (
+                          <button
+                            key={sk.id}
+                            type="button"
+                            disabled={isCoolingDown}
+                            onClick={() => {
+                              setSelectedSkillId(isSelected ? null : sk.id);
+                              setShowSkillDrawer(false);
+                            }}
+                            className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border text-left transition-all ${
+                              isCoolingDown
+                                ? "bg-slate-900/60 border-slate-800 text-slate-500 opacity-60 cursor-not-allowed"
+                                : isSelected
+                                ? "bg-purple-900 border-amber-400 text-white shadow-lg shadow-purple-900/50"
+                                : "bg-purple-950/60 hover:bg-purple-900/80 border-purple-500/40 text-purple-100 hover:scale-102 cursor-pointer shadow-lg"
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-xs text-white">
+                                  {sk.name}
+                                </span>
+                                <span className="text-[10px] text-purple-300 font-bold bg-purple-900/60 px-1.5 py-0.2 rounded border border-purple-400/30">
+                                  SPELL
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-300 line-clamp-1 mt-0.5">
+                                {sk.description}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              {isCoolingDown ? (
+                                <span className="text-[10px] font-black text-red-400">
+                                  CD: {cd}T
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                                    isSelected
+                                      ? "bg-amber-400 text-black border-amber-300"
+                                      : "bg-emerald-950/60 text-emerald-400 border-emerald-500/30"
+                                  }`}
+                                >
+                                  {isSelected ? "READY" : "SELECT"}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* FLOATING ITEM DRAWER (OPENS ABOVE DOCK) */}
+            <AnimatePresence>
+              {showItemDrawer && (
+                <motion.div
+                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[92vw] max-w-sm sm:max-w-md bg-slate-950/95 backdrop-blur-xl border border-amber-500/50 rounded-2xl p-4 shadow-2xl z-50"
+                >
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
+                    <div className="flex items-center gap-2 text-amber-300 text-xs font-black tracking-wider uppercase">
+                      <span>POTION BAG</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowItemDrawer(false)}
+                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
+                    >
+                      CLOSE ✕
+                    </button>
+                  </div>
+
+                  {usableCombatPotions.length === 0 ? (
+                    <div className="text-center py-4 text-xs font-bold text-slate-400">
+                      No combat potions in bag
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                      {usableCombatPotions.map((potId, idx) => {
+                        const pot = POTIONS[potId];
+                        if (!pot) return null;
+                        const isSelected = selectedPotionId === potId;
+
+                        return (
+                          <ItemTooltip key={idx} item={pot} position="top">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPotionId(isSelected ? null : potId);
+                                setShowItemDrawer(false);
+                              }}
+                              className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all hover:scale-102 group w-full ${
+                                isSelected
+                                  ? "bg-amber-900 border-amber-300 shadow-lg"
+                                  : "bg-amber-950/60 hover:bg-amber-900 border-amber-500/40"
+                              }`}
+                            >
+                              <div className="w-8 h-8 rounded-lg overflow-hidden bg-black/60 border border-amber-400/40 shrink-0 flex items-center justify-center">
+                                {pot.image ? (
+                                  <img
+                                    src={pot.image}
+                                    alt={pot.name}
+                                    className="w-full h-full object-contain p-0.5"
+                                  />
+                                ) : (
+                                  <span className="text-[9px] font-bold text-amber-300">POT</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-black text-amber-200 truncate">
+                                  {pot.name}
+                                </div>
+                                <div className="text-[10px] text-amber-300/80 font-bold">
+                                  {isSelected ? "READY" : "CLICK TO USE"}
+                                </div>
+                              </div>
+                            </button>
+                          </ItemTooltip>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Selected Buff Badges */}
+            {(selectedSkillId || selectedPotionId) && (
+              <div className="flex items-center gap-2 mb-2">
+                {selectedSkillId && (
+                  <span className="text-[10px] bg-purple-900 text-purple-200 border border-purple-400/50 px-2 py-0.5 rounded-full font-bold">
+                    SPELL: {SKILLS[selectedSkillId]?.name}
+                  </span>
+                )}
+                {selectedPotionId && (
+                  <span className="text-[10px] bg-amber-900 text-amber-200 border border-amber-400/50 px-2 py-0.5 rounded-full font-bold">
+                    POTION: {POTIONS[selectedPotionId]?.name}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* ─── DOCK ACTION BUTTONS (ATTACK, SKILL, ITEM) ─── */}
+            <div className="flex items-center justify-center gap-2 sm:gap-3 w-full">
+              {/* 1. ATTACK BUTTON (Dominant Crimson & Amber Glow) */}
+              <button
+                type="button"
+                disabled={battleLocked || !isMyTurn || activeTargetIndex === null}
+                onClick={() => {
+                  if (activeTargetIndex !== null) {
+                    executeExchange(currentTurn, activeTargetIndex);
+                  }
+                }}
+                className={`flex-[1.5] py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_25px_rgba(239,68,68,0.5)] ${
+                  battleLocked || !isMyTurn || activeTargetIndex === null
+                    ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
+                    : "bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 border border-amber-400/80 text-white hover:scale-103 active:scale-95 cursor-pointer animate-pulse"
+                }`}
+              >
+                <span>{battleLocked ? "CASTING..." : "ATTACK"}</span>
+              </button>
+
+              {/* 2. SKILL BUTTON (Amethyst Purple Glow) */}
+              <button
+                type="button"
+                disabled={battleLocked || !isMyTurn || usableCombatSkills.length === 0}
+                onClick={() => {
+                  setShowSkillDrawer((prev) => !prev);
+                  setShowItemDrawer(false);
+                }}
+                className={`flex-1 py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.35)] ${
+                  battleLocked || !isMyTurn || usableCombatSkills.length === 0
+                    ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
+                    : "bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-600 hover:from-purple-600 hover:to-indigo-500 border border-purple-400/60 text-white hover:scale-103 active:scale-95 cursor-pointer"
+                }`}
+              >
+                <span>SKILL</span>
+              </button>
+
+              {/* 3. ITEM BUTTON (Dark Slate & Gold Border) */}
+              <button
+                type="button"
+                disabled={battleLocked || !isMyTurn || usableCombatPotions.length === 0}
+                onClick={() => {
+                  setShowItemDrawer((prev) => !prev);
+                  setShowSkillDrawer(false);
+                }}
+                className={`flex-1 py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-md ${
+                  battleLocked || !isMyTurn || usableCombatPotions.length === 0
+                    ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
+                    : "bg-slate-900/90 hover:bg-slate-800 text-amber-200 hover:text-white border border-amber-500/40 hover:border-amber-400 hover:scale-103 active:scale-95 cursor-pointer"
+                }`}
+              >
+                <span>ITEM</span>
+              </button>
             </div>
-          )
-        )}
-      </div>
+
+            {/* Real-time Battle Action Log */}
+            <div className="text-center text-xs text-purple-200/90 font-medium mt-2.5 min-h-[18px] max-w-lg truncate">
+              {battleLog}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

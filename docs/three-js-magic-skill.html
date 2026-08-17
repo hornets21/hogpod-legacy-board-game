@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js Magic VFX Demo</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #090714;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas { display:block; }
+
+    .ui {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: min(850px, calc(100% - 24px));
+      background: rgba(9, 8, 26, 0.86);
+      border: 1px solid rgba(171, 122, 255, 0.35);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 130px;
+    }
+
+    button:hover { filter: brightness(1.12); }
+
+    .fire { background: #b74428; }
+    .lightning { background: #3f57bc; }
+    .arcane { background: #6e42c9; }
+    .poison { background: #387b4b; }
+
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      color: white;
+      background: rgba(9, 8, 26, .72);
+      border: 1px solid rgba(171, 122, 255, .25);
+      border-radius: 12px;
+      padding: 12px 14px;
+      line-height: 1.45;
+      pointer-events: none;
+    }
+
+    .damage {
+      position: fixed;
+      z-index: 30;
+      color: white;
+      font-weight: 900;
+      font-size: 30px;
+      text-shadow: 0 2px 8px black;
+      pointer-events: none;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="hud">
+  <b>Magic VFX Demo</b><br/>
+  Three.js Low-Poly Spell Effects<br/>
+  Drag = Rotate · Scroll = Zoom
+</div>
+
+<div class="ui">
+  <button class="fire" id="fireBtn">🔥 Fireball</button>
+  <button class="lightning" id="lightningBtn">⚡ Lightning</button>
+  <button class="arcane" id="arcaneBtn">🔮 Arcane Orb</button>
+  <button class="poison" id="poisonBtn">☠ Poison Bolt</button>
+</div>
+
+<div id="damage" class="damage">-32</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// =========================================================
+// BASIC SCENE
+// =========================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b081c);
+scene.fog = new THREE.Fog(0x0b081c, 28, 60);
+
+const camera = new THREE.PerspectiveCamera(
+  42,
+  innerWidth / innerHeight,
+  0.1,
+  200
+);
+camera.position.set(0, 13, 20);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: "high-performance"
+});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1.2, 0);
+controls.minDistance = 14;
+controls.maxDistance = 28;
+
+scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x24142f, 2.3));
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+sun.position.set(-7, 15, 10);
+sun.castShadow = true;
+scene.add(sun);
+
+// =========================================================
+// HELPERS
+// =========================================================
+function flatMat(color, emissive = 0x000000, intensity = 0) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive,
+    emissiveIntensity: intensity,
+    roughness: 0.75,
+    metalness: 0.02,
+    flatShading: true
+  });
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function tween(object, from, to, duration) {
+  return new Promise(resolve => {
+    const start = performance.now();
+
+    function frame(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const t = p * p * (3 - 2 * p);
+      object.position.lerpVectors(from, to, t);
+
+      if (p < 1) requestAnimationFrame(frame);
+      else resolve();
+    }
+
+    requestAnimationFrame(frame);
+  });
+}
+
+// =========================================================
+// ARENA
+// =========================================================
+const arena = new THREE.Mesh(
+  new THREE.CircleGeometry(9.5, 48),
+  flatMat(0x4c4655)
+);
+arena.rotation.x = -Math.PI / 2;
+arena.receiveShadow = true;
+scene.add(arena);
+
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(7.5, 7.8, 48),
+  flatMat(0x75657e)
+);
+ring.rotation.x = -Math.PI / 2;
+ring.position.y = .02;
+scene.add(ring);
+
+const magicRing = new THREE.Mesh(
+  new THREE.RingGeometry(2.2, 2.3, 64),
+  new THREE.MeshBasicMaterial({
+    color: 0xa85eff,
+    transparent: true,
+    opacity: .72,
+    side: THREE.DoubleSide
+  })
+);
+magicRing.rotation.x = -Math.PI / 2;
+magicRing.position.y = .05;
+scene.add(magicRing);
+
+// crystals around arena
+for (let i=0; i<10; i++) {
+  const a = i / 10 * Math.PI * 2;
+  const r = 10.8;
+
+  const crystal = new THREE.Mesh(
+    new THREE.ConeGeometry(.35, 1.8, 5),
+    new THREE.MeshStandardMaterial({
+      color: i % 2 ? 0x5ca8ff : 0x965cff,
+      emissive: i % 2 ? 0x2858ff : 0x7627ff,
+      emissiveIntensity: 1.2,
+      flatShading: true
+    })
+  );
+
+  crystal.position.set(
+    Math.cos(a) * r,
+    .9,
+    Math.sin(a) * r
+  );
+
+  crystal.castShadow = true;
+  scene.add(crystal);
+}
+
+// =========================================================
+// TWO MONSTERS
+// =========================================================
+function createMonster(color, x) {
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.9, 0),
+    flatMat(color)
+  );
+  body.position.y = 1.0;
+  body.scale.set(1.25, 1, 1.4);
+  body.castShadow = true;
+
+  const head = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.52, 0),
+    flatMat(color)
+  );
+  head.position.set(0, 1.6, -.5);
+  head.castShadow = true;
+
+  const horn1 = new THREE.Mesh(
+    new THREE.ConeGeometry(.13, .6, 5),
+    flatMat(0xe8ddff)
+  );
+  horn1.position.set(-.28, 2.0, -.55);
+
+  const horn2 = horn1.clone();
+  horn2.position.x = .28;
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(.95, 1.15, 32),
+    new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: .9
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = .05;
+
+  group.add(body, head, horn1, horn2, ring);
+  group.position.set(x,0,0);
+
+  scene.add(group);
+  return group;
+}
+
+const caster = createMonster(0x3f86ff, -5.5);
+const target = createMonster(0xff5c58, 5.5);
+
+caster.lookAt(target.position);
+target.lookAt(caster.position);
+
+// =========================================================
+// VFX GROUPS
+// =========================================================
+const fxGroup = new THREE.Group();
+scene.add(fxGroup);
+
+function worldPos(group, offset = new THREE.Vector3()) {
+  const p = new THREE.Vector3();
+  group.getWorldPosition(p);
+  return p.add(offset);
+}
+
+// =========================================================
+// MAGIC CIRCLE UNDER CASTER
+// =========================================================
+function castCircle(color) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(1.0, 1.2, 48),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    })
+  );
+
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.copy(worldPos(caster, new THREE.Vector3(0,.07,0)));
+  fxGroup.add(ring);
+
+  const start = performance.now();
+
+  function tick(now) {
+    const p = Math.min((now-start)/600,1);
+    ring.rotation.z += .08;
+    ring.scale.setScalar(.4 + p*1.4);
+    ring.material.opacity = 1-p;
+
+    if (p < 1) requestAnimationFrame(tick);
+    else {
+      fxGroup.remove(ring);
+      ring.geometry.dispose();
+      ring.material.dispose();
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// =========================================================
+// TRAIL PARTICLE
+// =========================================================
+function makeTrail(position, color, size=.12) {
+  const particle = new THREE.Mesh(
+    new THREE.OctahedronGeometry(size,0),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: .9
+    })
+  );
+
+  particle.position.copy(position);
+  fxGroup.add(particle);
+
+  const start = performance.now();
+
+  function tick(now) {
+    const p = Math.min((now-start)/320,1);
+    particle.scale.setScalar(1-p);
+    particle.material.opacity = 1-p;
+    particle.position.y += .008;
+
+    if (p < 1) requestAnimationFrame(tick);
+    else {
+      fxGroup.remove(particle);
+      particle.geometry.dispose();
+      particle.material.dispose();
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// =========================================================
+// IMPACT BURST
+// =========================================================
+function impactBurst(position, color, count=24) {
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(count*3);
+  const velocities = [];
+
+  for(let i=0;i<count;i++) {
+    positions[i*3] = 0;
+    positions[i*3+1] = 0;
+    positions[i*3+2] = 0;
+
+    velocities.push(
+      new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(.16),
+        THREE.MathUtils.randFloat(.03,.18),
+        THREE.MathUtils.randFloatSpread(.16)
+      )
+    );
+  }
+
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions,3)
+  );
+
+  const points = new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({
+      color,
+      size: .13,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    })
+  );
+
+  points.position.copy(position);
+  fxGroup.add(points);
+
+  let frame = 0;
+
+  function tick() {
+    frame++;
+
+    const arr = geometry.attributes.position.array;
+
+    velocities.forEach((v,i)=>{
+      arr[i*3] += v.x;
+      arr[i*3+1] += v.y;
+      arr[i*3+2] += v.z;
+      v.y -= .005;
+    });
+
+    geometry.attributes.position.needsUpdate = true;
+    points.material.opacity = 1 - frame/30;
+
+    if(frame < 30) requestAnimationFrame(tick);
+    else {
+      fxGroup.remove(points);
+      geometry.dispose();
+      points.material.dispose();
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// =========================================================
+// DAMAGE TEXT
+// =========================================================
+function showDamage(text, color="#ffffff") {
+  const el = document.getElementById("damage");
+  el.textContent = text;
+  el.style.color = color;
+  el.style.opacity = 1;
+
+  const p = worldPos(target, new THREE.Vector3(0,2.5,0)).project(camera);
+
+  el.style.left = `${(p.x * .5 + .5) * innerWidth}px`;
+  el.style.top = `${(-p.y * .5 + .5) * innerHeight}px`;
+
+  el.animate([
+    { transform:"translate(-50%,0) scale(.8)", opacity:0 },
+    { transform:"translate(-50%,-15px) scale(1.2)", opacity:1 },
+    { transform:"translate(-50%,-65px) scale(1)", opacity:0 }
+  ], {
+    duration: 900,
+    easing:"ease-out"
+  });
+}
+
+// =========================================================
+// CAMERA SHAKE
+// =========================================================
+async function cameraShake(amount=.18, duration=180) {
+  const base = camera.position.clone();
+  const start = performance.now();
+
+  return new Promise(resolve=>{
+    function tick(now) {
+      const p = Math.min((now-start)/duration,1);
+
+      camera.position.set(
+        base.x + THREE.MathUtils.randFloatSpread(amount),
+        base.y + THREE.MathUtils.randFloatSpread(amount),
+        base.z + THREE.MathUtils.randFloatSpread(amount)
+      );
+
+      if(p < 1) requestAnimationFrame(tick);
+      else {
+        camera.position.copy(base);
+        resolve();
+      }
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+// =========================================================
+// FIREBALL
+// =========================================================
+async function fireball() {
+  castCircle(0xff7030);
+
+  const orb = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.28,1),
+    new THREE.MeshStandardMaterial({
+      color:0xffb23b,
+      emissive:0xff3c00,
+      emissiveIntensity:3,
+      flatShading:true
+    })
+  );
+
+  const light = new THREE.PointLight(0xff5a1f,12,7,2);
+  orb.add(light);
+
+  const start = worldPos(caster,new THREE.Vector3(0,1.4,0));
+  const end = worldPos(target,new THREE.Vector3(0,1.3,0));
+  orb.position.copy(start);
+  fxGroup.add(orb);
+
+  await wait(180);
+
+  const t0 = performance.now();
+
+  await new Promise(resolve=>{
+    function tick(now){
+      const p = Math.min((now-t0)/650,1);
+      const t = p*p*(3-2*p);
+
+      orb.position.lerpVectors(start,end,t);
+      orb.position.y += Math.sin(p*Math.PI)*1.2;
+
+      orb.rotation.x += .18;
+      orb.rotation.y += .2;
+
+      if(Math.random()>.35) {
+        makeTrail(
+          orb.position.clone(),
+          Math.random()>.5 ? 0xff8a32 : 0xffd15c,
+          .09
+        );
+      }
+
+      if(p<1) requestAnimationFrame(tick);
+      else resolve();
+    }
+    requestAnimationFrame(tick);
+  });
+
+  impactBurst(end,0xff6a26,30);
+  await cameraShake(.2,180);
+  showDamage("-34","#ffbd70");
+
+  fxGroup.remove(orb);
+  orb.geometry.dispose();
+  orb.material.dispose();
+}
+
+// =========================================================
+// ARCANE ORB
+// =========================================================
+async function arcaneOrb() {
+  castCircle(0xa76cff);
+
+  const orb = new THREE.Mesh(
+    new THREE.OctahedronGeometry(.42,1),
+    new THREE.MeshStandardMaterial({
+      color:0xbe8cff,
+      emissive:0x6f2fff,
+      emissiveIntensity:3.5,
+      flatShading:true
+    })
+  );
+
+  const ringA = new THREE.Mesh(
+    new THREE.TorusGeometry(.62,.035,6,24),
+    new THREE.MeshBasicMaterial({ color:0xe0c6ff })
+  );
+
+  const ringB = ringA.clone();
+  ringB.rotation.x = Math.PI/2;
+
+  orb.add(ringA,ringB);
+
+  const start = worldPos(caster,new THREE.Vector3(0,1.4,0));
+  const end = worldPos(target,new THREE.Vector3(0,1.4,0));
+  orb.position.copy(start);
+  fxGroup.add(orb);
+
+  const t0 = performance.now();
+
+  await new Promise(resolve=>{
+    function tick(now) {
+      const p = Math.min((now-t0)/850,1);
+      const t = p*p*(3-2*p);
+
+      orb.position.lerpVectors(start,end,t);
+      orb.position.y += Math.sin(p*Math.PI)*.7;
+
+      ringA.rotation.z += .25;
+      ringB.rotation.z -= .32;
+      orb.rotation.y += .09;
+
+      makeTrail(orb.position.clone(),0xb678ff,.07);
+
+      if(p<1) requestAnimationFrame(tick);
+      else resolve();
+    }
+    requestAnimationFrame(tick);
+  });
+
+  impactBurst(end,0xb978ff,34);
+  await cameraShake(.16,150);
+  showDamage("-29","#d5b2ff");
+
+  fxGroup.remove(orb);
+  orb.geometry.dispose();
+  orb.material.dispose();
+}
+
+// =========================================================
+// POISON BOLT
+// =========================================================
+async function poisonBolt() {
+  castCircle(0x55d66f);
+
+  const orb = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(.32,0),
+    new THREE.MeshStandardMaterial({
+      color:0x77e874,
+      emissive:0x1e9c3f,
+      emissiveIntensity:2.6,
+      flatShading:true
+    })
+  );
+
+  const start = worldPos(caster,new THREE.Vector3(0,1.35,0));
+  const end = worldPos(target,new THREE.Vector3(0,1.3,0));
+  orb.position.copy(start);
+  fxGroup.add(orb);
+
+  const t0 = performance.now();
+
+  await new Promise(resolve=>{
+    function tick(now){
+      const p = Math.min((now-t0)/720,1);
+      const t = p*p*(3-2*p);
+
+      orb.position.lerpVectors(start,end,t);
+      orb.position.x += Math.sin(p*Math.PI*6)*.18;
+      orb.position.y += Math.sin(p*Math.PI)*.5;
+
+      makeTrail(
+        orb.position.clone(),
+        Math.random()>.5 ? 0x76ef7a : 0xb5f05e,
+        .075
+      );
+
+      if(p<1) requestAnimationFrame(tick);
+      else resolve();
+    }
+    requestAnimationFrame(tick);
+  });
+
+  impactBurst(end,0x60db6c,28);
+  showDamage("-18 POISON","#8df08c");
+
+  fxGroup.remove(orb);
+  orb.geometry.dispose();
+  orb.material.dispose();
+}
+
+// =========================================================
+// LIGHTNING
+// =========================================================
+async function lightning() {
+  castCircle(0x78a2ff);
+
+  const start = worldPos(caster,new THREE.Vector3(0,1.6,0));
+  const end = worldPos(target,new THREE.Vector3(0,1.5,0));
+
+  const segments = 18;
+  const pts = [];
+
+  for(let i=0;i<=segments;i++) {
+    const p = i/segments;
+
+    const point = new THREE.Vector3().lerpVectors(start,end,p);
+
+    if(i!==0 && i!==segments) {
+      point.x += THREE.MathUtils.randFloatSpread(.55);
+      point.y += THREE.MathUtils.randFloatSpread(.55);
+      point.z += THREE.MathUtils.randFloatSpread(.55);
+    }
+
+    pts.push(point);
+  }
+
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+
+  const material = new THREE.LineBasicMaterial({
+    color:0x9fc4ff,
+    transparent:true,
+    opacity:1
+  });
+
+  const bolt = new THREE.Line(geo,material);
+  fxGroup.add(bolt);
+
+  const flash = new THREE.PointLight(0x75a6ff,45,16,2);
+  flash.position.copy(end);
+  fxGroup.add(flash);
+
+  for(let i=0;i<4;i++){
+    bolt.visible = true;
+    await wait(55);
+    bolt.visible = false;
+    await wait(35);
+  }
+
+  bolt.visible = true;
+  impactBurst(end,0x83aaff,30);
+  await cameraShake(.26,200);
+  showDamage("CRIT -42","#9fc7ff");
+
+  await wait(120);
+
+  fxGroup.remove(bolt);
+  fxGroup.remove(flash);
+  geo.dispose();
+  material.dispose();
+}
+
+// =========================================================
+// BUTTONS
+// =========================================================
+let busy = false;
+
+async function runSpell(fn) {
+  if(busy) return;
+  busy = true;
+
+  await fn();
+
+  busy = false;
+}
+
+document.getElementById("fireBtn").onclick = ()=>runSpell(fireball);
+document.getElementById("lightningBtn").onclick = ()=>runSpell(lightning);
+document.getElementById("arcaneBtn").onclick = ()=>runSpell(arcaneOrb);
+document.getElementById("poisonBtn").onclick = ()=>runSpell(poisonBolt);
+
+// =========================================================
+// LOOP
+// =========================================================
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const t = clock.getElapsedTime();
+
+  magicRing.material.opacity = .55 + Math.sin(t*2)*.15;
+
+  caster.children[4].scale.setScalar(1 + Math.sin(t*2)*.04);
+  target.children[4].scale.setScalar(1 + Math.sin(t*2+1)*.04);
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+
+animate();
+
+window.addEventListener("resize",()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>

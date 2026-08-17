@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Magic Low-Poly Battle Arena - Three.js</title>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #09071a; }
+    body { font-family: Arial, Helvetica, sans-serif; }
+    canvas { display: block; }
+
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      color: #fff;
+      background: rgba(10, 7, 28, 0.72);
+      border: 1px solid rgba(180, 130, 255, 0.28);
+      border-radius: 12px;
+      padding: 12px 14px;
+      backdrop-filter: blur(8px);
+      line-height: 1.45;
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    .hud b { color: #dcbcff; }
+  </style>
+</head>
+
+<body>
+  <div class="hud">
+    <b>Magic Arena</b><br/>
+    Low-poly / Three.js / 4 Players<br/>
+    Drag = Rotate · Scroll = Zoom
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    // =========================================================
+    // Scene / Camera / Renderer
+    // =========================================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x09071a);
+    scene.fog = new THREE.FogExp2(0x120c29, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(
+      48,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      300
+    );
+    camera.position.set(0, 18, 22);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.2, 0);
+    controls.minDistance = 13;
+    controls.maxDistance = 35;
+    controls.maxPolarAngle = Math.PI / 2.15;
+
+    // =========================================================
+    // Lights
+    // =========================================================
+    scene.add(new THREE.HemisphereLight(0x9db8ff, 0x24142f, 2.4));
+
+    const moon = new THREE.DirectionalLight(0xdcc7ff, 2.6);
+    moon.position.set(-8, 18, 8);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(1024, 1024);
+    moon.shadow.camera.left = -25;
+    moon.shadow.camera.right = 25;
+    moon.shadow.camera.top = 25;
+    moon.shadow.camera.bottom = -25;
+    scene.add(moon);
+
+    const purpleFill = new THREE.PointLight(0x8a4dff, 25, 30, 2);
+    purpleFill.position.set(0, 6, -8);
+    scene.add(purpleFill);
+
+    // =========================================================
+    // Utility
+    // =========================================================
+    function mat(color, emissive = 0x000000, emissiveIntensity = 0) {
+      return new THREE.MeshStandardMaterial({
+        color,
+        emissive,
+        emissiveIntensity,
+        roughness: 0.82,
+        metalness: 0.05,
+        flatShading: true
+      });
+    }
+
+    const arenaGroup = new THREE.Group();
+    const envGroup = new THREE.Group();
+    const magicGroup = new THREE.Group();
+    const playersGroup = new THREE.Group();
+
+    scene.add(arenaGroup, envGroup, magicGroup, playersGroup);
+
+    // =========================================================
+    // Floating island base
+    // =========================================================
+    const islandTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(12.8, 13.4, 1.4, 32),
+      mat(0x3d3547)
+    );
+    islandTop.position.y = -0.55;
+    islandTop.receiveShadow = true;
+    islandTop.castShadow = true;
+    envGroup.add(islandTop);
+
+    // Angular rock underside
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const r = THREE.MathUtils.randFloat(7.5, 12);
+      const rock = new THREE.Mesh(
+        new THREE.ConeGeometry(
+          THREE.MathUtils.randFloat(0.7, 1.5),
+          THREE.MathUtils.randFloat(2.5, 5.5),
+          THREE.MathUtils.randInt(5, 7)
+        ),
+        mat(
+          [0x272333, 0x312b3b, 0x3a3146][Math.floor(Math.random() * 3)]
+        )
+      );
+      rock.position.set(
+        Math.cos(a) * r,
+        THREE.MathUtils.randFloat(-2.6, -1.2),
+        Math.sin(a) * r
+      );
+      rock.rotation.x = THREE.MathUtils.randFloat(-0.25, 0.25);
+      rock.rotation.z = THREE.MathUtils.randFloat(-0.25, 0.25);
+      envGroup.add(rock);
+    }
+
+    // =========================================================
+    // Arena floor
+    // =========================================================
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(10.3, 48),
+      mat(0x4a4452)
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    arenaGroup.add(ground);
+
+    // Stone rings
+    const ringMaterial = mat(0x75637f);
+    [
+      [8.3, 8.8],
+      [5.8, 6.05],
+      [3.6, 3.78]
+    ].forEach(([inner, outer]) => {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(inner, outer, 48),
+        ringMaterial
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.025;
+      ring.receiveShadow = true;
+      arenaGroup.add(ring);
+    });
+
+    // Radial stone lines
+    const lineMat = new THREE.MeshBasicMaterial({
+      color: 0x6b5a72,
+      transparent: true,
+      opacity: 0.72
+    });
+
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const strip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.025, 8.5),
+        lineMat
+      );
+      strip.position.y = 0.035;
+      strip.position.x = Math.sin(a) * 4.25;
+      strip.position.z = Math.cos(a) * 4.25;
+      strip.rotation.y = a;
+      arenaGroup.add(strip);
+    }
+
+    // =========================================================
+    // Arcane magic circle
+    // =========================================================
+    const magicMat = new THREE.MeshBasicMaterial({
+      color: 0xb875ff,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide
+    });
+
+    const centerRing = new THREE.Mesh(
+      new THREE.RingGeometry(2.2, 2.28, 64),
+      magicMat
+    );
+    centerRing.rotation.x = -Math.PI / 2;
+    centerRing.position.y = 0.08;
+    magicGroup.add(centerRing);
+
+    function magicLine(x1, z1, x2, z2, width = 0.045) {
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(width, 0.025, len),
+        magicMat
+      );
+
+      line.position.set((x1+x2)/2, 0.085, (z1+z2)/2);
+      line.rotation.y = Math.atan2(dx, dz);
+      magicGroup.add(line);
+    }
+
+    // Hexagram
+    const starR = 1.65;
+    const points = [];
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+      points.push({
+        x: Math.cos(a) * starR,
+        z: Math.sin(a) * starR
+      });
+    }
+
+    [[0,2],[2,4],[4,0],[1,3],[3,5],[5,1]].forEach(([a,b]) => {
+      magicLine(points[a].x, points[a].z, points[b].x, points[b].z);
+    });
+
+    // Small glowing runes around center
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const rune = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.02, 0.04),
+        magicMat
+      );
+      rune.position.set(Math.cos(a) * 2.75, 0.09, Math.sin(a) * 2.75);
+      rune.rotation.y = -a;
+      magicGroup.add(rune);
+    }
+
+    // =========================================================
+    // Player spawn rings P1-P4
+    // =========================================================
+    const playerData = [
+      { id: "P1", color: 0x2f8cff, pos: [0, 0, 7.0] },
+      { id: "P2", color: 0xff4f54, pos: [-7.0, 0, 0] },
+      { id: "P3", color: 0x68dc5e, pos: [7.0, 0, 0] },
+      { id: "P4", color: 0xffbf38, pos: [0, 0, -7.0] }
+    ];
+
+    function makeLabel(text, color) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+
+      ctx.clearRect(0,0,256,128);
+      ctx.fillStyle = "rgba(10,10,24,0.88)";
+      ctx.beginPath();
+      ctx.roundRect(52, 20, 152, 78, 26);
+      ctx.fill();
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+      ctx.stroke();
+
+      ctx.font = "bold 42px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(text, 128, 60);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false
+        })
+      );
+      sprite.scale.set(2.0, 1.0, 1);
+      return sprite;
+    }
+
+    playerData.forEach((p) => {
+      const group = new THREE.Group();
+      group.position.set(...p.pos);
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.9, 1.15, 40),
+        new THREE.MeshBasicMaterial({
+          color: p.color,
+          transparent: true,
+          opacity: 0.95,
+          side: THREE.DoubleSide
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.07;
+
+      const glow = new THREE.PointLight(p.color, 8, 4.5, 2);
+      glow.position.y = 0.7;
+
+      // Dummy low-poly wizard placeholder
+      const body = new THREE.Mesh(
+        new THREE.ConeGeometry(0.45, 1.2, 6),
+        mat(p.color)
+      );
+      body.position.y = 0.65;
+      body.castShadow = true;
+
+      const head = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.33, 0),
+        mat(0xe6d5c8)
+      );
+      head.position.y = 1.45;
+      head.castShadow = true;
+
+      const hat = new THREE.Mesh(
+        new THREE.ConeGeometry(0.38, 0.9, 6),
+        mat(0x211c38)
+      );
+      hat.position.set(0, 2.05, 0);
+      hat.rotation.z = 0.13;
+      hat.castShadow = true;
+
+      const label = makeLabel(p.id, "#" + p.color.toString(16).padStart(6,"0"));
+      label.position.y = 3.0;
+
+      group.add(ring, glow, body, head, hat, label);
+      group.lookAt(0, 0, 0);
+      playersGroup.add(group);
+    });
+
+    // =========================================================
+    // Low-poly crystals
+    // =========================================================
+    function createCrystal(x, z, scale = 1, color = 0x9a58ff) {
+      const group = new THREE.Group();
+      const crystalMat = new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 1.1,
+        roughness: 0.35,
+        metalness: 0.05,
+        flatShading: true
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const c = new THREE.Mesh(
+          new THREE.ConeGeometry(
+            0.25 * scale,
+            (1.2 + i * 0.3) * scale,
+            5
+          ),
+          crystalMat
+        );
+        c.position.set(
+          (i - 1) * 0.32 * scale,
+          (0.6 + i * 0.15) * scale,
+          (i % 2) * 0.12
+        );
+        c.rotation.z = THREE.MathUtils.randFloat(-0.18, 0.18);
+        c.castShadow = true;
+        group.add(c);
+      }
+
+      const light = new THREE.PointLight(color, 6 * scale, 4 * scale, 2);
+      light.position.y = 1.2 * scale;
+      group.add(light);
+
+      group.position.set(x, 0, z);
+      envGroup.add(group);
+    }
+
+    [
+      [-9, -3], [-8, 5], [8, -5], [9, 3],
+      [-4, -9], [5, 9]
+    ].forEach(([x,z], i) => {
+      createCrystal(x, z, THREE.MathUtils.randFloat(0.7,1.2),
+        i % 2 ? 0x59a8ff : 0xa15cff
+      );
+    });
+
+    // =========================================================
+    // Rocks / trees / obelisks
+    // =========================================================
+    function createRock(x, z, scale = 1) {
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.85, 0),
+        mat([0x3d3544, 0x4b4251, 0x574b5c][Math.floor(Math.random()*3)])
+      );
+
+      rock.position.set(x, 0.45 * scale, z);
+      rock.scale.set(
+        1.2 * scale,
+        0.75 * scale,
+        THREE.MathUtils.randFloat(0.8,1.2) * scale
+      );
+      rock.rotation.y = Math.random() * Math.PI;
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      envGroup.add(rock);
+    }
+
+    function createMagicTree(x, z, scale = 1) {
+      const group = new THREE.Group();
+
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.28, 1.5, 6),
+        mat(0x4b314a)
+      );
+      trunk.position.y = 0.75;
+
+      const crown = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(1.0, 0),
+        mat(0x57306f, 0x34124f, 0.15)
+      );
+      crown.position.y = 2.05;
+      crown.scale.set(1.15, 0.8, 1.0);
+
+      group.add(trunk, crown);
+      group.position.set(x, 0, z);
+      group.scale.setScalar(scale);
+      envGroup.add(group);
+    }
+
+    function createObelisk(x, z, rotation = 0) {
+      const group = new THREE.Group();
+
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.52, 2.5, 4),
+        mat(0x4d4357)
+      );
+      body.position.y = 1.25;
+      body.castShadow = true;
+
+      const gem = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.26, 0),
+        new THREE.MeshStandardMaterial({
+          color: 0xa460ff,
+          emissive: 0x7c28ff,
+          emissiveIntensity: 2.4,
+          flatShading: true
+        })
+      );
+      gem.position.y = 2.55;
+
+      const light = new THREE.PointLight(0x9b4dff, 5, 4, 2);
+      light.position.y = 2.6;
+
+      group.add(body, gem, light);
+      group.position.set(x, 0, z);
+      group.rotation.y = rotation;
+      envGroup.add(group);
+    }
+
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + THREE.MathUtils.randFloat(-0.14, 0.14);
+      const r = THREE.MathUtils.randFloat(10.6, 12.2);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+
+      if (i % 4 === 0) {
+        createMagicTree(x, z, THREE.MathUtils.randFloat(0.7,1.2));
+      } else {
+        createRock(x, z, THREE.MathUtils.randFloat(0.5,1.25));
+      }
+    }
+
+    [
+      [-8,7], [8,7], [-8,-7], [8,-7]
+    ].forEach(([x,z], i) => createObelisk(x,z,i*Math.PI/2));
+
+    // =========================================================
+    // Portal at the back
+    // =========================================================
+    const portal = new THREE.Group();
+    portal.position.set(0, 0, -10);
+
+    const archMat = mat(0x4c4057);
+
+    const leftPillar = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 4.6, 1.3),
+      archMat
+    );
+    leftPillar.position.set(-2.25, 2.3, 0);
+
+    const rightPillar = leftPillar.clone();
+    rightPillar.position.x = 2.25;
+
+    const topArch = new THREE.Mesh(
+      new THREE.TorusGeometry(2.25, 0.52, 8, 24, Math.PI),
+      archMat
+    );
+    topArch.position.y = 4.45;
+    topArch.rotation.z = Math.PI;
+
+    const portalDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(1.75, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x8d47ff,
+        transparent: true,
+        opacity: 0.74,
+        side: THREE.DoubleSide
+      })
+    );
+    portalDisc.position.y = 2.75;
+
+    const portalRing1 = new THREE.Mesh(
+      new THREE.TorusGeometry(1.82, 0.09, 8, 48),
+      new THREE.MeshBasicMaterial({ color: 0xd2adff })
+    );
+    portalRing1.position.y = 2.75;
+
+    const portalRing2 = new THREE.Mesh(
+      new THREE.TorusGeometry(1.42, 0.05, 8, 48),
+      new THREE.MeshBasicMaterial({ color: 0x6ee7ff })
+    );
+    portalRing2.position.y = 2.75;
+
+    const portalLight = new THREE.PointLight(0x9a55ff, 35, 18, 2);
+    portalLight.position.y = 3;
+
+    portal.add(
+      leftPillar,
+      rightPillar,
+      topArch,
+      portalDisc,
+      portalRing1,
+      portalRing2,
+      portalLight
+    );
+
+    envGroup.add(portal);
+
+    // =========================================================
+    // Floating island pieces in background
+    // =========================================================
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = THREE.MathUtils.randFloat(16, 27);
+
+      const chunk = new THREE.Mesh(
+        new THREE.ConeGeometry(
+          THREE.MathUtils.randFloat(0.8, 2),
+          THREE.MathUtils.randFloat(2, 5),
+          THREE.MathUtils.randInt(5,7)
+        ),
+        mat(0x302a3c)
+      );
+
+      chunk.position.set(
+        Math.cos(a) * r,
+        THREE.MathUtils.randFloat(3, 10),
+        Math.sin(a) * r
+      );
+
+      chunk.rotation.z = Math.PI;
+      scene.add(chunk);
+    }
+
+    // =========================================================
+    // Magical particles
+    // =========================================================
+    const particleCount = 180;
+    const positions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const r = THREE.MathUtils.randFloat(2, 16);
+      const a = Math.random() * Math.PI * 2;
+
+      positions[i*3] = Math.cos(a) * r;
+      positions[i*3+1] = THREE.MathUtils.randFloat(0.4, 8);
+      positions[i*3+2] = Math.sin(a) * r;
+    }
+
+    const particlesGeo = new THREE.BufferGeometry();
+    particlesGeo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3)
+    );
+
+    const particles = new THREE.Points(
+      particlesGeo,
+      new THREE.PointsMaterial({
+        color: 0xc590ff,
+        size: 0.07,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false
+      })
+    );
+    magicGroup.add(particles);
+
+    // =========================================================
+    // Stars
+    // =========================================================
+    const starCount = 500;
+    const starPos = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      starPos[i*3] = THREE.MathUtils.randFloatSpread(120);
+      starPos[i*3+1] = THREE.MathUtils.randFloat(8, 65);
+      starPos[i*3+2] = THREE.MathUtils.randFloatSpread(120);
+    }
+
+    const starsGeo = new THREE.BufferGeometry();
+    starsGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+
+    scene.add(
+      new THREE.Points(
+        starsGeo,
+        new THREE.PointsMaterial({
+          color: 0xb8ccff,
+          size: 0.12,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false
+        })
+      )
+    );
+
+    // =========================================================
+    // Animation
+    // =========================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const t = clock.getElapsedTime();
+
+      portalRing1.rotation.z = t * 0.55;
+      portalRing2.rotation.z = -t * 0.75;
+
+      portalDisc.material.opacity = 0.63 + Math.sin(t * 2.0) * 0.1;
+
+      centerRing.material.opacity = 0.55 + Math.sin(t * 2.4) * 0.18;
+
+      particles.rotation.y = t * 0.035;
+      particles.position.y = Math.sin(t * 0.7) * 0.12;
+
+      playersGroup.children.forEach((g, i) => {
+        const ring = g.children[0];
+        ring.scale.setScalar(1 + Math.sin(t * 2.2 + i) * 0.05);
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // =========================================================
+    // Resize
+    // =========================================================
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+  </script>
+</body>
+</html>

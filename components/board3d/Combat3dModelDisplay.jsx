@@ -51,7 +51,7 @@ class ModelErrorBoundary extends React.Component {
   }
 }
 
-function ModelMesh({ modelPath, targetHeight = 2.1, hitState }) {
+function ModelMesh({ modelPath, targetHeight = 1.95, hitState, facing = "monster" }) {
   const groupRef = useRef(null);
   const { scene, animations } = useGLTF(modelPath);
   const { actions } = useAnimations(animations, groupRef);
@@ -71,7 +71,7 @@ function ModelMesh({ modelPath, targetHeight = 2.1, hitState }) {
   }, [actions]);
 
   const normalizedScene = useMemo(() => {
-    const clone = scene.clone();
+    const clone = scene.clone(true);
     const bounds = new THREE.Box3().setFromObject(clone);
     const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
@@ -88,18 +88,22 @@ function ModelMesh({ modelPath, targetHeight = 2.1, hitState }) {
     return clone;
   }, [scene, targetHeight]);
 
+  // Monster faces 3/4 front towards player on lower-left (-0.2 rad)
+  // Player faces forward-right towards monster in upper-right (0.65 rad)
+  const baseAngle = facing === "player" ? Math.PI * 0.65 : -Math.PI * 0.2;
+
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
     const t = clock.elapsedTime;
     // Animation float + hit shake
     const shake = hitState ? Math.sin(t * 35) * 0.08 : 0;
-    groupRef.current.position.y = -1.0 + Math.sin(t * 1.8) * 0.04;
+    groupRef.current.position.y = -0.92 + Math.sin(t * 1.8) * 0.04;
     groupRef.current.position.x = shake;
-    groupRef.current.rotation.y = Math.sin(t * 0.45) * 0.25;
+    groupRef.current.rotation.y = baseAngle + Math.sin(t * 0.45) * 0.1;
   });
 
   return (
-    <group ref={groupRef} position={[0, -1.0, 0]}>
+    <group ref={groupRef} position={[0, -0.92, 0]}>
       <primitive object={normalizedScene} />
     </group>
   );
@@ -122,12 +126,12 @@ const GroundMagicPedestal = React.memo(function GroundMagicPedestal({ color = "#
   const innerRingRef = useRef(null);
 
   const sparkles = useMemo(() => {
-    return Array.from({ length: 8 }, (_, i) => ({
+    return Array.from({ length: 6 }, (_, i) => ({
       id: i,
-      angle: (i / 8) * Math.PI * 2,
-      radius: 0.35 + (i % 3) * 0.2,
-      speed: 1.2 + (i % 3) * 0.4,
-      size: 0.04 + (i % 3) * 0.02,
+      angle: (i / 6) * Math.PI * 2,
+      radius: 0.4 + (i % 2) * 0.15,
+      speed: 1.0 + (i % 2) * 0.3,
+      size: 0.035,
     }));
   }, []);
 
@@ -135,36 +139,36 @@ const GroundMagicPedestal = React.memo(function GroundMagicPedestal({ color = "#
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    if (outerRingRef.current) outerRingRef.current.rotation.z = t * 1.2;
-    if (innerRingRef.current) innerRingRef.current.rotation.z = -t * 1.8;
+    if (outerRingRef.current) outerRingRef.current.rotation.z = t * 0.8;
+    if (innerRingRef.current) innerRingRef.current.rotation.z = -t * 1.2;
 
     sparkRefs.current.forEach((mesh, i) => {
       if (!mesh) return;
       const sp = sparkles[i];
-      const pk = (t * sp.speed * 0.5) % 1;
-      mesh.position.y = -1.0 + pk * 2.0;
-      mesh.position.x = Math.cos(sp.angle + t) * sp.radius;
-      mesh.position.z = Math.sin(sp.angle + t) * sp.radius;
-      if (mesh.material) mesh.material.opacity = Math.sin(pk * Math.PI) * 0.8;
+      const pk = (t * sp.speed * 0.4) % 1;
+      mesh.position.y = -0.93 + pk * 1.6;
+      mesh.position.x = Math.cos(sp.angle + t * 0.6) * sp.radius;
+      mesh.position.z = Math.sin(sp.angle + t * 0.6) * sp.radius;
+      if (mesh.material) mesh.material.opacity = Math.sin(pk * Math.PI) * 0.6;
     });
   });
 
   return (
     <group position={[0, 0, 0]}>
       {/* Outer Rune Ring */}
-      <mesh ref={outerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.04, 0]} geometry={PEDESTAL_RING_GEO}>
-        <meshBasicMaterial color={color} transparent opacity={0.65} blending={THREE.AdditiveBlending} side={THREE.DoubleSide} depthWrite={false} />
+      <mesh ref={outerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.94, 0]} geometry={PEDESTAL_RING_GEO}>
+        <meshBasicMaterial color={color} transparent opacity={0.45} blending={THREE.AdditiveBlending} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
 
       {/* Inner Torus Ring */}
-      <mesh ref={innerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.03, 0]} geometry={PEDESTAL_TORUS_GEO}>
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.7} blending={THREE.AdditiveBlending} depthWrite={false} />
+      <mesh ref={innerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.93, 0]} geometry={PEDESTAL_TORUS_GEO}>
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
 
       {/* Upward sparkles */}
       {sparkles.map((sp, i) => (
         <mesh key={sp.id} ref={(el) => (sparkRefs.current[i] = el)} geometry={SPARK_GEO} scale={sp.size}>
-          <meshBasicMaterial color={color} transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
+          <meshBasicMaterial color={color} transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
       ))}
     </group>
@@ -230,8 +234,17 @@ const CombatFxOverlay = React.memo(function CombatFxOverlay({ activeFx, color })
 });
 
 // ─── MAIN DISPLAY COMPONENT ────────────────────────────────
-const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({ modelPath, color = "#ef4444", activeFx = null, hitState = false, fallback }) {
+const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({
+  modelPath,
+  color = "#ef4444",
+  activeFx = null,
+  hitState = false,
+  facing = "monster",
+  fallback,
+}) {
   if (!modelPath) return fallback;
+
+  const cameraPos = facing === "player" ? [-0.15, 0.25, 4.0] : [0.1, 0.25, 4.0];
 
   return (
     <ModelErrorBoundary fallback={fallback}>
@@ -239,7 +252,7 @@ const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({ modelPat
         <Canvas
           shadows
           dpr={[1, 1.5]}
-          camera={{ position: [0, 0.5, 3.8], fov: 38, near: 0.1, far: 20 }}
+          camera={{ position: cameraPos, fov: 40, near: 0.1, far: 20 }}
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         >
           <CameraTarget />
@@ -256,7 +269,7 @@ const Combat3dModelDisplay = React.memo(function Combat3dModelDisplay({ modelPat
 
           {/* HTML fallbacks must stay outside Canvas; R3F only accepts Three.js objects here. */}
           <Suspense fallback={null}>
-            <ModelMesh modelPath={modelPath} hitState={hitState} />
+            <ModelMesh modelPath={modelPath} hitState={hitState} facing={facing} />
           </Suspense>
         </Canvas>
       </div>

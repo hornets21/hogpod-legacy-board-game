@@ -254,12 +254,13 @@ export default function Home() {
       dispatch({ type: "ROLL_DICE", dice: rolledVal });
       emitStepMove();
 
-      // หน่วงเวลา 1.5 วินาทีให้หมากก้าวเดิน 3D บนกระดานตามแต้ม rolledVal
+      // หน่วงเวลาตามจำนวนก้าวเดินจริง (400ms ต่อช่อง + 400ms ลงพื้น) เพื่อให้หมากเดินถึงช่องเป้าหมายก่อนเปิด Modal
+      const walkDurationMs = Math.max(1200, rolledVal * 400 + 400);
       setTimeout(() => {
         dispatch({ type: "MOVE_AND_CHECK" });
         setIsRolling(false);
         setTempDice(null);
-      }, 1500);
+      }, walkDurationMs);
     }, 600);
   }
 
