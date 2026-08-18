@@ -64,12 +64,26 @@ export default function NpcDoctorModal({ player, grantedPotions = [], onClose })
             {grantedPotions.length > 0 ? (
               grantedPotions.map((pot, idx) => (
                 <div key={idx} className={`flex items-center gap-3 bg-slate-950/80 p-3 rounded-xl border transition shadow-inner ${pot.isBuff ? "border-amber-400/60 bg-amber-950/20" : "border-pink-500/30 hover:border-pink-400/60"}`}>
-                  <div className="relative w-10 h-10 shrink-0 flex items-center justify-center">
+                  <div className="relative w-12 h-12 rounded-xl bg-slate-900/90 border border-pink-400/40 p-1 shrink-0 flex items-center justify-center shadow-inner overflow-hidden">
                     {pot.image ? (
-                      <Image src={pot.image} alt={pot.name} fill className="object-contain" />
-                    ) : (
-                      <span className="text-2xl">{pot.icon || "🧪"}</span>
-                    )}
+                      <img
+                        src={pot.image}
+                        alt={pot.name}
+                        className="w-full h-full object-contain drop-shadow"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          if (e.currentTarget.nextElementSibling) {
+                            e.currentTarget.nextElementSibling.style.display = "block";
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <span
+                      className="text-2xl"
+                      style={{ display: pot.image ? "none" : "block" }}
+                    >
+                      {pot.icon || "🧪"}
+                    </span>
                   </div>
                   <div className="overflow-hidden min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">

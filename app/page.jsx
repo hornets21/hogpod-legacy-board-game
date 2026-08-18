@@ -613,12 +613,18 @@ export default function Home() {
       )}
 
       {/* ── Combat Modal ───────────────────────────────────────── */}
-      {state.phase === "combat" && state.combatState && !state.combatState.resolved && (
+      {state.phase === "combat" && state.combatState && (
         <CombatModal
           combatState={state.combatState}
           player={currentPlayer}
           onResolveCombat={(combatResult) => dispatch({ type: "COMBAT_RESOLVE", combatResult })}
-          onUseSkill={(skillId) => handleSkillRequest(state.currentPlayerIndex, skillId)}
+          onUseSkill={(skillId) =>
+            dispatch({
+              type: "USE_SKILL",
+              skillId,
+              playerIndex: state.currentPlayerIndex,
+            })
+          }
           onUsePotion={(potionId) => dispatch({ type: "USE_POTION", potionId })}
           onFlee={
             currentPlayer.pet?.effect === "dodge_once" && !currentPlayer.dodgeUsed

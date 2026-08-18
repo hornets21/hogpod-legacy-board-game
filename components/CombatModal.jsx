@@ -198,14 +198,40 @@ export default function CombatModal({
         key: Date.now(),
       });
     } else if (skillId === "thunder_star") {
+      setAttackAction({
+        type: "player",
+        active: true,
+        spellType: "lightning",
+        damage: 50,
+        isCrit: false,
+      });
       setMonsterFx("lightning");
       setMonsterDamagePopup({
         text: "-50 DMG",
         colorClass: "text-yellow-300 drop-shadow-[0_0_15px_rgba(253,224,71,0.9)]",
         key: Date.now(),
       });
-      setDisplayedMonsterHp((prev) => Math.max(0, prev - 50));
+      const newHp = Math.max(0, displayedMonsterHp - 50);
+      setDisplayedMonsterHp(newHp);
+      if (newHp <= 0) {
+        setTimeout(() => {
+          setCombatOutcome({
+            outcome: "win",
+            damageDealt: 50,
+            remainingHp: 0,
+            monsterHp: 0,
+            monsterDmg: 0,
+          });
+        }, 1200);
+      }
     } else if (skillId === "phoenix_force") {
+      setAttackAction({
+        type: "player",
+        active: true,
+        spellType: "fire",
+        damage: 80,
+        isCrit: false,
+      });
       setPlayerFx("damage");
       setMonsterFx("fire");
       setMonsterDamagePopup({
@@ -213,7 +239,19 @@ export default function CombatModal({
         colorClass: "text-rose-400 drop-shadow-[0_0_15px_rgba(251,113,133,0.9)]",
         key: Date.now(),
       });
-      setDisplayedMonsterHp((prev) => Math.max(0, prev - 80));
+      const newHp = Math.max(0, displayedMonsterHp - 80);
+      setDisplayedMonsterHp(newHp);
+      if (newHp <= 0) {
+        setTimeout(() => {
+          setCombatOutcome({
+            outcome: "win",
+            damageDealt: 80,
+            remainingHp: 0,
+            monsterHp: 0,
+            monsterDmg: 0,
+          });
+        }, 1200);
+      }
     } else if (skillId === "morelody") {
       setPlayerFx("speed");
       setPlayerDamagePopup({
@@ -325,9 +363,27 @@ export default function CombatModal({
 
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden animate-fade-in p-3 sm:p-5 md:p-6 w-screen h-screen max-w-full max-h-full text-white pointer-events-auto bg-[#090714]">
-      {/* Deep cosmic vignette background */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(15,10,30,0.5)_20%,_rgba(4,3,10,0.98)_100%)] pointer-events-none" />
+    <div className="fixed inset-0 z-50 flex flex-col justify-between select-none overflow-hidden text-white pointer-events-auto bg-[#090714] w-screen h-screen">
+      {/* ── 3D MAGIC BATTLE ARENA (100% FULLSCREEN UNIFIED STAGE) ── */}
+      <div className="absolute inset-0 z-0 w-full h-full pointer-events-auto">
+        <MagicCombat3dArena
+          player={player}
+          monster={monster}
+          playerModelPath={playerModelPath}
+          monsterModelPath={monsterModelPath}
+          attackAction={attackAction}
+          hitStop={hitStop}
+          playerFx={playerFx}
+          monsterFx={monsterFx}
+          onSpellImpact={handlePlayerSpellImpact}
+          onMonsterImpact={handleMonsterSpellImpact}
+          onSpellComplete={handleSpellComplete}
+        />
+      </div>
+
+      {/* Atmospheric Cinematic Gradients */}
+      <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-slate-950/85 via-slate-950/25 to-transparent pointer-events-none z-10" />
+      <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-transparent pointer-events-none z-10" />
 
       {/* Hit-stop flash when resolving */}
       {hitStop && (
@@ -340,8 +396,8 @@ export default function CombatModal({
         />
       )}
 
-      {/* ── TOP HUD BARS (Pokemon RPG Layout) ────────────────────── */}
-      <div className="relative z-30 w-full flex items-start justify-between gap-4 pointer-events-auto">
+      {/* ── 1. TOP HUD BARS (Floating Top-Left & Top-Right inside 3D Scene) ── */}
+      <div className="relative z-20 w-full max-w-7xl mx-auto pt-3 sm:pt-4 px-3 sm:px-5 flex items-start justify-between gap-4 pointer-events-auto shrink-0">
         
         {/* TOP-LEFT: Player Status Bar (Angled Polygon) */}
         <div className="flex flex-col gap-1.5 max-w-[48%] sm:max-w-md w-full">
@@ -381,7 +437,7 @@ export default function CombatModal({
 
             {/* Row 3: Numeric HP text */}
             <div className="text-right text-[10px] sm:text-[11px] font-black text-white/90 pr-4 mt-1 tracking-wider">
-              {Math.max(0, displayedPlayerHp)} / {player.maxHp}
+              {Math.max(0, displayedPlayerHp)} / {player.maxHp || 100}
             </div>
           </div>
         </div>
@@ -430,181 +486,163 @@ export default function CombatModal({
         </div>
       </div>
 
-      {/* ── 3D MAGIC BATTLE ARENA (FULL SCREEN PANORAMIC VIEW) ── */}
-      <div className="relative z-10 flex-1 w-full h-full flex items-center justify-center pointer-events-none">
-        
-        {/* Full 3D Magic Arena Canvas */}
-        <MagicCombat3dArena
-          player={player}
-          monster={monster}
-          playerModelPath={playerModelPath}
-          monsterModelPath={monsterModelPath}
-          attackAction={attackAction}
-          hitStop={hitStop}
-          playerFx={playerFx}
-          monsterFx={monsterFx}
-          onSpellImpact={handlePlayerSpellImpact}
-          onMonsterImpact={handleMonsterSpellImpact}
-          onSpellComplete={handleSpellComplete}
-        />
+      {/* ── 2. CENTER OVERLAYS: DAMAGE POPUPS & OUTCOME BANNER ── */}
+      <div className="relative z-30 flex-1 w-full h-full flex items-center justify-center pointer-events-none">
+        {/* Floating Damage Popup Over Monster */}
+        <AnimatePresence>
+          {monsterDamagePopup && (
+            <motion.div
+              key={monsterDamagePopup.key}
+              initial={{ opacity: 0, y: 0, scale: 0.8 }}
+              animate={{ opacity: 1, y: -45, scale: 1.35 }}
+              exit={{ opacity: 0, y: -80, scale: 0.9 }}
+              transition={{ duration: 0.85, ease: "easeOut" }}
+              className={`absolute top-[28%] right-[22%] z-40 text-3xl sm:text-4xl md:text-5xl font-black ${
+                monsterDamagePopup.colorClass || "text-amber-300"
+              } drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] pointer-events-none tracking-wider select-none`}
+            >
+              {monsterDamagePopup.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* 2D HUD Tags Overlay on 3D Stage */}
-        <div className="relative w-full h-full pointer-events-auto flex items-center justify-center">
+        {/* Floating Damage Popup Over Player */}
+        <AnimatePresence>
+          {playerDamagePopup && (
+            <motion.div
+              key={playerDamagePopup.key}
+              initial={{ opacity: 0, y: 0, scale: 0.8 }}
+              animate={{ opacity: 1, y: -45, scale: 1.35 }}
+              exit={{ opacity: 0, y: -80, scale: 0.9 }}
+              transition={{ duration: 0.85, ease: "easeOut" }}
+              className={`absolute bottom-[36%] left-[22%] z-40 text-3xl sm:text-4xl md:text-5xl font-black ${
+                playerDamagePopup.colorClass || "text-red-400"
+              } drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] pointer-events-none tracking-wider select-none`}
+            >
+              {playerDamagePopup.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          {/* 1. FLOATING DAMAGE POPUP OVER MONSTER */}
-          <AnimatePresence>
-            {monsterDamagePopup && (
-              <motion.div
-                key={monsterDamagePopup.key}
-                initial={{ opacity: 0, y: 0, scale: 0.8 }}
-                animate={{ opacity: 1, y: -45, scale: 1.35 }}
-                exit={{ opacity: 0, y: -80, scale: 0.9 }}
-                transition={{ duration: 0.85, ease: "easeOut" }}
-                className={`absolute top-[28%] right-[22%] z-40 text-3xl sm:text-4xl md:text-5xl font-black ${
-                  monsterDamagePopup.colorClass || "text-amber-300"
-                } drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] pointer-events-none tracking-wider select-none`}
+        {/* Center Overlay: Victory / Battle Clash Banner */}
+        <AnimatePresence mode="wait">
+          {combatOutcome && (
+            <motion.div
+              key="combat-outcome-banner"
+              initial={{ opacity: 0, scale: 0.8, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ type: "spring", stiffness: 280, damping: 22 }}
+              className="absolute inset-0 m-auto z-40 flex flex-col items-center justify-center max-w-sm sm:max-w-md pointer-events-auto gap-2.5 px-4"
+            >
+              <div
+                className={`w-full py-3.5 px-5 rounded-2xl border-2 text-center shadow-[0_0_40px_rgba(0,0,0,0.95)] backdrop-blur-xl ${
+                  combatOutcome.outcome === "win"
+                    ? "bg-emerald-950/95 border-emerald-400 text-emerald-300 shadow-emerald-500/40"
+                    : "bg-red-950/95 border-red-400 text-red-300 shadow-red-500/40"
+                }`}
               >
-                {monsterDamagePopup.text}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* 2. FLOATING DAMAGE POPUP OVER PLAYER */}
-          <AnimatePresence>
-            {playerDamagePopup && (
-              <motion.div
-                key={playerDamagePopup.key}
-                initial={{ opacity: 0, y: 0, scale: 0.8 }}
-                animate={{ opacity: 1, y: -45, scale: 1.35 }}
-                exit={{ opacity: 0, y: -80, scale: 0.9 }}
-                transition={{ duration: 0.85, ease: "easeOut" }}
-                className={`absolute bottom-[36%] left-[22%] z-40 text-3xl sm:text-4xl md:text-5xl font-black ${
-                  playerDamagePopup.colorClass || "text-red-400"
-                } drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] pointer-events-none tracking-wider select-none`}
-              >
-                {playerDamagePopup.text}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* 3. CENTER OVERLAY: VICTORY / DEFEAT BANNER */}
-          <AnimatePresence mode="wait">
-            {combatOutcome && (
-              <motion.div
-                key="combat-outcome-banner"
-                initial={{ opacity: 0, scale: 0.8, y: 15 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.85 }}
-                transition={{ type: "spring", stiffness: 280, damping: 22 }}
-                className="absolute inset-0 m-auto z-30 flex flex-col items-center justify-center max-w-sm sm:max-w-md pointer-events-auto gap-2.5 px-4"
-              >
-                <div
-                  className={`w-full py-3.5 px-5 rounded-2xl border-2 text-center shadow-[0_0_40px_rgba(0,0,0,0.95)] backdrop-blur-xl ${
-                    combatOutcome.outcome === "win"
-                      ? "bg-emerald-950/95 border-emerald-400 text-emerald-300 shadow-emerald-500/40"
-                      : "bg-red-950/95 border-red-400 text-red-300 shadow-red-500/40"
-                  }`}
-                >
-                  <div className="text-xl md:text-2xl font-black tracking-wider drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] uppercase">
-                    {combatOutcome.outcome === "win" ? "VICTORY!" : "BATTLE CLASH!"}
-                  </div>
-                  <div className="text-xs font-bold text-white/90 truncate mt-1">
-                    {combatOutcome.remainingHp <= 0
-                      ? `สร้าง ${combatOutcome.damageDealt} ดาเมจ ปราบ ${monster?.name || "มอนสเตอร์"} สำเร็จ!`
-                      : `คุณทำ ${combatOutcome.damageDealt} ดาเมจ | โดน ${monster?.name || "มอนสเตอร์"} สวนกลับ ${combatOutcome.monsterDmg} ดาเมจ`}
-                  </div>
+                <div className="text-xl md:text-2xl font-black tracking-wider drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] uppercase">
+                  {combatOutcome.outcome === "win" ? "VICTORY!" : "BATTLE CLASH!"}
                 </div>
+                <div className="text-xs font-bold text-white/90 truncate mt-1">
+                  {combatOutcome.remainingHp <= 0
+                    ? `สร้าง ${combatOutcome.damageDealt} ดาเมจ ปราบ ${monster?.name || "มอนสเตอร์"} สำเร็จ!`
+                    : `คุณทำ ${combatOutcome.damageDealt} ดาเมจ | โดน ${monster?.name || "มอนสเตอร์"} สวนกลับ ${combatOutcome.monsterDmg} ดาเมจ`}
+                </div>
+              </div>
 
-                <button
-                  onClick={handleConfirmResult}
-                  className={`w-full py-3 px-6 rounded-xl font-black text-sm shadow-2xl transition-all duration-200 active:scale-95 border border-white/30 tracking-wider uppercase cursor-pointer ${
-                    combatOutcome.outcome === "win"
-                      ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-white shadow-emerald-500/60 hover:brightness-110"
-                      : "bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-red-500/60 hover:brightness-110"
-                  }`}
-                >
-                  {combatOutcome.outcome === "win" ? "รับรางวัล & จบการต่อสู้" : "บันทึกผล & จบการต่อสู้"}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-        </div>
+              <button
+                onClick={handleConfirmResult}
+                className={`w-full py-3 px-6 rounded-xl font-black text-sm shadow-2xl transition-all duration-200 active:scale-95 border border-white/30 tracking-wider uppercase cursor-pointer ${
+                  combatOutcome.outcome === "win"
+                    ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-white shadow-emerald-500/60 hover:brightness-110"
+                    : "bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-red-500/60 hover:brightness-110"
+                }`}
+              >
+                {combatOutcome.outcome === "win" ? "รับรางวัล & จบการต่อสู้" : "บันทึกผล & จบการต่อสู้"}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ── BOTTOM ACTION COMMAND DOCK (CLEAN GLASSMORPHIC DESIGN) ────── */}
-      <div className="relative z-30 w-full flex items-center justify-center pointer-events-auto pb-2 sm:pb-3">
-        <div className="relative flex flex-row items-center justify-center gap-2 sm:gap-3 bg-slate-950/80 backdrop-blur-2xl border border-white/15 p-2 sm:p-2.5 rounded-2xl sm:rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.85)] max-w-xl w-full mx-auto">
+      {/* ── 3. BOTTOM ACTION COMMAND DOCK (Floating inside 3D Scene) ────── */}
+      <div
+        className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-xl px-3 sm:px-4 pointer-events-auto flex flex-col items-center"
+        onMouseLeave={() => {
+          setShowSkillDrawer(false);
+          setShowItemDrawer(false);
+        }}
+      >
+        <div className="relative flex flex-row items-center justify-center gap-2 sm:gap-3 bg-slate-950/85 backdrop-blur-2xl border border-white/15 p-2 sm:p-2.5 rounded-2xl sm:rounded-3xl shadow-[0_12px_45px_rgba(0,0,0,0.85)] w-full">
           
-          {/* FLOATING SKILL DRAWER (OPENS ABOVE CENTER DOCK) */}
+          {/* ─── HORIZONTAL SINGLE-ROW SKILL QUICK-BAR (HOVER / CLICK) ─── */}
           <AnimatePresence>
             {showSkillDrawer && (
               <motion.div
-                initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                initial={{ opacity: 0, y: 12, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[92vw] max-w-sm sm:max-w-md bg-slate-950/95 backdrop-blur-xl border border-purple-500/50 rounded-2xl p-4 shadow-2xl z-50"
+                exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                onMouseEnter={() => {
+                  setShowSkillDrawer(true);
+                  setShowItemDrawer(false);
+                }}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 max-w-[94vw] bg-slate-950/95 backdrop-blur-2xl border border-purple-400/60 rounded-2xl p-2 sm:p-2.5 shadow-[0_0_35px_rgba(168,85,247,0.5)] z-50 flex items-center gap-2 overflow-x-auto scrollbar-none"
               >
-                <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
-                  <div className="flex items-center gap-2 text-purple-300 text-xs font-black tracking-wider uppercase">
-                    <span>COMBAT SKILLS (สกิลต่อสู้)</span>
-                  </div>
-                  <button
-                    onClick={() => setShowSkillDrawer(false)}
-                    className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
-                  >
-                    ปิด ✕
-                  </button>
-                </div>
-
                 {combatUsableSkills.length === 0 ? (
-                  <div className="text-center py-4 text-xs font-bold text-slate-400">
-                    ไม่มีสกิลที่สามารถใช้กับมอนสเตอร์ได้
+                  <div className="px-4 py-2 text-xs font-bold text-slate-400 whitespace-nowrap">
+                    ไม่มีสกิลต่อสู้ในขณะนี้
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                  <div className="flex flex-row items-center gap-2">
                     {combatUsableSkills.map((sk) => {
                       const cd = player.skillCooldowns?.[sk.id] || 0;
                       const isCoolingDown = cd > 0;
+                      const skillImg = sk.image || `/images/skills/${sk.id}_skill.webp`;
 
                       return (
                         <button
                           key={sk.id}
-                          disabled={isCoolingDown}
+                          disabled={isCoolingDown || isAttacking || !!combatOutcome}
                           onClick={() => {
                             handleUseSkillWithFx(sk.id);
                             setShowSkillDrawer(false);
                           }}
-                          className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border text-left transition-all ${
-                            isCoolingDown
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition-all shrink-0 select-none ${
+                            isCoolingDown || isAttacking || !!combatOutcome
                               ? "bg-slate-900/60 border-slate-800 text-slate-500 opacity-60 cursor-not-allowed"
-                              : "bg-purple-950/60 hover:bg-purple-900/80 border-purple-500/40 text-purple-100 hover:scale-102 cursor-pointer shadow-lg"
+                              : "bg-gradient-to-r from-purple-950/85 to-indigo-950/85 hover:from-purple-900 hover:to-indigo-800 border-purple-400/60 hover:border-purple-300 text-white shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
                           }`}
                         >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-xs text-white">
+                          {/* Skill Icon */}
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden bg-slate-900 border border-purple-400/50 shrink-0 flex items-center justify-center p-0.5 shadow-inner">
+                            <img
+                              src={skillImg}
+                              alt={sk.nameTh || sk.name}
+                              className="w-full h-full object-contain drop-shadow"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          </div>
+
+                          {/* Skill Text */}
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-xs text-white whitespace-nowrap">
                                 {sk.nameTh || sk.name}
                               </span>
-                              <span className="text-[10px] text-purple-300 font-bold bg-purple-900/60 px-1.5 py-0.2 rounded border border-purple-400/30">
-                                {sk.categoryTh || "สกิล"}
-                              </span>
+                              {sk.dmg && (
+                                <span className="text-[10px] font-black text-amber-300 bg-amber-950/70 px-1.5 py-0.2 rounded border border-amber-500/30">
+                                  {sk.dmg} DMG
+                                </span>
+                              )}
                             </div>
-                            <div className="text-[10px] text-slate-300 line-clamp-1 mt-0.5">
-                              {sk.description}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            {isCoolingDown ? (
-                              <span className="text-[10px] font-black text-red-400">
-                                CD: {cd}T
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-black text-emerald-400 uppercase bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                                ร่ายสกิล
-                              </span>
-                            )}
+                            <span className="text-[10px] text-purple-300/80 font-bold whitespace-nowrap">
+                              {isCoolingDown ? `Cooldown: ${cd} เทิร์น` : "คลิกเพื่อร่าย"}
+                            </span>
                           </div>
                         </button>
                       );
@@ -615,69 +653,59 @@ export default function CombatModal({
             )}
           </AnimatePresence>
 
-          {/* FLOATING ITEM DRAWER (OPENS ABOVE CENTER DOCK) */}
+          {/* ─── HORIZONTAL SINGLE-ROW ITEM QUICK-BAR (HOVER / CLICK) ─── */}
           <AnimatePresence>
             {showItemDrawer && (
               <motion.div
-                initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                initial={{ opacity: 0, y: 12, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[92vw] max-w-sm sm:max-w-md bg-slate-950/95 backdrop-blur-xl border border-amber-500/50 rounded-2xl p-4 shadow-2xl z-50"
+                exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                onMouseEnter={() => {
+                  setShowItemDrawer(true);
+                  setShowSkillDrawer(false);
+                }}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 max-w-[94vw] bg-slate-950/95 backdrop-blur-2xl border border-amber-500/60 rounded-2xl p-2 sm:p-2.5 shadow-[0_0_35px_rgba(245,158,11,0.5)] z-50 flex items-center gap-2 overflow-x-auto scrollbar-none"
               >
-                <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
-                  <div className="flex items-center gap-2 text-amber-300 text-xs font-black tracking-wider uppercase">
-                    <span>POTION BAG (กระเป๋ายา)</span>
-                  </div>
-                  <button
-                    onClick={() => setShowItemDrawer(false)}
-                    className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
-                  >
-                    ปิด ✕
-                  </button>
-                </div>
-
                 {combatUsablePotions.length === 0 ? (
-                  <div className="text-center py-4 text-xs font-bold text-slate-400">
-                    ไม่มีขวดยาที่ใช้ในฉากต่อสู้ได้
+                  <div className="px-4 py-2 text-xs font-bold text-slate-400 whitespace-nowrap">
+                    ไม่มีไอเทมยาที่ใช้ได้ในขณะนี้
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                  <div className="flex flex-row items-center gap-2">
                     {combatUsablePotions.map((potId, idx) => {
                       const pot = POTIONS[potId];
                       if (!pot) return null;
-                      const potItem = { ...pot, categoryTh: "ยาปรุง" };
-
                       return (
-                        <ItemTooltip key={idx} item={potItem} position="top">
-                          <button
-                            onClick={() => {
-                              handleUsePotionWithFx(potId);
-                              setShowItemDrawer(false);
-                            }}
-                            className="flex items-center gap-2 p-2 rounded-xl bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-left transition-all hover:scale-102 group w-full"
-                          >
-                            <div className="w-8 h-8 rounded-lg overflow-hidden bg-black/60 border border-amber-400/40 shrink-0 flex items-center justify-center">
-                              {pot.image ? (
-                                <img
-                                  src={pot.image}
-                                  alt={pot.name}
-                                  className="w-full h-full object-contain p-0.5"
-                                />
-                              ) : (
-                                <span className="text-[9px] font-bold text-amber-300">POT</span>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-black text-amber-200 truncate">
-                                {pot.name}
-                              </div>
-                              <div className="text-[10px] text-amber-300/80 font-bold">
-                                กดเพื่อใช้
-                              </div>
-                            </div>
-                          </button>
-                        </ItemTooltip>
+                        <button
+                          key={idx}
+                          disabled={isAttacking || !!combatOutcome}
+                          onClick={() => {
+                            handleUsePotionWithFx(potId);
+                            setShowItemDrawer(false);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-950/80 to-yellow-950/80 hover:from-amber-900 hover:to-yellow-800 border border-amber-500/50 hover:border-amber-300 text-white shadow-lg hover:scale-105 active:scale-95 transition-all shrink-0 cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded-lg overflow-hidden bg-black/60 border border-amber-400/40 shrink-0 flex items-center justify-center">
+                            {pot.image ? (
+                              <img
+                                src={pot.image}
+                                alt={pot.name}
+                                className="w-full h-full object-contain p-0.5"
+                              />
+                            ) : (
+                              <span className="text-[9px] font-bold text-amber-300">POT</span>
+                            )}
+                          </div>
+                          <div className="flex flex-col text-left">
+                            <span className="text-xs font-black text-amber-200 whitespace-nowrap">
+                              {pot.name}
+                            </span>
+                            <span className="text-[10px] text-amber-300/80 font-bold whitespace-nowrap">
+                              {pot.effect || "คลิกเพื่อใช้"}
+                            </span>
+                          </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -700,10 +728,14 @@ export default function CombatModal({
             <span>{isAttacking ? "CASTING..." : "ATTACK"}</span>
           </button>
 
-          {/* 2. SKILL BUTTON (Amethyst Purple Glow) */}
+          {/* 2. SKILL BUTTON (Amethyst Purple Glow with Hover Quick-Bar) */}
           <button
             type="button"
             disabled={isAttacking || !!combatOutcome}
+            onMouseEnter={() => {
+              setShowSkillDrawer(true);
+              setShowItemDrawer(false);
+            }}
             onClick={() => {
               setShowSkillDrawer((prev) => !prev);
               setShowItemDrawer(false);
@@ -717,10 +749,14 @@ export default function CombatModal({
             <span>SKILL</span>
           </button>
 
-          {/* 3. ITEM BUTTON (Dark Slate & Gold Border) */}
+          {/* 3. ITEM BUTTON (Dark Slate & Gold Border with Hover Quick-Bar) */}
           <button
             type="button"
             disabled={isAttacking || !!combatOutcome}
+            onMouseEnter={() => {
+              setShowItemDrawer(true);
+              setShowSkillDrawer(false);
+            }}
             onClick={() => {
               setShowItemDrawer((prev) => !prev);
               setShowSkillDrawer(false);

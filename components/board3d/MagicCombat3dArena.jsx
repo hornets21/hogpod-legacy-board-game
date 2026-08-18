@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo, useRef, useEffect, useState, memo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, useAnimations } from "@react-three/drei";
+import { useGLTF, useAnimations, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
 // ─── MODULE-LEVEL SHARED GEOMETRIES & VECTORS (Zero Garbage Collection) ───
@@ -13,6 +13,7 @@ const ICOSA_GEO = new THREE.IcosahedronGeometry(0.28, 1);
 const MONSTER_ORB_GEO = new THREE.DodecahedronGeometry(0.35, 1);
 const TORUS_ORB_GEO = new THREE.TorusGeometry(0.62, 0.035, 6, 24);
 const TRAIL_GEO = new THREE.OctahedronGeometry(0.08, 0);
+const FIGHTER_BASE_RING_GEO = new THREE.RingGeometry(0.85, 1.1, 36);
 
 // ─── BUFF VFX SHARED GEOMETRIES (Inspired by Three.js Showcase) ───
 const BUFF_RING_GEO = new THREE.RingGeometry(0.65, 1.05, 32);
@@ -242,40 +243,111 @@ export function getHouseSpellType(houseId) {
   }
 }
 
-// ─── 1. FLOATING ISLAND ARENA PLATFORM ──────────────────────────────────────
-const MagicIslandArena = memo(function MagicIslandArena() {
-  const centerRingRef = useRef(null);
-  const runesRef = useRef(null);
-
+// ─── 1. FLOATING ISLAND BASE (docs/magic-arena-threejs.html) ───
+const FloatingIsland = memo(function FloatingIsland() {
   const rockOffsets = useMemo(() => {
-    return Array.from({ length: 16 }, (_, i) => {
-      const a = (i / 16) * Math.PI * 2;
-      const r = 5.2 + (i % 3) * 0.7;
-      return {
+    const rocks = [];
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const r = THREE.MathUtils.randFloat(7.5, 12);
+      rocks.push({
         x: Math.cos(a) * r,
-        y: -1.2 - (i % 4) * 0.35,
+        y: THREE.MathUtils.randFloat(-2.6, -1.2),
         z: Math.sin(a) * r,
-        rad: 0.6 + (i % 3) * 0.35,
-        height: 2.0 + (i % 4) * 0.9,
-        rotX: i % 2 === 0 ? 0.15 : -0.15,
-        rotZ: i % 3 === 0 ? 0.18 : -0.12,
-        color: [0x272333, 0x312b3b, 0x3a3146][i % 3],
+        radius: THREE.MathUtils.randFloat(0.7, 1.5),
+        height: THREE.MathUtils.randFloat(2.5, 5.5),
+        segments: THREE.MathUtils.randInt(5, 7),
+        rotX: THREE.MathUtils.randFloat(-0.25, 0.25),
+        rotZ: THREE.MathUtils.randFloat(-0.25, 0.25),
+        color: [0x272333, 0x312b3b, 0x3a3146][Math.floor(Math.random() * 3)],
+      });
+    }
+    return rocks;
+  }, []);
+
+  return (
+    <group>
+      {/* Island Top Solid Cylinder */}
+      <mesh position={[0, -0.55, 0]}>
+        <cylinderGeometry args={[12.8, 13.4, 1.4, 32]} />
+        <meshStandardMaterial color="#3d3547" roughness={0.82} metalness={0.05} flatShading />
+      </mesh>
+
+      {/* Angular Rock Underside */}
+      {rockOffsets.map((r, i) => (
+        <mesh
+          key={`rock_${i}`}
+          position={[r.x, r.y, r.z]}
+          rotation={[r.rotX, 0, r.rotZ]}
+        >
+          <coneGeometry args={[r.radius, r.height, r.segments]} />
+          <meshStandardMaterial color={r.color} roughness={0.85} metalness={0.05} flatShading />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+
+// ─── 2. ARENA FLOOR & STONE RINGS (docs/magic-arena-threejs.html) ──
+const ArenaFloorAndRings = memo(function ArenaFloorAndRings() {
+  const radialStrips = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const a = (i / 12) * Math.PI * 2;
+      return {
+        x: Math.sin(a) * 4.25,
+        z: Math.cos(a) * 4.25,
+        rotY: a,
       };
     });
   }, []);
 
-  const radialAngles = useMemo(() => {
-    return Array.from({ length: 8 }, (_, i) => (i / 8) * Math.PI * 2);
-  }, []);
+  return (
+    <group>
+      {/* Ground Circle */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+        <circleGeometry args={[10.3, 48]} />
+        <meshStandardMaterial color="#4a4452" roughness={0.82} metalness={0.05} flatShading />
+      </mesh>
+
+      {/* 3 Stone Rings */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
+        <ringGeometry args={[8.3, 8.8, 48]} />
+        <meshStandardMaterial color="#75637f" roughness={0.82} flatShading />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
+        <ringGeometry args={[5.8, 6.05, 48]} />
+        <meshStandardMaterial color="#75637f" roughness={0.82} flatShading />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
+        <ringGeometry args={[3.6, 3.78, 48]} />
+        <meshStandardMaterial color="#75637f" roughness={0.82} flatShading />
+      </mesh>
+
+      {/* 12 Radial Stone Lines */}
+      {radialStrips.map((s, idx) => (
+        <mesh key={`strip_${idx}`} position={[s.x, 0.035, s.z]} rotation={[0, s.rotY, 0]}>
+          <boxGeometry args={[0.07, 0.025, 8.5]} />
+          <meshBasicMaterial color="#6b5a72" transparent opacity={0.72} />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+
+// ─── 3. ARCANE MAGIC CIRCLE (docs/magic-arena-threejs.html) ────
+const ArcaneMagicCircle = memo(function ArcaneMagicCircle() {
+  const centerRingRef = useRef(null);
 
   const starLines = useMemo(() => {
-    const starR = 1.35;
+    const starR = 1.65;
     const pts = [];
     for (let i = 0; i < 6; i++) {
       const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
       pts.push({ x: Math.cos(a) * starR, z: Math.sin(a) * starR });
     }
-    const pairs = [[0, 2], [2, 4], [4, 0], [1, 3], [3, 5], [5, 1]];
+    const pairs = [
+      [0, 2], [2, 4], [4, 0], [1, 3], [3, 5], [5, 1],
+    ];
     return pairs.map(([a, b]) => {
       const p1 = pts[a];
       const p2 = pts[b];
@@ -292,11 +364,11 @@ const MagicIslandArena = memo(function MagicIslandArena() {
   }, []);
 
   const runePoints = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => {
-      const a = (i / 12) * Math.PI * 2;
+    return Array.from({ length: 18 }, (_, i) => {
+      const a = (i / 18) * Math.PI * 2;
       return {
-        x: Math.cos(a) * 2.1,
-        z: Math.sin(a) * 2.1,
+        x: Math.cos(a) * 2.75,
+        z: Math.sin(a) * 2.75,
         rotY: -a,
       };
     });
@@ -305,260 +377,283 @@ const MagicIslandArena = memo(function MagicIslandArena() {
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     if (centerRingRef.current?.material) {
-      centerRingRef.current.material.opacity = 0.55 + Math.sin(t * 2.0) * 0.15;
-    }
-    if (runesRef.current) {
-      runesRef.current.rotation.y = t * 0.1;
+      centerRingRef.current.material.opacity = 0.55 + Math.sin(t * 2.4) * 0.18;
     }
   });
 
   return (
-    <group position={[0, -0.05, 0]}>
-      {/* Top Solid Cylinder */}
-      <mesh position={[0, -0.45, 0]}>
-        <cylinderGeometry args={[6.8, 7.2, 0.9, 24]} />
-        <meshStandardMaterial color="#3d3547" roughness={0.85} flatShading />
-      </mesh>
-
-      {/* Underside Rocks */}
-      {rockOffsets.map((r, i) => (
-        <mesh
-          key={i}
-          position={[r.x, r.y, r.z]}
-          rotation={[r.rotX, 0, r.rotZ]}
-          scale={[r.rad, r.height, r.rad]}
-        >
-          <coneGeometry args={[1, 1, 4]} />
-          <meshStandardMaterial color={r.color} roughness={0.9} flatShading />
-        </mesh>
-      ))}
-
-      {/* Arena Stone Floor Circle */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <circleGeometry args={[6.2, 32]} />
-        <meshStandardMaterial color="#383142" roughness={0.8} flatShading />
-      </mesh>
-
-      {/* Concentric Stone Rings */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[5.2, 5.5, 32]} />
-        <meshStandardMaterial color="#5e5066" roughness={0.75} flatShading />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.022, 0]}>
-        <ringGeometry args={[3.8, 3.98, 32]} />
-        <meshStandardMaterial color="#6a5c73" roughness={0.75} flatShading />
-      </mesh>
-
-      {/* Radial stone lines */}
-      {radialAngles.map((a, i) => (
-        <mesh
-          key={i}
-          position={[Math.sin(a) * 2.8, 0.025, Math.cos(a) * 2.8]}
-          rotation={[0, a, 0]}
-        >
-          <boxGeometry args={[0.05, 0.015, 5.6]} />
-          <meshBasicMaterial color="#7a6785" transparent opacity={0.5} />
-        </mesh>
-      ))}
-
-      {/* Center Arcane Magic Circle (Hexagram & Glowing Ring) */}
+    <group>
+      {/* Center Ring */}
       <mesh
         ref={centerRingRef}
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.04, 0]}
+        position={[0, 0.08, 0]}
       >
-        <ringGeometry args={[1.75, 1.82, 36]} />
-        <meshBasicMaterial color="#c084fc" transparent opacity={0.75} side={THREE.DoubleSide} />
+        <ringGeometry args={[2.2, 2.28, 64]} />
+        <meshBasicMaterial color="#b875ff" transparent opacity={0.75} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Hexagram Lines */}
+      {/* Hexagram Star Lines */}
       {starLines.map((line, idx) => (
         <mesh
-          key={idx}
-          position={[line.posX, 0.045, line.posZ]}
+          key={`star_${idx}`}
+          position={[line.posX, 0.085, line.posZ]}
           rotation={[0, line.rotY, 0]}
         >
-          <boxGeometry args={[0.035, 0.015, line.len]} />
-          <meshBasicMaterial color="#c084fc" transparent opacity={0.7} />
+          <boxGeometry args={[0.045, 0.025, line.len]} />
+          <meshBasicMaterial color="#b875ff" transparent opacity={0.75} />
         </mesh>
       ))}
 
-      {/* Orbiting Runes */}
-      <group ref={runesRef} position={[0, 0.046, 0]}>
-        {runePoints.map((pt, i) => (
-          <mesh key={i} position={[pt.x, 0, pt.z]} rotation={[0, pt.rotY, 0]}>
-            <boxGeometry args={[0.14, 0.012, 0.035]} />
-            <meshBasicMaterial color="#e879f9" transparent opacity={0.85} />
-          </mesh>
-        ))}
-      </group>
+      {/* 18 Glowing Runes */}
+      {runePoints.map((pt, i) => (
+        <mesh key={`rune_${i}`} position={[pt.x, 0.09, pt.z]} rotation={[0, pt.rotY, 0]}>
+          <boxGeometry args={[0.18, 0.02, 0.04]} />
+          <meshBasicMaterial color="#b875ff" transparent opacity={0.75} />
+        </mesh>
+      ))}
     </group>
   );
 });
 
-// ─── 2. STYLIZED MAGICAL FANTASY TREES & CRYSTAL SPIRES ───────────────────
-function MagicFantasyTree({ x, z, scale = 1, foliageColor = "#a855f7", trunkColor = "#3d2745" }) {
+// ─── 4. BACK PORTAL (docs/magic-arena-threejs.html) ────────────
+const BackPortal = memo(function BackPortal() {
+  const ring1Ref = useRef(null);
+  const ring2Ref = useRef(null);
+  const discRef = useRef(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (ring1Ref.current) ring1Ref.current.rotation.z = t * 0.55;
+    if (ring2Ref.current) ring2Ref.current.rotation.z = -t * 0.75;
+    if (discRef.current?.material) {
+      discRef.current.material.opacity = 0.63 + Math.sin(t * 2.0) * 0.1;
+    }
+  });
+
   return (
-    <group position={[x, 0, z]} scale={scale}>
-      {/* Roots base */}
-      <mesh position={[0, 0.15, 0]}>
-        <cylinderGeometry args={[0.22, 0.38, 0.3, 6]} />
-        <meshStandardMaterial color={trunkColor} roughness={0.9} flatShading />
+    <group position={[0, 0, -8.5]}>
+      {/* Pillars */}
+      <mesh position={[-2.25, 2.3, 0]}>
+        <boxGeometry args={[1, 4.6, 1.3]} />
+        <meshStandardMaterial color="#4c4057" roughness={0.82} flatShading />
       </mesh>
-      {/* Main curved trunk */}
-      <mesh position={[0, 0.85, 0]} rotation={[0.08, 0, 0.06]}>
-        <cylinderGeometry args={[0.16, 0.24, 1.25, 6]} />
-        <meshStandardMaterial color={trunkColor} roughness={0.9} flatShading />
+      <mesh position={[2.25, 2.3, 0]}>
+        <boxGeometry args={[1, 4.6, 1.3]} />
+        <meshStandardMaterial color="#4c4057" roughness={0.82} flatShading />
       </mesh>
-      {/* Branch 1 */}
-      <mesh position={[-0.2, 1.5, 0.1]} rotation={[0.35, 0, 0.5]}>
-        <cylinderGeometry args={[0.08, 0.13, 0.7, 5]} />
-        <meshStandardMaterial color={trunkColor} roughness={0.9} flatShading />
+
+      {/* Top Arch */}
+      <mesh position={[0, 4.45, 0]} rotation={[0, 0, Math.PI]}>
+        <torusGeometry args={[2.25, 0.52, 8, 24, Math.PI]} />
+        <meshStandardMaterial color="#4c4057" roughness={0.82} flatShading />
       </mesh>
-      {/* Branch 2 */}
-      <mesh position={[0.18, 1.45, -0.1]} rotation={[-0.3, 0, -0.45]}>
-        <cylinderGeometry args={[0.08, 0.13, 0.65, 5]} />
-        <meshStandardMaterial color={trunkColor} roughness={0.9} flatShading />
+
+      {/* Portal Disc */}
+      <mesh ref={discRef} position={[0, 2.75, 0]}>
+        <circleGeometry args={[1.75, 48]} />
+        <meshBasicMaterial color="#8d47ff" transparent opacity={0.74} side={THREE.DoubleSide} />
       </mesh>
-      {/* Main Foliage Canopy (Center) */}
-      <mesh position={[0, 2.1, 0]} scale={[1.1, 0.85, 1.05]}>
-        <dodecahedronGeometry args={[0.8, 1]} />
-        <meshStandardMaterial
-          color={foliageColor}
-          emissive={foliageColor}
-          emissiveIntensity={0.35}
-          roughness={0.7}
-          flatShading
-        />
+
+      {/* Rotating Portal Rings */}
+      <mesh ref={ring1Ref} position={[0, 2.75, 0]}>
+        <torusGeometry args={[1.82, 0.09, 8, 48]} />
+        <meshBasicMaterial color="#d2adff" />
       </mesh>
-      {/* Left Foliage Tier */}
-      <mesh position={[-0.5, 1.85, 0.18]} scale={[0.65, 0.55, 0.65]}>
-        <dodecahedronGeometry args={[0.6, 1]} />
-        <meshStandardMaterial
-          color={foliageColor}
-          emissive={foliageColor}
-          emissiveIntensity={0.4}
-          roughness={0.7}
-          flatShading
-        />
+      <mesh ref={ring2Ref} position={[0, 2.75, 0]}>
+        <torusGeometry args={[1.42, 0.05, 8, 48]} />
+        <meshBasicMaterial color="#6ee7ff" />
       </mesh>
-      {/* Right Foliage Tier */}
-      <mesh position={[0.45, 1.8, -0.2]} scale={[0.6, 0.5, 0.6]}>
-        <dodecahedronGeometry args={[0.6, 1]} />
-        <meshStandardMaterial
-          color={foliageColor}
-          emissive={foliageColor}
-          emissiveIntensity={0.4}
-          roughness={0.7}
-          flatShading
-        />
-      </mesh>
-      {/* Top Foliage Blossom */}
-      <mesh position={[0.05, 2.6, 0.05]} scale={[0.5, 0.45, 0.5]}>
-        <dodecahedronGeometry args={[0.5, 1]} />
-        <meshStandardMaterial
-          color="#f472b6"
-          emissive="#db2777"
-          emissiveIntensity={0.45}
-          roughness={0.65}
-          flatShading
-        />
-      </mesh>
+
+      <pointLight position={[0, 3, 0]} color="#9a55ff" intensity={35} distance={18} decay={2} />
     </group>
   );
-}
+});
 
-const EnvironmentProps = memo(function EnvironmentProps() {
-  const crystals = useMemo(() => [
-    { x: -5.4, z: -1.8, color: "#a855f7", scale: 1.0 },
-    { x: -4.8, z: 3.2, color: "#38bdf8", scale: 0.85 },
-    { x: 4.8, z: -3.2, color: "#a855f7", scale: 0.95 },
-    { x: 5.4, z: 1.8, color: "#38bdf8", scale: 0.9 },
-  ], []);
+// ─── 5. ARENA ENVIRONMENT (CRYSTALS, TREES, OBELISKS, ROCKS) ──
+const ArenaEnvironment = memo(function ArenaEnvironment() {
+  const crystalPositions = useMemo(
+    () => [
+      { pos: [-9, -3], color: 0x59a8ff, scale: 0.9 },
+      { pos: [-8, 5], color: 0xa15cff, scale: 1.1 },
+      { pos: [8, -5], color: 0x59a8ff, scale: 0.95 },
+      { pos: [9, 3], color: 0xa15cff, scale: 1.0 },
+      { pos: [-4, -9], color: 0x59a8ff, scale: 0.85 },
+      { pos: [5, 9], color: 0xa15cff, scale: 1.15 },
+    ],
+    []
+  );
 
-  const trees = useMemo(() => [
-    { x: -5.6, z: 0.8, scale: 0.95, color: "#a855f7" },
-    { x: 5.6, z: -0.8, scale: 0.95, color: "#ec4899" },
-    { x: -3.8, z: -4.6, scale: 0.85, color: "#818cf8" },
-    { x: 3.8, z: 4.4, scale: 0.85, color: "#a855f7" },
-  ], []);
+  const obelisks = useMemo(
+    () => [
+      { x: -8, z: 7, rot: 0 },
+      { x: 8, z: 7, rot: Math.PI / 2 },
+      { x: -8, z: -7, rot: Math.PI },
+      { x: 8, z: -7, rot: (3 * Math.PI) / 2 },
+    ],
+    []
+  );
+
+  const treesAndRocks = useMemo(() => {
+    const list = [];
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + THREE.MathUtils.randFloat(-0.14, 0.14);
+      const r = THREE.MathUtils.randFloat(10.6, 12.2);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const isTree = i % 4 === 0;
+      list.push({
+        x,
+        z,
+        isTree,
+        scale: isTree ? THREE.MathUtils.randFloat(0.7, 1.2) : THREE.MathUtils.randFloat(0.5, 1.25),
+        rockColor: [0x3d3544, 0x4b4251, 0x574b5c][Math.floor(Math.random() * 3)],
+      });
+    }
+    return list;
+  }, []);
+
+  const bgChunks = useMemo(() => {
+    const chunks = [];
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = THREE.MathUtils.randFloat(16, 27);
+      chunks.push({
+        x: Math.cos(a) * r,
+        y: THREE.MathUtils.randFloat(3, 10),
+        z: Math.sin(a) * r,
+        rad: THREE.MathUtils.randFloat(0.8, 2),
+        height: THREE.MathUtils.randFloat(2, 5),
+        seg: THREE.MathUtils.randInt(5, 7),
+      });
+    }
+    return chunks;
+  }, []);
 
   return (
     <group>
       {/* Crystal Clusters */}
-      {crystals.map((c, idx) => (
-        <group key={`c_${idx}`} position={[c.x, 0, c.z]} scale={c.scale}>
-          <mesh position={[0, 0.65, 0]}>
-            <octahedronGeometry args={[0.3, 0]} />
-            <meshStandardMaterial color={c.color} emissive={c.color} emissiveIntensity={1.5} roughness={0.25} flatShading />
-          </mesh>
-          <mesh position={[0.2, 0.45, 0.1]} scale={[0.7, 0.7, 0.7]}>
-            <octahedronGeometry args={[0.25, 0]} />
-            <meshStandardMaterial color={c.color} emissive={c.color} emissiveIntensity={1.3} roughness={0.25} flatShading />
-          </mesh>
+      {crystalPositions.map((c, idx) => (
+        <group key={`crys_${idx}`} position={[c.pos[0], 0, c.pos[1]]}>
+          {[0, 1, 2].map((ci) => (
+            <mesh
+              key={ci}
+              position={[(ci - 1) * 0.32 * c.scale, (0.6 + ci * 0.15) * c.scale, (ci % 2) * 0.12]}
+              rotation={[0, 0, THREE.MathUtils.randFloat(-0.18, 0.18)]}
+            >
+              <coneGeometry args={[0.25 * c.scale, (1.2 + ci * 0.3) * c.scale, 5]} />
+              <meshStandardMaterial
+                color={c.color}
+                emissive={c.color}
+                emissiveIntensity={1.1}
+                roughness={0.35}
+                metalness={0.05}
+                flatShading
+              />
+            </mesh>
+          ))}
+          <pointLight position={[0, 1.2 * c.scale, 0]} color={c.color} intensity={6 * c.scale} distance={4 * c.scale} decay={2} />
         </group>
       ))}
 
-      {/* Stylized Fantasy Magic Trees */}
-      {trees.map((t, idx) => (
-        <MagicFantasyTree
-          key={`t_${idx}`}
-          x={t.x}
-          z={t.z}
-          scale={t.scale}
-          foliageColor={t.color}
-        />
+      {/* 4 Corner Obelisks with glowing gems */}
+      {obelisks.map((ob, idx) => (
+        <group key={`ob_${idx}`} position={[ob.x, 0, ob.z]} rotation={[0, ob.rot, 0]}>
+          <mesh position={[0, 1.25, 0]}>
+            <cylinderGeometry args={[0.38, 0.52, 2.5, 4]} />
+            <meshStandardMaterial color="#4d4357" roughness={0.82} flatShading />
+          </mesh>
+          <mesh position={[0, 2.55, 0]}>
+            <octahedronGeometry args={[0.26, 0]} />
+            <meshStandardMaterial color="#a460ff" emissive="#7c28ff" emissiveIntensity={2.4} flatShading />
+          </mesh>
+          <pointLight position={[0, 2.6, 0]} color="#9b4dff" intensity={5} distance={4} decay={2} />
+        </group>
+      ))}
+
+      {/* Perimeter Magic Trees & Rocks */}
+      {treesAndRocks.map((item, idx) =>
+        item.isTree ? (
+          <group key={`tree_${idx}`} position={[item.x, 0, item.z]} scale={item.scale}>
+            <mesh position={[0, 0.75, 0]}>
+              <cylinderGeometry args={[0.18, 0.28, 1.5, 6]} />
+              <meshStandardMaterial color="#4b314a" roughness={0.82} flatShading />
+            </mesh>
+            <mesh position={[0, 2.05, 0]} scale={[1.15, 0.8, 1.0]}>
+              <icosahedronGeometry args={[1.0, 0]} />
+              <meshStandardMaterial color="#57306f" emissive="#34124f" emissiveIntensity={0.15} roughness={0.82} flatShading />
+            </mesh>
+          </group>
+        ) : (
+          <mesh
+            key={`rock_${idx}`}
+            position={[item.x, 0.45 * item.scale, item.z]}
+            scale={[1.2 * item.scale, 0.75 * item.scale, 1.0 * item.scale]}
+          >
+            <dodecahedronGeometry args={[0.85, 0]} />
+            <meshStandardMaterial color={item.rockColor} roughness={0.82} flatShading />
+          </mesh>
+        )
+      )}
+
+      {/* Background Floating Island Chunks */}
+      {bgChunks.map((bg, idx) => (
+        <mesh key={`bgchunk_${idx}`} position={[bg.x, bg.y, bg.z]} rotation={[0, 0, Math.PI]}>
+          <coneGeometry args={[bg.rad, bg.height, bg.seg]} />
+          <meshStandardMaterial color="#302a3c" roughness={0.82} flatShading />
+        </mesh>
       ))}
     </group>
   );
 });
 
-// ─── 3. FLOATING MAGICAL PARTICLES & STARRY COSMOS ─────────────────────────
-const MagicalParticlesAndStars = memo(function MagicalParticlesAndStars() {
+// ─── 6. COSMOS & PARTICLES ────────────────────────────────────
+const CosmosAndParticles = memo(function CosmosAndParticles() {
   const particlesRef = useRef(null);
 
-  const sparkGeo = useMemo(() => {
-    const count = 50;
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const r = 1.2 + Math.random() * 8.0;
+  const particlesGeo = useMemo(() => {
+    const particleCount = 180;
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const r = THREE.MathUtils.randFloat(2, 16);
       const a = Math.random() * Math.PI * 2;
-      pos[i * 3] = Math.cos(a) * r;
-      pos[i * 3 + 1] = 0.2 + Math.random() * 4.0;
-      pos[i * 3 + 2] = Math.sin(a) * r;
+      positions[i * 3] = Math.cos(a) * r;
+      positions[i * 3 + 1] = THREE.MathUtils.randFloat(0.4, 8);
+      positions[i * 3 + 2] = Math.sin(a) * r;
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return geo;
   }, []);
 
-  const starGeo = useMemo(() => {
-    const count = 120;
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      pos[i * 3] = THREE.MathUtils.randFloatSpread(50);
-      pos[i * 3 + 1] = THREE.MathUtils.randFloat(3, 30);
-      pos[i * 3 + 2] = THREE.MathUtils.randFloatSpread(50);
+  const starsGeo = useMemo(() => {
+    const starCount = 500;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      starPos[i * 3] = THREE.MathUtils.randFloatSpread(120);
+      starPos[i * 3 + 1] = THREE.MathUtils.randFloat(8, 65);
+      starPos[i * 3 + 2] = THREE.MathUtils.randFloatSpread(120);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
     return geo;
   }, []);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     if (particlesRef.current) {
-      particlesRef.current.rotation.y = t * 0.03;
+      particlesRef.current.rotation.y = t * 0.035;
+      particlesRef.current.position.y = Math.sin(t * 0.7) * 0.12;
     }
   });
 
   return (
     <group>
-      <points ref={particlesRef} geometry={sparkGeo}>
-        <pointsMaterial color="#d8b4fe" size={0.06} transparent opacity={0.8} depthWrite={false} />
+      <points ref={particlesRef} geometry={particlesGeo}>
+        <pointsMaterial color="#c590ff" size={0.07} transparent opacity={0.9} depthWrite={false} />
       </points>
-      <points geometry={starGeo}>
-        <pointsMaterial color="#c7d2fe" size={0.09} transparent opacity={0.65} depthWrite={false} />
+      <points geometry={starsGeo}>
+        <pointsMaterial color="#b8ccff" size={0.12} transparent opacity={0.75} depthWrite={false} />
       </points>
     </group>
   );
@@ -592,7 +687,7 @@ function ModelObject({ modelPath, targetHeight = 1.85, hitState, isCasting }) {
     const scale = maxDim > 0 ? targetHeight / maxDim : 1;
 
     clone.scale.setScalar(scale);
-    clone.position.set(-center.x * scale, -bounds.min.y * scale, -center.z * scale);
+    clone.position.set(-center.x * scale, -bounds.min.y * scale + 0.06, -center.z * scale);
     return clone;
   }, [scene, targetHeight]);
 
@@ -601,7 +696,7 @@ function ModelObject({ modelPath, targetHeight = 1.85, hitState, isCasting }) {
     const t = clock.elapsedTime;
     const shake = hitState ? Math.sin(t * 35) * 0.08 : 0;
     const castingVibe = isCasting ? Math.sin(t * 25) * 0.03 : 0;
-    groupRef.current.position.y = Math.sin(t * 2.0) * 0.03;
+    groupRef.current.position.y = (Math.sin(t * 2.0) + 1) * 0.02;
     groupRef.current.position.x = shake + castingVibe;
   });
 
@@ -1778,7 +1873,32 @@ const CharacterBuffVfx = memo(function CharacterBuffVfx({ buffType }) {
   );
 });
 
-// ─── 6. MAIN EXPORT: FULL MAGIC COMBAT 3D ARENA (LOCKED CAMERA) ────────────
+// ─── 5. SCENE SHAKE GROUP (SCREEN SHAKE ON HIT WITHOUT CONFLICTING ORBIT CONTROLS) ──
+function SceneShakeGroup({ hitStop, children }) {
+  const groupRef = useRef(null);
+  const shakeTimeRef = useRef(0);
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const t = clock.elapsedTime;
+    if (hitStop) {
+      shakeTimeRef.current = t;
+    }
+    const shakeElapsed = t - shakeTimeRef.current;
+    if (shakeElapsed < 0.25) {
+      const amt = (1 - shakeElapsed / 0.25) * 0.25;
+      groupRef.current.position.x = THREE.MathUtils.randFloatSpread(amt);
+      groupRef.current.position.y = THREE.MathUtils.randFloatSpread(amt * 0.5);
+    } else {
+      groupRef.current.position.x = 0;
+      groupRef.current.position.y = 0;
+    }
+  });
+
+  return <group ref={groupRef}>{children}</group>;
+}
+
+// ─── 6. MAIN EXPORT: FULL MAGIC COMBAT 3D ARENA (INTERACTIVE ORBIT & ZOOM) ──
 export default memo(function MagicCombat3dArena({
   player,
   monster,
@@ -1795,102 +1915,148 @@ export default memo(function MagicCombat3dArena({
   const monsterGroupRef = useRef(null);
 
   return (
-    <div className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-hidden">
+    <div className="absolute inset-0 w-full h-full pointer-events-auto select-none overflow-hidden">
       <Canvas
         frameloop="always"
         dpr={1}
         camera={{
-          position: [0, 4.0, 7.8], // Fixed Perspective Camera
+          position: [0, 8.5, 12.8], // Closer cinematic perspective framing fighters and arena
           fov: 44,
           near: 0.1,
-          far: 60,
+          far: 350,
         }}
         gl={{
-          antialias: false, // Huge FPS boost inside dialog modal
+          antialias: true,
           alpha: true,
           powerPreference: "high-performance",
           stencil: false,
           depth: true,
         }}
       >
-        {/* Optimized Lighting (1 Hemisphere + 1 Directional + 1 Point) */}
-        <hemisphereLight args={[0x9db8ff, 0x24142f, 2.2]} />
-        <directionalLight position={[-6, 14, 6]} intensity={2.2} color="#dcc7ff" />
-        <pointLight position={[0, 4, -4]} intensity={3.5} color="#8a4dff" distance={15} />
-
-        {/* Floating Island & Environment */}
-        <MagicIslandArena />
-        <EnvironmentProps />
-        <MagicalParticlesAndStars />
-
-        {/* 3D Fighters */}
-        <group position={[-2.4, 0.05, 1.3]} rotation={[0, Math.PI * 0.68, 0]}>
-          {playerModelPath ? (
-            <Suspense fallback={null}>
-              <ModelObject
-                modelPath={playerModelPath}
-                targetHeight={1.9}
-                hitState={hitStop}
-                isCasting={attackAction?.active}
-              />
-            </Suspense>
-          ) : (
-            <group position={[0, 0, 0]}>
-              <mesh position={[0, 0.7, 0]}>
-                <coneGeometry args={[0.45, 1.3, 6]} />
-                <meshStandardMaterial color="#f59e0b" roughness={0.6} flatShading />
-              </mesh>
-              <mesh position={[0, 1.5, 0]}>
-                <icosahedronGeometry args={[0.32, 0]} />
-                <meshStandardMaterial color="#fef3c7" roughness={0.7} flatShading />
-              </mesh>
-              <mesh position={[0, 2.05, 0]} rotation={[0, 0, 0.12]}>
-                <coneGeometry args={[0.36, 0.85, 6]} />
-                <meshStandardMaterial color="#1e1b4b" roughness={0.6} flatShading />
-              </mesh>
-            </group>
-          )}
-
-          {/* Dynamic Buff & Support VFX (Showcase Implementation) */}
-          <CharacterBuffVfx buffType={playerFx} />
-        </group>
-
-        <group ref={monsterGroupRef} position={[2.4, 0.05, -1.3]} rotation={[0, -Math.PI * 0.24, 0]}>
-          {monsterModelPath ? (
-            <Suspense fallback={null}>
-              <ModelObject
-                modelPath={monsterModelPath}
-                targetHeight={monster.isBoss ? 2.3 : 1.9}
-                hitState={hitStop}
-                isCasting={false}
-              />
-            </Suspense>
-          ) : (
-            <group position={[0, 0, 0]}>
-              <mesh position={[0, 0.75, 0]}>
-                <dodecahedronGeometry args={[0.65, 0]} />
-                <meshStandardMaterial color="#991b1b" roughness={0.6} flatShading />
-              </mesh>
-              <mesh position={[0, 1.45, 0]}>
-                <octahedronGeometry args={[0.42, 0]} />
-                <meshStandardMaterial color="#7f1d1d" roughness={0.5} flatShading />
-              </mesh>
-            </group>
-          )}
-
-          {/* Dynamic Buff & Support VFX for Monster */}
-          <CharacterBuffVfx buffType={monsterFx} />
-        </group>
-
-        {/* 2-Way Magic Combat VFX (Player Spell + Monster Counter Spell) */}
-        <SpellVfxOrchestrator
-          monster={monster}
-          monsterGroupRef={monsterGroupRef}
-          attackAction={attackAction}
-          onPlayerImpact={onSpellImpact}
-          onMonsterImpact={onMonsterImpact}
-          onComplete={onSpellComplete}
+        {/* Interactive Orbit & Zoom Controls */}
+        <OrbitControls
+          enableDamping
+          dampingFactor={0.05}
+          minDistance={4}
+          maxDistance={45}
+          maxPolarAngle={Math.PI / 2 - 0.05}
+          minPolarAngle={0.05}
+          target={[0, 1.0, -0.5]}
         />
+
+        {/* Natural Neutral Illumination for crisp character models & textures */}
+        <ambientLight intensity={0.9} color="#ffffff" />
+        <hemisphereLight args={[0xffffff, 0x333348, 2.0]} />
+        <directionalLight
+          position={[-6, 16, 8]}
+          intensity={2.4}
+          color="#ffffff"
+          castShadow
+          shadow-mapSize={[1024, 1024]}
+        />
+        <directionalLight position={[6, 10, -6]} intensity={1.2} color="#f8fafc" />
+        <pointLight position={[0, 6, -8]} intensity={16} distance={30} decay={2} color="#8a4dff" />
+
+        {/* Scene Objects wrapped in Hit Shake Group */}
+        <SceneShakeGroup hitStop={hitStop}>
+          {/* 1. Floating Island Base */}
+          <FloatingIsland />
+
+          {/* 2. Arena Stone Floor & Concentric Rings */}
+          <ArenaFloorAndRings />
+
+          {/* 3. Arcane Magic Circle & Glowing Runes */}
+          <ArcaneMagicCircle />
+
+          {/* 4. Back Portal with Spinning Dual Rings */}
+          <BackPortal />
+
+          {/* 5. Crystals, Trees, Rocks, Corner Obelisks, Background Floating Chunks */}
+          <ArenaEnvironment />
+
+          {/* 6. Cosmos Stars & Magical Orbiting Particles */}
+          <CosmosAndParticles />
+
+          {/* 7. Player 3D Character Group */}
+          <group position={[-2.4, 0.10, 1.3]} rotation={[0, Math.PI * 0.68, 0]}>
+            {/* Subtle Ground Ring */}
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={FIGHTER_BASE_RING_GEO}>
+              <meshBasicMaterial color={player?.color || "#f59e0b"} transparent opacity={0.45} side={THREE.DoubleSide} />
+            </mesh>
+
+            {playerModelPath ? (
+              <Suspense fallback={null}>
+                <ModelObject
+                  modelPath={playerModelPath}
+                  targetHeight={1.9}
+                  hitState={hitStop}
+                  isCasting={attackAction?.active}
+                />
+              </Suspense>
+            ) : (
+              <group position={[0, 0, 0]}>
+                <mesh position={[0, 0.7, 0]}>
+                  <coneGeometry args={[0.45, 1.3, 6]} />
+                  <meshStandardMaterial color={player?.color || "#f59e0b"} roughness={0.6} flatShading />
+                </mesh>
+                <mesh position={[0, 1.5, 0]}>
+                  <icosahedronGeometry args={[0.32, 0]} />
+                  <meshStandardMaterial color="#fef3c7" roughness={0.7} flatShading />
+                </mesh>
+                <mesh position={[0, 2.05, 0]} rotation={[0, 0, 0.12]}>
+                  <coneGeometry args={[0.36, 0.85, 6]} />
+                  <meshStandardMaterial color="#1e1b4b" roughness={0.6} flatShading />
+                </mesh>
+              </group>
+            )}
+
+            {/* Dynamic Buff & Support VFX */}
+            <CharacterBuffVfx buffType={playerFx} />
+          </group>
+
+          {/* 8. Monster 3D Character Group */}
+          <group ref={monsterGroupRef} position={[2.4, 0.10, -1.3]} rotation={[0, -Math.PI * 0.24, 0]}>
+            {/* Subtle Ground Ring */}
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={FIGHTER_BASE_RING_GEO}>
+              <meshBasicMaterial color="#ef4444" transparent opacity={0.45} side={THREE.DoubleSide} />
+            </mesh>
+
+            {monsterModelPath ? (
+              <Suspense fallback={null}>
+                <ModelObject
+                  modelPath={monsterModelPath}
+                  targetHeight={monster?.isBoss ? 2.3 : 1.9}
+                  hitState={hitStop}
+                  isCasting={false}
+                />
+              </Suspense>
+            ) : (
+              <group position={[0, 0, 0]}>
+                <mesh position={[0, 0.75, 0]}>
+                  <dodecahedronGeometry args={[0.65, 0]} />
+                  <meshStandardMaterial color="#991b1b" roughness={0.6} flatShading />
+                </mesh>
+                <mesh position={[0, 1.45, 0]}>
+                  <octahedronGeometry args={[0.42, 0]} />
+                  <meshStandardMaterial color="#7f1d1d" roughness={0.5} flatShading />
+                </mesh>
+              </group>
+            )}
+
+            {/* Dynamic Buff & Support VFX for Monster */}
+            <CharacterBuffVfx buffType={monsterFx} />
+          </group>
+
+          {/* 9. 2-Way Magic Combat VFX (Player Spell + Monster Counter Spell) */}
+          <SpellVfxOrchestrator
+            monster={monster}
+            monsterGroupRef={monsterGroupRef}
+            attackAction={attackAction}
+            onPlayerImpact={onSpellImpact}
+            onMonsterImpact={onMonsterImpact}
+            onComplete={onSpellComplete}
+          />
+        </SceneShakeGroup>
       </Canvas>
     </div>
   );

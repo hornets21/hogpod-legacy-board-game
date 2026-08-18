@@ -3,7 +3,7 @@
 // ============================================================
 // PvpCombatModal — Fullscreen 3D PvP Arena with Monster Dock UI
 // Pure 3D Canvas Background, Monster Combat Button Style,
-// 1-Attack Target Selection per Player, Strict Zero Emojis
+// 1-Attack Target Selection per Encounter, Strict Zero Emojis
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -62,11 +62,21 @@ export default function PvpCombatModal({
       .filter(Boolean);
   }, [pvpEncounter, players]);
 
+  // Identify attacker player index
+  const attackerPlayerIndex =
+    pvpEncounter.attackerIndex ??
+    (pvpEncounter.participantIndices ? pvpEncounter.participantIndices[0] : 0);
+
   // Mutable fighter list inside duel
   const [fighters, setFighters] = useState(initialFighters);
-  const [currentTurn, setCurrentTurn] = useState(0);
-  const [completedTurns, setCompletedTurns] = useState([]);
-  const [damageDealtMap, setDamageDealtMap] = useState({});
+
+  // Index within fighters array corresponding to the attacker
+  const attackerIdx = useMemo(() => {
+    const idx = fighters.findIndex((f) => f.playerIndex === attackerPlayerIndex);
+    return idx >= 0 ? idx : 0;
+  }, [fighters, attackerPlayerIndex]);
+
+  const currentAttacker = fighters[attackerIdx] || fighters[0];
 
   const [lockedTargetIndex, setLockedTargetIndex] = useState(null);
   const [battleLocked, setBattleLocked] = useState(false);
@@ -86,29 +96,24 @@ export default function PvpCombatModal({
   const [selectedSkillId, setSelectedSkillId] = useState(null);
   const [selectedPotionId, setSelectedPotionId] = useState(null);
 
-  // Duel completion state
+  // Duel completion state (1 single attack round)
   const [duelFinished, setDuelFinished] = useState(false);
-  const [winner, setWinner] = useState(null);
+  const [duelOutcome, setDuelOutcome] = useState(null);
   const [autoReturnCountdown, setAutoReturnCountdown] = useState(null);
 
-  // Refs for async animation queue
+  // Refs for async animation queue & state protection
   const fightersRef = useRef(fighters);
   fightersRef.current = fighters;
-  const currentTurnRef = useRef(currentTurn);
-  currentTurnRef.current = currentTurn;
-  const completedTurnsRef = useRef(completedTurns);
-  completedTurnsRef.current = completedTurns;
-  const damageDealtMapRef = useRef(damageDealtMap);
-  damageDealtMapRef.current = damageDealtMap;
   const battleLockedRef = useRef(battleLocked);
   battleLockedRef.current = battleLocked;
+  const duelFinishedRef = useRef(duelFinished);
+  duelFinishedRef.current = duelFinished;
   const isResolvingRef = useRef(false);
   const onPvpActionRef = useRef(onPvpAction);
   onPvpActionRef.current = onPvpAction;
 
   const isOnline = myPlayerIndex !== undefined;
   const isSpectator = isOnline && (myPlayerIndex == null || myPlayerIndex < 0);
-  const currentAttacker = fighters[currentTurn] || fighters[0];
 
   const isMyTurn = useMemo(() => {
     if (!currentAttacker || currentAttacker.hp <= 0) return false;
@@ -122,15 +127,15 @@ export default function PvpCombatModal({
     return !currentAttacker.isBot;
   }, [currentAttacker, isOnline, myPlayerIndex]);
 
-  // Target indices of other living fighters
+  // Target indices of other living fighters (opponents)
   const availableTargetIndices = useMemo(() => {
     return fighters
       .map((f, idx) => ({ f, idx }))
-      .filter(({ f, idx }) => idx !== currentTurn && f.hp > 0)
+      .filter(({ f, idx }) => idx !== attackerIdx && f.hp > 0)
       .map(({ idx }) => idx);
-  }, [fighters, currentTurn]);
+  }, [fighters, attackerIdx]);
 
-  // Default target if none locked
+  // Default target if none explicitly locked
   const activeTargetIndex = useMemo(() => {
     if (lockedTargetIndex !== null && availableTargetIndices.includes(lockedTargetIndex)) {
       return lockedTargetIndex;
@@ -138,72 +143,73 @@ export default function PvpCombatModal({
     return availableTargetIndices[0] ?? null;
   }, [lockedTargetIndex, availableTargetIndices]);
 
-  // Reset encounter state on new cell encounter
+  // Unique encounter signature so we ONLY reset when a genuinely new encounter starts
+  const encounterKey = useMemo(() => {
+    if (!pvpEncounter) return null;
+    return `${pvpEncounter.cell}_${attackerPlayerIndex}_${(pvpEncounter.participantIndices || []).join("-")}`;
+  }, [pvpEncounter, attackerPlayerIndex]);
+
+  const lastEncounterKeyRef = useRef(encounterKey);
+
+  // Reset encounter state ONLY on a new distinct encounter (NOT on fighter HP updates)
   useEffect(() => {
-    setFighters(initialFighters);
-    setCurrentTurn(0);
-    setCompletedTurns([]);
-    setDamageDealtMap({});
-    setLockedTargetIndex(null);
-    setBattleLocked(false);
-    setShowSkillDrawer(false);
-    setShowItemDrawer(false);
-    setSelectedSkillId(null);
-    setSelectedPotionId(null);
-    setDuelFinished(false);
-    setWinner(null);
-    setAutoReturnCountdown(null);
-    setLogHistory([]);
-    isResolvingRef.current = false;
-  }, [cell, initialFighters]);
+    if (!encounterKey) return;
+    if (lastEncounterKeyRef.current !== encounterKey) {
+      lastEncounterKeyRef.current = encounterKey;
+      setFighters(initialFighters);
+      setLockedTargetIndex(null);
+      setBattleLocked(false);
+      setShowSkillDrawer(false);
+      setShowItemDrawer(false);
+      setSelectedSkillId(null);
+      setSelectedPotionId(null);
+      setDuelFinished(false);
+      setDuelOutcome(null);
+      setAutoReturnCountdown(null);
+      setLogHistory([]);
+      isResolvingRef.current = false;
+    }
+  }, [encounterKey, initialFighters]);
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   // ─── RESOLVE PVP DUEL & SEND FINAL STATE TO REDUCER / FIREBASE ──
-  const resolveDuel = useCallback(
-    (customWinner = winner) => {
-      if (isResolvingRef.current) return;
-      isResolvingRef.current = true;
+  const resolveDuel = useCallback(() => {
+    if (isResolvingRef.current) return;
+    isResolvingRef.current = true;
 
-      const currentFighters = fightersRef.current;
-      const updatedPlayers = players.map((p, idx) => {
-        const f = currentFighters.find((item) => item.playerIndex === idx);
-        if (!f) return p;
-        return {
-          ...p,
-          hp: f.hp,
-          potions: f.potions,
-          skillCooldowns: f.skillCooldowns,
-          isInvincible: f.isInvincible,
-        };
+    const currentFighters = fightersRef.current;
+    const updatedPlayers = players.map((p, idx) => {
+      const f = currentFighters.find((item) => item.playerIndex === idx);
+      if (!f) return p;
+      return {
+        ...p,
+        hp: f.hp,
+        potions: f.potions,
+        skillCooldowns: f.skillCooldowns,
+        isInvincible: f.isInvincible,
+      };
+    });
+
+    const finalLogs = [
+      `[PVP] Magic Clash at cell #${cell}`,
+      ...logHistory,
+    ];
+
+    if (onPvpActionRef.current) {
+      onPvpActionRef.current({
+        choice: "resolve",
+        updatedPlayers,
+        logEntries: finalLogs,
+        extraTurn: false,
       });
+    }
+  }, [cell, logHistory, players]);
 
-      const winnerText = customWinner
-        ? `[PVP] Clash Winner: ${customWinner.name} (${customWinner.id})`
-        : "[PVP] Clash ended in a Draw";
-
-      const finalLogs = [
-        `[PVP] Magic Clash finished at cell #${cell}`,
-        ...logHistory,
-        winnerText,
-      ];
-
-      if (onPvpActionRef.current) {
-        onPvpActionRef.current({
-          choice: "resolve",
-          updatedPlayers,
-          logEntries: finalLogs,
-          extraTurn: false,
-        });
-      }
-    },
-    [cell, logHistory, players, winner]
-  );
-
-  // ─── EXECUTE 1 ATTACK TURN (1 ATTACK PER FIGHTER IN CLASH) ─────
-  const executeExchange = useCallback(
-    async (attackerIdx, targetIdx) => {
-      if (battleLockedRef.current || isResolvingRef.current) return;
+  // ─── EXECUTE 1 ATTACK (1-ATTACK PVP RULE: NO BACK-AND-FORTH LOOP) ─────
+  const executeAttack = useCallback(
+    async (targetIdx) => {
+      if (battleLockedRef.current || isResolvingRef.current || duelFinishedRef.current) return;
       setBattleLocked(true);
       setShowSkillDrawer(false);
       setShowItemDrawer(false);
@@ -305,13 +311,6 @@ export default function PvpCombatModal({
       list[targetIdx] = target;
       setFighters([...list]);
 
-      // Record damage dealt by this attacker in this clash
-      const updatedDmgMap = {
-        ...damageDealtMapRef.current,
-        [attackerIdx]: (damageDealtMapRef.current[attackerIdx] || 0) + actualDmg,
-      };
-      setDamageDealtMap(updatedDmgMap);
-
       emitDamageDealt({
         targetIndex: target.playerIndex,
         amount: actualDmg,
@@ -319,115 +318,125 @@ export default function PvpCombatModal({
         visualContext: "pvp",
       });
 
+      const isDefeated = target.hp <= 0;
       const hitLog = target.isInvincible
         ? `${target.name} is invincible and deflected all damage!`
-        : `${attacker.name} deals ${actualDmg} damage to ${target.name}`;
+        : isDefeated
+        ? `${attacker.name} dealt ${actualDmg} damage and defeated ${target.name}!`
+        : `${attacker.name} dealt ${actualDmg} damage to ${target.name}!`;
+
       setBattleLog(hitLog);
       setLogHistory((prev) => [...prev, hitLog]);
-      await wait(360);
+      await wait(420);
       setActiveHit(null);
-
-      if (target.hp <= 0) {
-        const defeatLog = `${target.name} was defeated!`;
-        setBattleLog(defeatLog);
-        setLogHistory((prev) => [...prev, defeatLog]);
-        await wait(350);
-      }
 
       // Reset choices for this turn
       setSelectedSkillId(null);
       setSelectedPotionId(null);
 
-      // 6. Record turn completion for this fighter
-      const updatedCompleted = [...completedTurnsRef.current, attackerIdx];
-      setCompletedTurns(updatedCompleted);
-
-      // Check if all alive fighters have taken their 1 attack turn
-      const remainingToAct = list
-        .map((f, i) => i)
-        .filter((i) => list[i].hp > 0 && !updatedCompleted.includes(i));
-
-      if (remainingToAct.length === 0 || list.filter((f) => f.hp > 0).length <= 1) {
-        // ── ALL PARTICIPANTS HAVE ATTACKED (CLASH ROUND COMPLETE) ──
-        let highestDmg = -1;
-        let bestFighterIdx = null;
-        let isDraw = false;
-
-        Object.entries(updatedDmgMap).forEach(([fIdx, dmg]) => {
-          if (dmg > highestDmg) {
-            highestDmg = dmg;
-            bestFighterIdx = Number(fIdx);
-            isDraw = false;
-          } else if (dmg === highestDmg) {
-            isDraw = true;
-          }
-        });
-
-        const clashWinner = !isDraw && bestFighterIdx !== null ? list[bestFighterIdx] : null;
-        setDuelFinished(true);
-        setWinner(clashWinner);
-
-        const summaryText = clashWinner
-          ? `CLASH WINNER: ${clashWinner.id} ${clashWinner.name} (${highestDmg} DMG)`
-          : `CLASH TIED: DRAW (${highestDmg} DMG)`;
-
-        setBattleLog(summaryText);
-        setLogHistory((prev) => [...prev, summaryText]);
-        setAutoReturnCountdown(4);
-        return;
-      }
-
-      // 7. Advance to the next player who has not attacked yet
-      const nextTurnIdx = remainingToAct[0];
-      setCurrentTurn(nextTurnIdx);
-      setLockedTargetIndex(null);
-      setBattleLocked(false);
-      setBattleLog(`TURN: ${list[nextTurnIdx].id} ${list[nextTurnIdx].name} - Select target to attack`);
+      // 6. IMMEDIATELY FINISH CLASH (1 ATTACK RULE — NO BACK-AND-FORTH LOOP)
+      setDuelOutcome({
+        attackerName: attacker.name,
+        attackerId: attacker.id,
+        targetName: target.name,
+        targetId: target.id,
+        damageDealt: actualDmg,
+        isDefeated,
+        targetSurvived: !isDefeated,
+        isAlliance: false,
+      });
+      setDuelFinished(true);
+      setAutoReturnCountdown(3);
     },
-    [selectedPotionId, selectedSkillId]
+    [attackerIdx, selectedPotionId, selectedSkillId]
   );
 
-  // ─── AUTO-ATTACK FOR BOTS & INACTIVE PLAYERS (12s timer) ────
+  // ─── EXECUTE ALLIANCE (PEACE / TRUCE / NON-AGGRESSION HANDSHAKE) ───
+  const executeAlliance = useCallback(async () => {
+    if (battleLockedRef.current || isResolvingRef.current || duelFinishedRef.current) return;
+    setBattleLocked(true);
+    setShowSkillDrawer(false);
+    setShowItemDrawer(false);
+
+    const list = [...fightersRef.current];
+    const attacker = { ...list[attackerIdx] };
+    const target = activeTargetIndex !== null ? list[activeTargetIndex] : null;
+
+    if (!attacker) {
+      setBattleLocked(false);
+      return;
+    }
+
+    const alliancePartnerName = target ? target.name : "Opponents";
+    const allianceMsg = `🤝 ${attacker.name} and ${alliancePartnerName} shook hands and formed a peaceful alliance!`;
+
+    setBattleLog(allianceMsg);
+    setLogHistory((prev) => [...prev, allianceMsg]);
+
+    await wait(500);
+
+    setDuelOutcome({
+      isAlliance: true,
+      attackerName: attacker.name,
+      targetName: alliancePartnerName,
+      damageDealt: 0,
+      isDefeated: false,
+      targetSurvived: true,
+    });
+    setDuelFinished(true);
+    setAutoReturnCountdown(3);
+  }, [attackerIdx, activeTargetIndex]);
+
+  // ─── AUTO-ATTACK FOR BOTS & TIMEOUT FALLBACK ────────────────
   useEffect(() => {
     if (duelFinished || battleLocked) return undefined;
 
-    const currentFighter = fighters[currentTurn];
-    if (!currentFighter || currentFighter.hp <= 0) return undefined;
+    const attacker = fighters[attackerIdx];
+    if (!attacker || attacker.hp <= 0) return undefined;
 
-    const targets = fighters
-      .map((f, i) => ({ f, i }))
-      .filter(({ f, i }) => i !== currentTurn && f.hp > 0)
-      .map(({ i }) => i);
-
-    if (targets.length === 0) return undefined;
+    if (availableTargetIndices.length === 0) return undefined;
 
     const chosenTarget =
-      activeTargetIndex !== null && targets.includes(activeTargetIndex)
+      activeTargetIndex !== null && availableTargetIndices.includes(activeTargetIndex)
         ? activeTargetIndex
-        : targets[Math.floor(Math.random() * targets.length)];
+        : availableTargetIndices[0];
 
-    // If bot, execute after 1.2s delay
-    if (currentFighter.isBot) {
+    if (chosenTarget === null || chosenTarget === undefined) return undefined;
+
+    // If bot attacker, execute after 1.2s delay
+    if (attacker.isBot) {
       const botTimer = setTimeout(() => {
-        executeExchange(currentTurn, chosenTarget);
+        executeAttack(chosenTarget);
       }, 1200);
       return () => clearTimeout(botTimer);
     }
 
-    // If human in online/spectator mode taking too long, auto-execute in 14s
-    const timeoutTimer = setTimeout(() => {
-      executeExchange(currentTurn, chosenTarget);
-    }, 14000);
+    // In online mode with human player timeout fallback (15s)
+    if (isOnline) {
+      const timeoutTimer = setTimeout(() => {
+        executeAttack(chosenTarget);
+      }, 15000);
+      return () => clearTimeout(timeoutTimer);
+    }
 
-    return () => clearTimeout(timeoutTimer);
-  }, [currentTurn, battleLocked, duelFinished, fighters, activeTargetIndex, executeExchange]);
+    return undefined;
+  }, [
+    attackerIdx,
+    battleLocked,
+    duelFinished,
+    fighters,
+    activeTargetIndex,
+    availableTargetIndices,
+    executeAttack,
+    isOnline,
+  ]);
 
   // ─── AUTO-RESOLVE COUNTDOWN AFTER CLASH FINISHED ─────────────
   useEffect(() => {
     if (!duelFinished || autoReturnCountdown === null) return undefined;
 
     if (autoReturnCountdown <= 0) {
-      resolveDuel(winner);
+      resolveDuel();
       return undefined;
     }
 
@@ -436,7 +445,7 @@ export default function PvpCombatModal({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [duelFinished, autoReturnCountdown, resolveDuel, winner]);
+  }, [duelFinished, autoReturnCountdown, resolveDuel]);
 
   // Usable skills/potions for active turn fighter
   const usableCombatSkills = useMemo(() => {
@@ -462,7 +471,7 @@ export default function PvpCombatModal({
           activeCast={activeCast}
           activeProjectile={activeProjectile}
           activeHit={activeHit}
-          currentTurn={currentTurn}
+          currentTurn={attackerIdx}
           lockedTargetIndex={activeTargetIndex}
         />
       </div>
@@ -474,9 +483,8 @@ export default function PvpCombatModal({
       {/* ─── 1. TOPBAR: PLAYER STATUS CARDS ──────────────────────────── */}
       <div className="relative z-20 w-full max-w-4xl mx-auto pt-3 px-3 flex items-center justify-center gap-2.5 md:gap-4 flex-wrap pointer-events-auto shrink-0">
         {fighters.map((f, idx) => {
-          const isTurn = idx === currentTurn && f.hp > 0 && !duelFinished;
+          const isAttacker = idx === attackerIdx && f.hp > 0;
           const isTarget = idx === activeTargetIndex && f.hp > 0;
-          const hasAttacked = completedTurns.includes(idx);
           const hpPct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
 
           const barColor =
@@ -486,40 +494,37 @@ export default function PvpCombatModal({
             <div
               key={f.houseId || idx}
               className={`min-w-[140px] md:min-w-[170px] px-3.5 py-2.5 rounded-xl border backdrop-blur-md transition-all duration-300 ${
-                isTurn
+                isAttacker
                   ? "bg-slate-900/95 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.45)] -translate-y-0.5"
                   : isTarget
                   ? "bg-slate-900/90 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.35)]"
                   : "bg-slate-950/80 border-white/15 opacity-85"
-              } ${f.hp <= 0 ? "opacity-40 grayscale" : ""}`}
+              }`}
             >
-              <div className="flex items-center justify-between text-xs font-black mb-1.5">
-                <span className="truncate text-white">
-                  {f.id} · {f.name}
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-black text-xs md:text-sm tracking-wide truncate">
+                  {f.name}
                 </span>
-                {f.hp <= 0 ? (
-                  <span className="text-[9px] bg-rose-950 text-rose-300 border border-rose-500/40 px-1 py-0.2 rounded uppercase font-bold">
-                    DEFEATED
-                  </span>
-                ) : isTurn ? (
-                  <span className="text-[9px] bg-amber-400 text-black px-1.5 py-0.2 rounded font-black uppercase">
-                    TURN
-                  </span>
-                ) : hasAttacked ? (
-                  <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1 py-0.2 rounded uppercase font-bold">
-                    ATTACKED
-                  </span>
-                ) : null}
+                <span
+                  className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                    isAttacker
+                      ? "bg-amber-950/80 text-amber-300 border-amber-500/40"
+                      : isTarget
+                      ? "bg-rose-950/80 text-rose-300 border-rose-500/40"
+                      : "bg-slate-900 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {f.id || `P${idx + 1}`}
+                </span>
               </div>
 
-              {/* Health Progress Bar */}
-              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-white/10">
+              {/* Health Bar */}
+              <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden p-0.2 border border-white/15">
                 <div
-                  className={`h-full ${barColor} transition-all duration-300`}
+                  className={`h-full ${barColor} rounded-full transition-all duration-300`}
                   style={{ width: `${hpPct}%` }}
                 />
               </div>
-
               <div className="flex items-center justify-between text-[10px] text-white/70 font-bold mt-1">
                 <span>HP</span>
                 <span>
@@ -532,21 +537,32 @@ export default function PvpCombatModal({
       </div>
 
       {/* ─── 2. CENTER CLASH RESULT ANNOUNCEMENT BANNER ──────────────── */}
-      {duelFinished && (
-        <div className="relative z-30 my-auto flex flex-col items-center justify-center pointer-events-auto">
-          <div className="bg-slate-950/95 border-2 border-amber-400 px-8 py-6 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.85)] text-center animate-bounce max-w-md">
+      {duelFinished && duelOutcome && (
+        <div className="relative z-30 my-auto flex flex-col items-center justify-center pointer-events-auto px-4">
+          <div className="bg-slate-950/95 border-2 border-amber-400 px-8 py-6 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.85)] text-center max-w-md backdrop-blur-xl">
             <h2 className="text-xl md:text-2xl font-black text-amber-300 tracking-wider uppercase">
-              {winner ? `CLASH WINNER: ${winner.id} ${winner.name}` : "CLASH TIED: DRAW"}
+              {duelOutcome.isAlliance
+                ? "🤝 ALLIANCE FORMED!"
+                : duelOutcome.isDefeated
+                ? `VICTORY: ${duelOutcome.attackerName} DEFEATED ${duelOutcome.targetName}!`
+                : `CLASH FINISHED`}
             </h2>
             <p className="text-xs text-slate-300 mt-2 font-bold">
+              {duelOutcome.isAlliance
+                ? `${duelOutcome.attackerName} and ${duelOutcome.targetName} formed a peaceful alliance! (No damage taken)`
+                : duelOutcome.isDefeated
+                ? `${duelOutcome.targetName} took ${duelOutcome.damageDealt} DMG and was defeated!`
+                : `${duelOutcome.attackerName} dealt ${duelOutcome.damageDealt} DMG to ${duelOutcome.targetName}!`}
+            </p>
+            <p className="text-[11px] text-amber-400/80 mt-1 font-semibold">
               {autoReturnCountdown != null
                 ? `Returning to board in ${autoReturnCountdown}s...`
-                : "Clash Finished"}
+                : "Returning to board..."}
             </p>
             <button
               type="button"
-              onClick={() => resolveDuel(winner)}
-              className="mt-4 py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs tracking-wider uppercase shadow-lg border border-emerald-300 transition-all hover:scale-105 active:scale-95"
+              onClick={resolveDuel}
+              className="mt-4 py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs tracking-wider uppercase shadow-lg border border-emerald-300 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               CONTINUE TO BOARD
             </button>
@@ -557,7 +573,7 @@ export default function PvpCombatModal({
       {/* Spacer when not finished */}
       {!duelFinished && <div className="flex-1 pointer-events-none" />}
 
-      {/* ─── 3. MONSTER-STYLE BOTTOM ACTION DOCK (Components/CombatModal.jsx) ─── */}
+      {/* ─── 3. MONSTER-STYLE BOTTOM ACTION DOCK ─────────────────────── */}
       {!duelFinished && (
         <div className="relative z-30 w-full max-w-2xl mx-auto px-4 pb-4 flex flex-col items-center pointer-events-auto">
           {/* Target Selection Pills (when multiple opponents) */}
@@ -617,7 +633,7 @@ export default function PvpCombatModal({
                     <button
                       type="button"
                       onClick={() => setShowSkillDrawer(false)}
-                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
+                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800 cursor-pointer"
                     >
                       CLOSE ✕
                     </button>
@@ -633,6 +649,7 @@ export default function PvpCombatModal({
                         const cd = currentAttacker?.skillCooldowns?.[sk.id] || 0;
                         const isCoolingDown = cd > 0;
                         const isSelected = selectedSkillId === sk.id;
+                        const skillImg = sk.image || `/images/skills/${sk.id}_skill.webp`;
 
                         return (
                           <button
@@ -651,13 +668,25 @@ export default function PvpCombatModal({
                                 : "bg-purple-950/60 hover:bg-purple-900/80 border-purple-500/40 text-purple-100 hover:scale-102 cursor-pointer shadow-lg"
                             }`}
                           >
+                            {/* Skill Icon Thumbnail */}
+                            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-slate-900 border border-purple-400/50 shrink-0 flex items-center justify-center p-0.5 shadow-inner">
+                              <img
+                                src={skillImg}
+                                alt={sk.nameTh || sk.name}
+                                className="w-full h-full object-contain drop-shadow"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
+                              />
+                            </div>
+
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="font-black text-xs text-white">
-                                  {sk.name}
+                                  {sk.nameTh || sk.name}
                                 </span>
                                 <span className="text-[10px] text-purple-300 font-bold bg-purple-900/60 px-1.5 py-0.2 rounded border border-purple-400/30">
-                                  SPELL
+                                  {sk.categoryTh || "SPELL"}
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-300 line-clamp-1 mt-0.5">
@@ -707,7 +736,7 @@ export default function PvpCombatModal({
                     <button
                       type="button"
                       onClick={() => setShowItemDrawer(false)}
-                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800"
+                      className="text-xs text-slate-400 hover:text-white font-bold px-2 py-0.5 rounded-lg bg-slate-800 cursor-pointer"
                     >
                       CLOSE ✕
                     </button>
@@ -732,7 +761,7 @@ export default function PvpCombatModal({
                                 setSelectedPotionId(isSelected ? null : potId);
                                 setShowItemDrawer(false);
                               }}
-                              className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all hover:scale-102 group w-full ${
+                              className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all hover:scale-102 group w-full cursor-pointer ${
                                 isSelected
                                   ? "bg-amber-900 border-amber-300 shadow-lg"
                                   : "bg-amber-950/60 hover:bg-amber-900 border-amber-500/40"
@@ -769,32 +798,47 @@ export default function PvpCombatModal({
 
             {/* Selected Buff Badges */}
             {(selectedSkillId || selectedPotionId) && (
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap justify-center">
                 {selectedSkillId && (
-                  <span className="text-[10px] bg-purple-900 text-purple-200 border border-purple-400/50 px-2 py-0.5 rounded-full font-bold">
-                    SPELL: {SKILLS[selectedSkillId]?.name}
+                  <span className="flex items-center gap-1.5 text-[10px] bg-purple-900/90 text-purple-200 border border-purple-400/60 px-2.5 py-1 rounded-full font-bold shadow-md">
+                    <img
+                      src={`/images/skills/${selectedSkillId}_skill.webp`}
+                      alt=""
+                      className="w-4 h-4 object-contain rounded"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                    <span>SPELL: {SKILLS[selectedSkillId]?.nameTh || SKILLS[selectedSkillId]?.name}</span>
                   </span>
                 )}
                 {selectedPotionId && (
-                  <span className="text-[10px] bg-amber-900 text-amber-200 border border-amber-400/50 px-2 py-0.5 rounded-full font-bold">
-                    POTION: {POTIONS[selectedPotionId]?.name}
+                  <span className="flex items-center gap-1.5 text-[10px] bg-amber-900/90 text-amber-200 border border-amber-400/60 px-2.5 py-1 rounded-full font-bold shadow-md">
+                    {POTIONS[selectedPotionId]?.image && (
+                      <img
+                        src={POTIONS[selectedPotionId].image}
+                        alt=""
+                        className="w-4 h-4 object-contain rounded"
+                      />
+                    )}
+                    <span>POTION: {POTIONS[selectedPotionId]?.name}</span>
                   </span>
                 )}
               </div>
             )}
 
-            {/* ─── DOCK ACTION BUTTONS (ATTACK, SKILL, ITEM) ─── */}
-            <div className="flex items-center justify-center gap-2 sm:gap-3 w-full">
+            {/* ─── DOCK ACTION BUTTONS (ATTACK, ALLIANCE, SKILL, ITEM) ─── */}
+            <div className="flex items-center justify-center gap-2 sm:gap-2.5 w-full flex-wrap">
               {/* 1. ATTACK BUTTON (Dominant Crimson & Amber Glow) */}
               <button
                 type="button"
                 disabled={battleLocked || !isMyTurn || activeTargetIndex === null}
                 onClick={() => {
                   if (activeTargetIndex !== null) {
-                    executeExchange(currentTurn, activeTargetIndex);
+                    executeAttack(activeTargetIndex);
                   }
                 }}
-                className={`flex-[1.5] py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_25px_rgba(239,68,68,0.5)] ${
+                className={`flex-[1.3] min-w-[100px] py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_25px_rgba(239,68,68,0.5)] ${
                   battleLocked || !isMyTurn || activeTargetIndex === null
                     ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
                     : "bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 border border-amber-400/80 text-white hover:scale-103 active:scale-95 cursor-pointer animate-pulse"
@@ -803,7 +847,22 @@ export default function PvpCombatModal({
                 <span>{battleLocked ? "CASTING..." : "ATTACK"}</span>
               </button>
 
-              {/* 2. SKILL BUTTON (Amethyst Purple Glow) */}
+              {/* 2. ALLIANCE BUTTON (International Peace Handshake - Emerald & Teal Glow) */}
+              <button
+                type="button"
+                disabled={battleLocked || !isMyTurn}
+                onClick={executeAlliance}
+                className={`flex-1 min-w-[95px] py-3 sm:py-3.5 px-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_20px_rgba(16,185,129,0.35)] ${
+                  battleLocked || !isMyTurn
+                    ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
+                    : "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-300/70 text-white hover:scale-103 active:scale-95 cursor-pointer"
+                }`}
+              >
+                <span className="text-sm sm:text-base">🤝</span>
+                <span>ALLIANCE</span>
+              </button>
+
+              {/* 3. SKILL BUTTON (Amethyst Purple Glow) */}
               <button
                 type="button"
                 disabled={battleLocked || !isMyTurn || usableCombatSkills.length === 0}
@@ -811,7 +870,7 @@ export default function PvpCombatModal({
                   setShowSkillDrawer((prev) => !prev);
                   setShowItemDrawer(false);
                 }}
-                className={`flex-1 py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.35)] ${
+                className={`flex-1 min-w-[85px] py-3 sm:py-3.5 px-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.35)] ${
                   battleLocked || !isMyTurn || usableCombatSkills.length === 0
                     ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
                     : "bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-600 hover:from-purple-600 hover:to-indigo-500 border border-purple-400/60 text-white hover:scale-103 active:scale-95 cursor-pointer"
@@ -820,7 +879,7 @@ export default function PvpCombatModal({
                 <span>SKILL</span>
               </button>
 
-              {/* 3. ITEM BUTTON (Dark Slate & Gold Border) */}
+              {/* 4. ITEM BUTTON (Dark Slate & Gold Border) */}
               <button
                 type="button"
                 disabled={battleLocked || !isMyTurn || usableCombatPotions.length === 0}
@@ -828,7 +887,7 @@ export default function PvpCombatModal({
                   setShowItemDrawer((prev) => !prev);
                   setShowSkillDrawer(false);
                 }}
-                className={`flex-1 py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-md ${
+                className={`flex-1 min-w-[85px] py-3 sm:py-3.5 px-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-md ${
                   battleLocked || !isMyTurn || usableCombatPotions.length === 0
                     ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
                     : "bg-slate-900/90 hover:bg-slate-800 text-amber-200 hover:text-white border border-amber-500/40 hover:border-amber-400 hover:scale-103 active:scale-95 cursor-pointer"

@@ -8,7 +8,7 @@
 
 import { Suspense, useRef, useMemo, memo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import { useGLTF, OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 const HOUSE_MODELS = {
@@ -37,48 +37,9 @@ const _V_END = new THREE.Vector3();
 const _V_MID = new THREE.Vector3();
 const _V_CUR = new THREE.Vector3();
 
-// Helper to create 3D Sprite text label without emojis
-function createTextLabelSprite(text, colorHex) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 128;
-  const ctx = canvas.getContext("2d");
 
-  ctx.clearRect(0, 0, 256, 128);
-  ctx.fillStyle = "rgba(10, 10, 24, 0.88)";
-  ctx.beginPath();
-  if (ctx.roundRect) {
-    ctx.roundRect(52, 20, 152, 78, 26);
-  } else {
-    ctx.rect(52, 20, 152, 78);
-  }
-  ctx.fill();
 
-  ctx.strokeStyle = colorHex;
-  ctx.lineWidth = 5;
-  ctx.stroke();
-
-  ctx.font = "bold 40px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, 128, 60);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  const mat = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthWrite: false,
-  });
-
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(2.0, 1.0, 1);
-  return sprite;
-}
-
-// ─── MAIN 3D BATTLE STAGE CANVAS (LOCKED CAMERA) ────────────
+// ─── MAIN 3D BATTLE STAGE CANVAS (INTERACTIVE ORBIT & ZOOM) ────────────
 export default memo(function Pvp3dBattleStage({
   fighters = [],
   activeCast = null,
@@ -88,15 +49,15 @@ export default memo(function Pvp3dBattleStage({
   lockedTargetIndex = null,
 }) {
   return (
-    <div className="w-full h-full relative flex items-center justify-center select-none pointer-events-none">
+    <div className="w-full h-full relative flex items-center justify-center select-none pointer-events-auto">
       <Canvas
         frameloop="always"
         dpr={1}
         camera={{
-          position: [0, 13.5, 17.5], // Tilted locked perspective framing entire magic arena
-          fov: 46,
+          position: [0, 8.5, 12.8], // Same closer cinematic perspective as CombatModal
+          fov: 44,
           near: 0.1,
-          far: 300,
+          far: 350,
         }}
         gl={{
           antialias: true,
@@ -106,6 +67,17 @@ export default memo(function Pvp3dBattleStage({
           depth: true,
         }}
       >
+        {/* Interactive Orbit & Zoom Controls */}
+        <OrbitControls
+          enableDamping
+          dampingFactor={0.05}
+          minDistance={4}
+          maxDistance={45}
+          maxPolarAngle={Math.PI / 2 - 0.05}
+          minPolarAngle={0.05}
+          target={[0, 1.0, -0.5]}
+        />
+
         <SceneController
           fighters={fighters}
           activeCast={activeCast}
@@ -119,7 +91,7 @@ export default memo(function Pvp3dBattleStage({
   );
 });
 
-// ─── SCENE CONTROLLER (LOCKED CAMERA WITH IMPACT SHAKE) ───────
+// ─── SCENE CONTROLLER (WITH IMPACT SHAKE GROUP) ───────
 function SceneController({
   fighters,
   activeCast,
@@ -128,66 +100,67 @@ function SceneController({
   currentTurn,
   lockedTargetIndex,
 }) {
-  const { camera } = useThree();
+  const shakeGroupRef = useRef(null);
   const shakeTimeRef = useRef(0);
 
-  // Radial positions from docs/magic-arena-threejs.html (P1: South, P2: West, P3: East, P4: North)
+  // Isometric diagonal layout matching CombatModal (P1: Lower-Left, P2: Upper-Right)
   const fighterPositions = useMemo(() => {
     const total = fighters.length || 2;
     if (total === 2) {
       return [
-        new THREE.Vector3(0, 0, 6.8),   // P1 (South)
-        new THREE.Vector3(0, 0, -6.8),  // P2 (North)
+        new THREE.Vector3(-2.6, 0.10, 1.4),   // P1 (Lower-Left — Attacker position matching CombatModal)
+        new THREE.Vector3(2.6, 0.10, -1.4),   // P2 (Upper-Right — Defender position matching CombatModal)
       ];
     }
     if (total === 3) {
       return [
-        new THREE.Vector3(0, 0, 7.0),
-        new THREE.Vector3(-6.2, 0, -3.5),
-        new THREE.Vector3(6.2, 0, -3.5),
+        new THREE.Vector3(-2.8, 0.10, 1.5),   // P1 (Lower-Left)
+        new THREE.Vector3(2.8, 0.10, 1.5),    // P2 (Lower-Right)
+        new THREE.Vector3(0, 0.10, -2.6),     // P3 (Top-Center)
       ];
     }
     // 4 Players
     return [
-      new THREE.Vector3(0, 0, 7.0),   // P1: South
-      new THREE.Vector3(-7.0, 0, 0),  // P2: West
-      new THREE.Vector3(7.0, 0, 0),   // P3: East
-      new THREE.Vector3(0, 0, -7.0),  // P4: North
+      new THREE.Vector3(-2.8, 0.10, 1.6),   // P1 (Lower-Left)
+      new THREE.Vector3(2.8, 0.10, 1.6),    // P2 (Lower-Right)
+      new THREE.Vector3(-2.8, 0.10, -1.6),  // P3 (Upper-Left)
+      new THREE.Vector3(2.8, 0.10, -1.6),   // P4 (Upper-Right)
     ];
   }, [fighters.length]);
 
   useFrame(({ clock }) => {
+    if (!shakeGroupRef.current) return;
     const t = clock.elapsedTime;
 
-    // Locked camera with impact shake
+    // Impact shake
     if (activeHit) {
       shakeTimeRef.current = t;
     }
     const shakeElapsed = t - shakeTimeRef.current;
     if (shakeElapsed < 0.25) {
-      const amt = (1 - shakeElapsed / 0.25) * 0.28;
-      camera.position.x = THREE.MathUtils.randFloatSpread(amt);
-      camera.position.y = 13.5 + THREE.MathUtils.randFloatSpread(amt * 0.6);
+      const amt = (1 - shakeElapsed / 0.25) * 0.25;
+      shakeGroupRef.current.position.x = THREE.MathUtils.randFloatSpread(amt);
+      shakeGroupRef.current.position.y = THREE.MathUtils.randFloatSpread(amt * 0.5);
     } else {
-      camera.position.x = 0;
-      camera.position.y = 13.5;
+      shakeGroupRef.current.position.x = 0;
+      shakeGroupRef.current.position.y = 0;
     }
-    camera.position.z = 17.5;
-    camera.lookAt(0, 1.2, -1.0);
   });
 
   return (
-    <group>
-      {/* Lighting from docs/magic-arena-threejs.html */}
-      <hemisphereLight args={[0x9db8ff, 0x24142f, 2.4]} />
+    <group ref={shakeGroupRef}>
+      {/* Natural Neutral Illumination for crisp character models & textures */}
+      <ambientLight intensity={0.9} color="#ffffff" />
+      <hemisphereLight args={[0xffffff, 0x333348, 2.0]} />
       <directionalLight
-        position={[-8, 18, 8]}
-        intensity={2.6}
-        color="#dcc7ff"
+        position={[-6, 16, 8]}
+        intensity={2.4}
+        color="#ffffff"
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
-      <pointLight position={[0, 6, -8]} intensity={25} distance={30} decay={2} color="#8a4dff" />
+      <directionalLight position={[6, 10, -6]} intensity={1.2} color="#f8fafc" />
+      <pointLight position={[0, 6, -8]} intensity={16} distance={30} decay={2} color="#8a4dff" />
 
       {/* 1. Floating Island Base */}
       <FloatingIsland />
@@ -698,47 +671,102 @@ const FighterToken = memo(function FighterToken({
   isHit,
   color,
 }) {
-  const groupRef = useRef(null);
+  const outerGroupRef = useRef(null);
+  const yawGroupRef = useRef(null);
+  const fallGroupRef = useRef(null);
   const ringRef = useRef(null);
+  const defeatTimeRef = useRef(null);
+  const wasDefeatedRef = useRef(false);
+
   const isDefeated = fighter.hp <= 0;
 
-  const labelSprite = useMemo(() => {
-    return createTextLabelSprite(fighter.id || "P1", isLockedTarget ? "#f43f5e" : color);
-  }, [fighter.id, isLockedTarget, color]);
-
   useFrame(({ clock }) => {
-    if (!groupRef.current) return;
     const t = clock.elapsedTime;
+    if (!yawGroupRef.current || !fallGroupRef.current) return;
+
+    // Track timestamp when character enters defeated state
+    if (isDefeated) {
+      if (!wasDefeatedRef.current) {
+        wasDefeatedRef.current = true;
+        defeatTimeRef.current = t;
+      }
+    } else {
+      wasDefeatedRef.current = false;
+      defeatTimeRef.current = null;
+    }
 
     if (isDefeated) {
-      groupRef.current.scale.set(1, 0.25, 1);
-      groupRef.current.position.y = -0.15;
+      const defeatStart = defeatTimeRef.current != null ? defeatTimeRef.current : t;
+      const elapsed = Math.max(0, t - defeatStart);
+      const fallDuration = 0.65;
+      const fallT = Math.min(Math.max(elapsed / fallDuration, 0), 1);
+
+      // Realistic backward topple physics with bounce on floor impact
+      let fallProgress;
+      if (fallT < 0.2) {
+        // Initial stagger/flinch before falling
+        const k = fallT / 0.2;
+        fallProgress = k * 0.08;
+      } else if (fallT < 0.75) {
+        // Accelerating backward topple under gravity
+        const k = (fallT - 0.2) / 0.55;
+        fallProgress = 0.08 + (k * k) * 0.92;
+      } else {
+        // Floor impact bounce & settle
+        const k = (fallT - 0.75) / 0.25;
+        const bounce = Math.sin(k * Math.PI) * 0.05;
+        fallProgress = 1.0 - bounce;
+      }
+
+      // Topple backward 90 degrees onto the arena floor (rotates around local X axis)
+      const targetFallAngle = Math.PI * 0.5; // 90 degrees backwards
+      fallGroupRef.current.rotation.x = -fallProgress * targetFallAngle;
+      fallGroupRef.current.rotation.z = 0;
+      fallGroupRef.current.rotation.y = 0;
+
+      // When lying flat, adjust Y & Z so the body rests naturally on the floor without clipping
+      fallGroupRef.current.position.y = THREE.MathUtils.lerp(0, 0.18, fallProgress);
+      fallGroupRef.current.position.z = THREE.MathUtils.lerp(0, -0.45, fallProgress);
+      fallGroupRef.current.position.x = 0;
+
+      // Scale remains 100% full scale (NO pancake squishing!)
+      fallGroupRef.current.scale.set(1, 1, 1);
+
+      // Dim ground ring
+      if (ringRef.current && ringRef.current.material) {
+        ringRef.current.material.opacity = Math.max(0.1, 0.85 * (1 - fallProgress));
+      }
       return;
     }
 
-    // Orient smoothly on XZ plane only (100% upright, ZERO tilt!)
+    // ── ALIVE STATE ──
+    // 1. Orient yaw smoothly on XZ plane towards lookTarget
     const dx = lookTarget.x - position.x;
     const dz = lookTarget.z - position.z;
     if (Math.abs(dx) > 0.001 || Math.abs(dz) > 0.001) {
       const targetYaw = Math.atan2(dx, dz);
-      groupRef.current.rotation.set(0, targetYaw, 0);
+      yawGroupRef.current.rotation.y = targetYaw;
     }
 
-    // Hit shake animation
+    // 2. Hit shake & flinch animation
     if (isHit) {
-      groupRef.current.position.x = position.x + Math.sin(t * 50) * 0.15;
-      groupRef.current.position.z = position.z + Math.cos(t * 50) * 0.15;
+      fallGroupRef.current.position.x = Math.sin(t * 50) * 0.15;
+      fallGroupRef.current.position.z = Math.cos(t * 50) * 0.15;
+      fallGroupRef.current.rotation.x = Math.sin(t * 35) * 0.2; // backward flinch
     } else {
-      groupRef.current.position.x = position.x;
-      groupRef.current.position.z = position.z;
+      fallGroupRef.current.position.x = 0;
+      fallGroupRef.current.position.z = 0;
+      fallGroupRef.current.rotation.x = 0;
     }
 
-    // Breathing float
-    groupRef.current.position.y = isCurrentTurn
+    // 3. Breathing float
+    fallGroupRef.current.position.y = isCurrentTurn
       ? 0.15 + Math.sin(t * 4) * 0.06
       : Math.sin(t * 2 + (fighter.playerIndex || 0)) * 0.03;
 
-    // Ground Ring pulse
+    fallGroupRef.current.scale.set(1, 1, 1);
+
+    // 4. Ground Ring pulse
     if (ringRef.current) {
       const pulse = 1 + Math.sin(t * 2.2 + (fighter.playerIndex || 0)) * 0.05;
       ringRef.current.scale.setScalar(pulse);
@@ -751,7 +779,7 @@ const FighterToken = memo(function FighterToken({
   const modelPath = HOUSE_MODELS[fighter.houseId];
 
   return (
-    <group ref={groupRef} position={position.toArray()}>
+    <group ref={outerGroupRef} position={position.toArray()}>
       {/* Player Ground Ring */}
       <mesh
         ref={ringRef}
@@ -762,25 +790,85 @@ const FighterToken = memo(function FighterToken({
         <meshBasicMaterial
           color={isLockedTarget ? "#f43f5e" : color}
           transparent
-          opacity={0.95}
+          opacity={0.45}
           side={THREE.DoubleSide}
         />
       </mesh>
 
-      {/* Player Floor Light */}
-      <pointLight position={[0, 0.7, 0]} color={color} intensity={8} distance={4.5} decay={2} />
+      {/* Facing (Yaw) Group */}
+      <group ref={yawGroupRef}>
+        {/* Fall & Animation (Pitch & Float) Group */}
+        <group ref={fallGroupRef}>
+          {modelPath ? (
+            <Suspense fallback={<LowPolyWizardMesh color={color} isDefeated={isDefeated} />}>
+              <HouseModelObject modelPath={modelPath} targetHeight={1.9} />
+            </Suspense>
+          ) : (
+            <LowPolyWizardMesh color={color} isDefeated={isDefeated} />
+          )}
+        </group>
+      </group>
 
-      {/* 3D Character Model or Showcase Low-Poly Wizard */}
-      {modelPath ? (
-        <Suspense fallback={<LowPolyWizardMesh color={color} isDefeated={isDefeated} />}>
-          <HouseModelObject modelPath={modelPath} targetHeight={1.9} />
-        </Suspense>
-      ) : (
-        <LowPolyWizardMesh color={color} isDefeated={isDefeated} />
-      )}
+      {/* 3D Floating In-World HUD Card over Fighter */}
+      <Html
+        position={[0, isDefeated ? 0.9 : 2.7, 0]}
+        center
+        distanceFactor={13}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        <div className="flex flex-col items-center pointer-events-none min-w-[130px]">
+          <div
+            className={`px-3 py-1.5 rounded-xl border backdrop-blur-md transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.85)] flex flex-col items-center gap-1 ${
+              isDefeated
+                ? "bg-slate-950/90 border-rose-900/60 opacity-60 grayscale"
+                : isCurrentTurn
+                ? "bg-slate-900/95 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                : isLockedTarget
+                ? "bg-slate-900/95 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)]"
+                : "bg-slate-950/85 border-white/20"
+            }`}
+          >
+            {/* Header: Name & Role Badge */}
+            <div className="flex items-center justify-between gap-1.5 w-full">
+              <span className="font-black text-[11px] text-white tracking-wide truncate">
+                {fighter.id} · {fighter.name}
+              </span>
+              {isDefeated ? (
+                <span className="text-[8px] font-black bg-rose-950 text-rose-300 border border-rose-500/40 px-1 py-0.2 rounded uppercase">
+                  KO
+                </span>
+              ) : isCurrentTurn ? (
+                <span className="text-[8px] font-black bg-amber-400 text-black px-1.2 py-0.2 rounded uppercase">
+                  ATTACKER
+                </span>
+              ) : isLockedTarget ? (
+                <span className="text-[8px] font-black bg-rose-950 text-rose-300 border border-rose-500/40 px-1 py-0.2 rounded uppercase">
+                  TARGET
+                </span>
+              ) : null}
+            </div>
 
-      {/* Floating 3D Label Sprite above head */}
-      <primitive object={labelSprite} position={[0, 3.0, 0]} />
+            {/* Health Progress Bar */}
+            <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden border border-white/20">
+              <div
+                className={`h-full ${
+                  (fighter.hp / (fighter.maxHp || 100)) > 0.5
+                    ? "bg-emerald-400"
+                    : (fighter.hp / (fighter.maxHp || 100)) > 0.25
+                    ? "bg-amber-400"
+                    : "bg-rose-500"
+                } transition-all duration-300`}
+                style={{ width: `${Math.max(0, Math.min(100, (fighter.hp / (fighter.maxHp || 100)) * 100))}%` }}
+              />
+            </div>
+
+            {/* Numbers */}
+            <div className="text-[9px] font-bold text-white/80 w-full text-right">
+              {Math.max(0, fighter.hp)} / {fighter.maxHp || 100}
+            </div>
+          </div>
+        </div>
+      </Html>
     </group>
   );
 });
@@ -790,15 +878,15 @@ function LowPolyWizardMesh({ color, isDefeated }) {
     <group position={[0, 0, 0]}>
       <mesh position={[0, 0.65, 0]} castShadow>
         <coneGeometry args={[0.45, 1.2, 6]} />
-        <meshStandardMaterial color={isDefeated ? "#64748b" : color} roughness={0.82} flatShading />
+        <meshStandardMaterial color={isDefeated ? "#475569" : color} roughness={0.82} flatShading />
       </mesh>
       <mesh position={[0, 1.45, 0]} castShadow>
         <icosahedronGeometry args={[0.33, 0]} />
-        <meshStandardMaterial color={isDefeated ? "#94a3b8" : "#e6d5c8"} roughness={0.82} flatShading />
+        <meshStandardMaterial color={isDefeated ? "#64748b" : "#e6d5c8"} roughness={0.82} flatShading />
       </mesh>
       <mesh position={[0, 2.05, 0]} castShadow>
         <coneGeometry args={[0.38, 0.9, 6]} />
-        <meshStandardMaterial color="#211c38" roughness={0.82} flatShading />
+        <meshStandardMaterial color={isDefeated ? "#334155" : "#211c38"} roughness={0.82} flatShading />
       </mesh>
     </group>
   );
@@ -949,7 +1037,7 @@ function HouseModelObject({ modelPath, targetHeight = 1.9 }) {
     const scale = targetHeight / maxDim;
 
     clone.scale.setScalar(scale);
-    clone.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+    clone.position.set(-center.x * scale, -box.min.y * scale + 0.06, -center.z * scale);
     return clone;
   }, [scene, targetHeight]);
 
