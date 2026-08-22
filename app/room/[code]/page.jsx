@@ -47,25 +47,55 @@ function getStateSignature(state) {
   return JSON.stringify(state, (_, value) => (value instanceof Set ? [...value] : value));
 }
 
+const COMBAT_SPELL_SEQUENCE_MS = 2200; // MagicCombat3dArena full spell sequence ≈ 1.95s
+const COMBAT_OUTCOME_READ_MS = 3200; // extra time to read the outcome banner
+const PVP_DUEL_PLAYBACK_MS = 8000; // PvP replay animation + outcome banner + countdown
+
 function getPresentationDuration(previous, next) {
-  if (!previous || previous.phase !== next.phase) return 2500;
-  if (next.combatState || previous.combatState) return 10000;
-  if (next.pvpEncounter || previous.pvpEncounter) return 10000;
-  if (previous.players?.some((player, index) => player.position !== next.players?.[index]?.position)) {
-    return 4000;
+  // New PvP clash result: hold long enough for the replay animation plus the
+  // outcome banner & countdown on every viewer.
+  if (
+    next?.pvpEncounter?.lastResult &&
+    (!previous?.pvpEncounter ||
+      previous.pvpEncounter.lastResult?.id !== next.pvpEncounter.lastResult.id)
+  ) {
+    return PVP_DUEL_PLAYBACK_MS;
   }
-  return 2000;
+  // New attack result: reserve the full spell animation (~2s) plus banner
+  // reading time so no viewer's playback is cut short by the next queued
+  // snapshot. Checked before the phase-change shortcut because a spectator
+  // catching up may receive the combat-start and attack snapshots together.
+  if (
+    next?.combatState?.lastResult &&
+    (!previous?.combatState || previous?.combatState?.lastResult?.id !== next.combatState.lastResult.id)
+  ) {
+    return COMBAT_SPELL_SEQUENCE_MS + COMBAT_OUTCOME_READ_MS;
+  }
+  if (!previous || previous.phase !== next.phase) return 2000;
+  if (next?.combatState || previous?.combatState) return 2500;
+  if (next?.pvpEncounter || previous?.pvpEncounter) return 3500;
+  if (previous?.players?.some((player, index) => player.position !== next?.players?.[index]?.position)) {
+    return 3000;
+  }
+  return 1500;
 }
 
-const BOT_COMBAT_DELAY_MS = 16000;
+const BOT_COMBAT_ATTACK_DELAY_MS = 1500;
+const BOT_COMBAT_RESOLVE_DELAY_MS = 7000;
 const BOT_DECISION_DELAY_MS = 7500;
 const BOT_SHOP_DELAY_MS = 6000;
 const BOT_TELEPORT_CONFIRM_DELAY_MS = 5000;
 const BOT_TELEPORT_RESOLVE_DELAY_MS = 9500;
 const MOVEMENT_SAFETY_DELAY_MS = 9500;
+const HUMAN_COMBAT_ATTACK_TIMEOUT_MS = 45000;
+const HUMAN_COMBAT_RESOLVE_TIMEOUT_MS = 30000;
+const PVP_STALL_TIMEOUT_MS = 30000;
+const BOT_PVP_ATTACK_DELAY_MS = 1600;
+const BOT_PVP_RESOLVE_DELAY_MS = 6500;
 const HOST_BOT_ACTIONS = new Set([
   "ROLL_DICE",
   "MOVE_AND_CHECK",
+  "COMBAT_ATTACK",
   "COMBAT_RESOLVE",
   "CLOSE_SHOP",
   "CONFIRM_TELEPORT",
@@ -305,9 +335,19 @@ export default function OnlineGameRoom({ params }) {
         hostState.combatState.monsterDied,
         hostState.combatState.monster?.currentHp,
         hostState.combatState.monster?.cell,
+        hostState.combatState.lastResult ? [
+          hostState.combatState.lastResult.id,
+          hostState.combatState.lastResult.rollType,
+          hostState.combatState.lastResult.damageDealt,
+          hostState.combatState.lastResult.counterDamage,
+          hostState.combatState.lastResult.outcome,
+        ] : null,
       ] : null,
       hostState.teleportModalData ? [hostState.teleportModalData.from, hostState.teleportModalData.to] : null,
-      !!hostState.pvpEncounter,
+      hostState.pvpEncounter ? [
+        hostState.pvpEncounter.cell,
+        hostState.pvpEncounter.lastResult ? hostState.pvpEncounter.lastResult.id : null,
+      ] : null,
       hostState.usedLadders ? [...hostState.usedLadders] : null,
       hostState.monsterCells ? [...hostState.monsterCells] : null,
       hostState.revealedMonsters ? Object.keys(hostState.revealedMonsters) : null,
@@ -649,10 +689,21 @@ export default function OnlineGameRoom({ params }) {
     if (!currentPl) return;
 
     if (currentPl.isBot) {
-      if (hostState.combatState) {
+      if (hostState.combatState && !hostState.combatState.resolved) {
+        // Bot attacks first so every viewer (host, players, spectators) sees
+        // the full spell sequence, then resolves once the animation and the
+        // outcome banner have had time to play. The reducer ignores
+        // duplicate COMBAT_ATTACKs, so this is safe to race with the
+        // CombatModal's own bot auto-trigger.
+        if (!hostState.combatState.lastResult) {
+          const timer = setTimeout(() => {
+            dispatchAction("COMBAT_ATTACK");
+          }, BOT_COMBAT_ATTACK_DELAY_MS);
+          return () => clearTimeout(timer);
+        }
         const timer = setTimeout(() => {
           dispatchAction("COMBAT_RESOLVE", { combatResult: {} });
-        }, BOT_COMBAT_DELAY_MS);
+        }, BOT_COMBAT_RESOLVE_DELAY_MS);
         return () => clearTimeout(timer);
       }
 
@@ -698,7 +749,48 @@ export default function OnlineGameRoom({ params }) {
       }
 
       if (hostState.pvpEncounter) {
-        return undefined;
+        // Bot attacker: the host drives the authoritative PVP_ATTACK (the
+        // reducer computes the clash and broadcasts lastResult so EVERY
+        // client replays the animation), then resolves after the replay and
+        // outcome banner have had time to play.
+        const pvp = hostState.pvpEncounter;
+        const attackerIsBot = Boolean(
+          hostState.players?.[
+            typeof pvp.attackerIndex === "number"
+              ? pvp.attackerIndex
+              : (pvp.participantIndices || [])[0]
+          ]?.isBot
+        );
+        if (attackerIsBot && !pvp.lastResult) {
+          const opponents = (pvp.participantIndices || []).filter(
+            (i) =>
+              i !== pvp.attackerIndex &&
+              hostState.players?.[i] &&
+              hostState.players[i].hp > 0
+          );
+          if (opponents.length > 0) {
+            const timer = setTimeout(() => {
+              hostDispatch({ type: "PVP_ATTACK", targetIndex: opponents[0] });
+            }, BOT_PVP_ATTACK_DELAY_MS);
+            return () => clearTimeout(timer);
+          }
+          // No valid opponent — skip the encounter.
+          const timer = setTimeout(() => {
+            hostDispatch({ type: "PVP_ACTION", choice: "resolve" });
+          }, 1500);
+          return () => clearTimeout(timer);
+        }
+        if (pvp.lastResult) {
+          const timer = setTimeout(() => {
+            hostDispatch({ type: "PVP_ACTION", choice: "resolve" });
+          }, BOT_PVP_RESOLVE_DELAY_MS);
+          return () => clearTimeout(timer);
+        }
+        // Human attacker — nothing to drive; stall backstop below.
+        const timer = setTimeout(() => {
+          hostDispatch({ type: "PVP_ACTION", choice: "resolve" });
+        }, PVP_STALL_TIMEOUT_MS);
+        return () => clearTimeout(timer);
       }
 
       if (
@@ -715,7 +807,37 @@ export default function OnlineGameRoom({ params }) {
         return () => clearTimeout(timer);
       }
     } else {
-      // Human player (Guest or Host): Inactivity timeout only when waiting for dice roll
+      // Human player (Guest or Host)
+      // Combat watchdog: if a human attacker never clicks ATTACK, or never
+      // confirms the outcome (AFK / closed browser), the whole room would
+      // stall on the combat screen forever. Drive the combat forward so all
+      // viewers eventually return to the board. Uses hostDispatch directly:
+      // in host-spectator mode dispatchAction blocks player-role actions,
+      // but anti-stall timers are host infrastructure, not gameplay input.
+      if (hostState.combatState && !hostState.combatState.resolved) {
+        if (!hostState.combatState.lastResult) {
+          const timer = setTimeout(() => {
+            hostDispatch({ type: "COMBAT_ATTACK" });
+          }, HUMAN_COMBAT_ATTACK_TIMEOUT_MS);
+          return () => clearTimeout(timer);
+        }
+        const timer = setTimeout(() => {
+          hostDispatch({ type: "COMBAT_RESOLVE", combatResult: {} });
+        }, HUMAN_COMBAT_RESOLVE_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+      }
+
+      // PvP anti-stall: online duels are simulated on the acting client only.
+      // If that client dies mid-duel the encounter would never resolve;
+      // skipping the encounter is a safe reducer fallback (no damage applied).
+      if (hostState.pvpEncounter) {
+        const timer = setTimeout(() => {
+          hostDispatch({ type: "PVP_ACTION", choice: "resolve" });
+        }, PVP_STALL_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+      }
+
+      // Inactivity timeout only when waiting for dice roll
       if (
         hostState.diceResult == null &&
         !hostState.combatState &&
@@ -741,6 +863,7 @@ export default function OnlineGameRoom({ params }) {
     hostState?.phase,
     hostState?.diceResult,
     hostState?.combatState,
+    hostState?.combatState?.lastResult?.id,
     hostState?.shopOpen,
     hostState?.teleportModalData,
     hostState?.doctorModalData,
@@ -748,6 +871,7 @@ export default function OnlineGameRoom({ params }) {
     hostState?.petModalPlayer,
     hostState?.bingoWinModalData,
     hostState?.pvpEncounter,
+    hostState?.pvpEncounter?.lastResult?.id,
     hostState?.winner,
     dispatchAction,
   ]);
@@ -1205,8 +1329,13 @@ export default function OnlineGameRoom({ params }) {
         <CombatModal
           combatState={activeState.combatState}
           player={activeState.players?.[activeState.combatState.playerIndex ?? activeState.currentPlayerIndex] || currentPlayer}
+          onAttack={
+            (role === "host" && activeState.players?.[activeState.combatState.playerIndex ?? activeState.currentPlayerIndex]?.isBot) || isMyTurn
+              ? () => dispatchAction("COMBAT_ATTACK")
+              : null
+          }
           onResolveCombat={
-            isMyTurn
+            isMyTurn || (role === "host" && activeState.players?.[activeState.combatState.playerIndex ?? activeState.currentPlayerIndex]?.isBot)
               ? (combatResult) => dispatchAction("COMBAT_RESOLVE", { combatResult })
               : null
           }
@@ -1243,7 +1372,13 @@ export default function OnlineGameRoom({ params }) {
                     (idx) => activeState.players?.[idx]?.isBot
                   ))
             )
-              ? (actionPayload) => dispatchAction("PVP_ACTION", actionPayload)
+              ? (actionPayload) => {
+                  if (actionPayload?.type === "PVP_ATTACK") {
+                    dispatchAction("PVP_ATTACK", actionPayload);
+                  } else {
+                    dispatchAction("PVP_ACTION", actionPayload);
+                  }
+                }
               : null
           }
         />

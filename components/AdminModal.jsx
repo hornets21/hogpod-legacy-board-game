@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  HOUSES,
   ARMOR_POOL,
   AMULET_POOL,
   POTIONS,

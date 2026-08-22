@@ -111,6 +111,22 @@ export default function PvpCombatModal({
   const isResolvingRef = useRef(false);
   const onPvpActionRef = useRef(onPvpAction);
   onPvpActionRef.current = onPvpAction;
+  // Initialize from the mount-time result so a client that joins MID-duel
+  // (refresh / rejoin) does not replay an already-applied clash and subtract
+  // its damage twice from the HP bars.
+  const lastResultIdRef = useRef(pvpEncounter?.lastResult?.id ?? null);
+  const attackUnlockTimerRef = useRef(null);
+  const executeAttackRef = useRef(null);
+
+  // Clean up the pending-attack fallback timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (attackUnlockTimerRef.current) {
+        clearTimeout(attackUnlockTimerRef.current);
+        attackUnlockTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const isOnline = myPlayerIndex !== undefined;
   const isSpectator = isOnline && (myPlayerIndex == null || myPlayerIndex < 0);
@@ -168,6 +184,11 @@ export default function PvpCombatModal({
       setAutoReturnCountdown(null);
       setLogHistory([]);
       isResolvingRef.current = false;
+      lastResultIdRef.current = null;
+      if (attackUnlockTimerRef.current) {
+        clearTimeout(attackUnlockTimerRef.current);
+        attackUnlockTimerRef.current = null;
+      }
     }
   }, [encounterKey, initialFighters]);
 
@@ -177,6 +198,21 @@ export default function PvpCombatModal({
   const resolveDuel = useCallback(() => {
     if (isResolvingRef.current) return;
     isResolvingRef.current = true;
+
+    if (isOnline) {
+      // Authoritative online flow: the reducer already applied the clash
+      // damage in PVP_ATTACK; the resolve just closes the encounter. Never
+      // send locally-simulated updatedPlayers — every viewer replayed the
+      // same authoritative result already.
+      if (onPvpActionRef.current) {
+        onPvpActionRef.current({
+          choice: "resolve",
+          logEntries: [`[PVP] Magic Clash at cell #${cell}`, ...logHistory],
+          extraTurn: false,
+        });
+      }
+      return;
+    }
 
     const currentFighters = fightersRef.current;
     const updatedPlayers = players.map((p, idx) => {
@@ -204,7 +240,190 @@ export default function PvpCombatModal({
         extraTurn: false,
       });
     }
-  }, [cell, logHistory, players]);
+  }, [cell, logHistory, players, isOnline]);
+
+  // ─── ONLINE: SUBMIT ATTACK TO THE AUTHORITATIVE REDUCER ────────
+  // The acting client sends only its INTENT (target + optional skill/potion).
+  // The host's reducer computes the clash once, and pvpEncounter.lastResult
+  // is broadcast so every viewer (attacker included) replays the SAME
+  // animation with the SAME numbers.
+  const submitAttack = useCallback(
+    (targetIdx) => {
+      if (battleLockedRef.current || isResolvingRef.current || duelFinishedRef.current) return;
+      if (!isOnline) {
+        executeAttackRef.current(targetIdx);
+        return;
+      }
+      if (typeof onPvpAction !== "function") return;
+
+      const target = fightersRef.current[targetIdx];
+      if (!target || target.hp <= 0) return;
+
+      setBattleLocked(true);
+      setShowSkillDrawer(false);
+      setShowItemDrawer(false);
+      setLockedTargetIndex(targetIdx);
+      setBattleLog(
+        `${currentAttacker?.name || "Attacker"} attacks ${target.name}...`
+      );
+
+      onPvpActionRef.current({
+        type: "PVP_ATTACK",
+        targetIndex: target.playerIndex,
+        skillId: selectedSkillId || null,
+        potionId: selectedPotionId || null,
+      });
+      setSelectedSkillId(null);
+      setSelectedPotionId(null);
+
+      // If the action is rejected or lost in transit, release the lock so
+      // the acting player can retry instead of being stuck on CASTING.
+      if (attackUnlockTimerRef.current) clearTimeout(attackUnlockTimerRef.current);
+      attackUnlockTimerRef.current = setTimeout(() => {
+        attackUnlockTimerRef.current = null;
+        if (!duelFinishedRef.current) {
+          setBattleLocked(false);
+          setBattleLog("Attack could not be delivered — try again.");
+        }
+      }, 8000);
+    },
+    [isOnline, onPvpAction, currentAttacker, selectedSkillId, selectedPotionId]
+  );
+
+  // ─── ONLINE: REPLAY THE AUTHORITATIVE CLASH ON EVERY VIEWER ────
+  const replayDuel = useCallback(async (result) => {
+    if (isResolvingRef.current || duelFinishedRef.current) return;
+    setBattleLocked(true);
+
+    // Alliance handshake — straight to the outcome banner on every viewer.
+    if (result.isAlliance) {
+      const list = [...fightersRef.current];
+      const attacker = list.find((f) => f.playerIndex === result.attackerIndex);
+      const target = list.find((f) => f.playerIndex === result.targetIndex);
+      const allianceMsg = `🤝 ${attacker?.name || "Attacker"} and ${
+        target?.name || "Opponents"
+      } shook hands and formed a peaceful alliance!`;
+      setBattleLog(allianceMsg);
+      setLogHistory((prev) => [...prev, allianceMsg]);
+      setDuelOutcome({
+        isAlliance: true,
+        attackerName: attacker?.name || "Attacker",
+        targetName: target?.name || "Opponents",
+        damageDealt: 0,
+        isDefeated: false,
+        targetSurvived: true,
+      });
+      setDuelFinished(true);
+      setAutoReturnCountdown(3);
+      return;
+    }
+
+    const list = [...fightersRef.current];
+    const attackerLocalIdx = list.findIndex(
+      (f) => f.playerIndex === result.attackerIndex
+    );
+    const targetLocalIdx = list.findIndex(
+      (f) => f.playerIndex === result.targetIndex
+    );
+
+    if (attackerLocalIdx < 0 || targetLocalIdx < 0) {
+      // Cannot map the broadcast to local fighters — jump to the outcome.
+      setDuelOutcome({
+        attackerName: list[attackerLocalIdx >= 0 ? attackerLocalIdx : 0]?.name || "Attacker",
+        targetName: "Opponent",
+        damageDealt: result.damageDealt || 0,
+        isDefeated: Boolean(result.isDefeated),
+        targetSurvived: !result.isDefeated,
+        isAlliance: Boolean(result.isAlliance),
+      });
+      setDuelFinished(true);
+      setAutoReturnCountdown(3);
+      return;
+    }
+
+    const attacker = list[attackerLocalIdx];
+    const target = { ...list[targetLocalIdx] };
+
+    // 1. Attacker wind-up & cast ring
+    setActiveCast({
+      attackerIndex: attackerLocalIdx,
+      targetIndex: targetLocalIdx,
+      color: attacker.color,
+    });
+    setBattleLog(`${attacker.name} attacks ${target.name}`);
+    await wait(260);
+    setActiveCast(null);
+
+    // 2. High-arc projectile flight
+    const flightDuration = 420;
+    const flightStart = performance.now();
+    await new Promise((res) => {
+      function tick(now) {
+        const p = Math.min((now - flightStart) / flightDuration, 1);
+        setActiveProjectile({
+          attackerIndex: attackerLocalIdx,
+          targetIndex: targetLocalIdx,
+          color: attacker.color,
+          progress: p,
+        });
+        if (p < 1) requestAnimationFrame(tick);
+        else res();
+      }
+      requestAnimationFrame(tick);
+    });
+    setActiveProjectile(null);
+
+    // 3. Impact burst & authoritative damage application
+    setActiveHit({
+      targetIndex: targetLocalIdx,
+      color: attacker.color,
+    });
+    target.hp = Math.max(0, target.hp - (result.damageDealt || 0));
+    list[targetLocalIdx] = target;
+    setFighters([...list]);
+
+    const isDefeated = target.hp <= 0;
+    const hitLog = target.isInvincible
+      ? `${target.name} is invincible and deflected all damage!`
+      : isDefeated
+      ? `${attacker.name} dealt ${result.damageDealt} damage and defeated ${target.name}!`
+      : `${attacker.name} dealt ${result.damageDealt} damage to ${target.name}!`;
+    setBattleLog(hitLog);
+    setLogHistory((prev) => [...prev, hitLog]);
+    await wait(420);
+    setActiveHit(null);
+
+    // 4. Outcome banner & countdown
+    setDuelOutcome({
+      attackerName: attacker.name,
+      attackerId: attacker.id,
+      targetName: target.name,
+      targetId: target.id,
+      damageDealt: result.damageDealt || 0,
+      isDefeated,
+      targetSurvived: !isDefeated,
+      isAlliance: Boolean(result.isAlliance),
+    });
+    setDuelFinished(true);
+    setAutoReturnCountdown(3);
+  }, []);
+
+  // Watch the authoritative clash result. Runs on EVERY client (attacker,
+  // other participants and spectators) so all viewers see the same replay.
+  useEffect(() => {
+    const result = pvpEncounter?.lastResult;
+    if (!result || !result.id) return;
+    if (lastResultIdRef.current === result.id) return;
+    lastResultIdRef.current = result.id;
+    if (!isOnline) return;
+
+    // The authoritative result arrived — cancel the attacker's retry timer.
+    if (attackUnlockTimerRef.current) {
+      clearTimeout(attackUnlockTimerRef.current);
+      attackUnlockTimerRef.current = null;
+    }
+    replayDuel(result);
+  }, [pvpEncounter?.lastResult, isOnline, replayDuel]);
 
   // ─── EXECUTE 1 ATTACK (1-ATTACK PVP RULE: NO BACK-AND-FORTH LOOP) ─────
   const executeAttack = useCallback(
@@ -350,6 +569,7 @@ export default function PvpCombatModal({
     },
     [attackerIdx, selectedPotionId, selectedSkillId]
   );
+  executeAttackRef.current = executeAttack;
 
   // ─── EXECUTE ALLIANCE (PEACE / TRUCE / NON-AGGRESSION HANDSHAKE) ───
   const executeAlliance = useCallback(async () => {
@@ -357,6 +577,17 @@ export default function PvpCombatModal({
     setBattleLocked(true);
     setShowSkillDrawer(false);
     setShowItemDrawer(false);
+
+    // Online: broadcast the handshake so every viewer shows the alliance
+    // banner from the authoritative lastResult.
+    if (isOnline) {
+      if (onPvpActionRef.current) {
+        onPvpActionRef.current({ type: "PVP_ATTACK", isAlliance: true });
+      } else {
+        setBattleLocked(false);
+      }
+      return;
+    }
 
     const list = [...fightersRef.current];
     const attacker = { ...list[attackerIdx] };
@@ -385,11 +616,17 @@ export default function PvpCombatModal({
     });
     setDuelFinished(true);
     setAutoReturnCountdown(3);
-  }, [attackerIdx, activeTargetIndex]);
+  }, [attackerIdx, activeTargetIndex, isOnline]);
 
   // ─── AUTO-ATTACK FOR BOTS & TIMEOUT FALLBACK ────────────────
+  // Only the client that can dispatch PVP actions may drive the duel.
+  // In ONLINE mode bot attackers are driven by the host's automation timers
+  // (authoritative PVP_ATTACK), and human attackers use submitAttack — both
+  // broadcast pvpEncounter.lastResult so every viewer replays the same duel.
+  const canDriveDuel = typeof onPvpAction === "function";
   useEffect(() => {
     if (duelFinished || battleLocked) return undefined;
+    if (!canDriveDuel) return undefined;
 
     const attacker = fighters[attackerIdx];
     if (!attacker || attacker.hp <= 0) return undefined;
@@ -403,18 +640,23 @@ export default function PvpCombatModal({
 
     if (chosenTarget === null || chosenTarget === undefined) return undefined;
 
-    // If bot attacker, execute after 1.2s delay
+    // Local mode: bot attacker executes its local simulation after 1.2s.
+    // Online mode: the host's automation effect dispatches PVP_ATTACK for
+    // bots, so this client does nothing (it will replay lastResult instead).
     if (attacker.isBot) {
+      if (isOnline) return undefined;
       const botTimer = setTimeout(() => {
         executeAttack(chosenTarget);
       }, 1200);
       return () => clearTimeout(botTimer);
     }
 
-    // In online mode with human player timeout fallback (15s)
-    if (isOnline) {
+    // Online: the acting player's own client resolves an idle duel after
+    // 15s (anti-AFK) via the authoritative submitAttack. Spectators and
+    // other participants must not simulate anything.
+    if (isOnline && isMyTurn) {
       const timeoutTimer = setTimeout(() => {
-        executeAttack(chosenTarget);
+        submitAttack(chosenTarget);
       }, 15000);
       return () => clearTimeout(timeoutTimer);
     }
@@ -424,11 +666,14 @@ export default function PvpCombatModal({
     attackerIdx,
     battleLocked,
     duelFinished,
+    canDriveDuel,
     fighters,
     activeTargetIndex,
     availableTargetIndices,
     executeAttack,
+    submitAttack,
     isOnline,
+    isMyTurn,
   ]);
 
   // ─── AUTO-RESOLVE COUNTDOWN AFTER CLASH FINISHED ─────────────
@@ -835,7 +1080,7 @@ export default function PvpCombatModal({
                 disabled={battleLocked || !isMyTurn || activeTargetIndex === null}
                 onClick={() => {
                   if (activeTargetIndex !== null) {
-                    executeAttack(activeTargetIndex);
+                    submitAttack(activeTargetIndex);
                   }
                 }}
                 className={`flex-[1.3] min-w-[100px] py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_25px_rgba(239,68,68,0.5)] ${

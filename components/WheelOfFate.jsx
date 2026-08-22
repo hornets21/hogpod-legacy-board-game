@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "re
 import { getTotalDmg } from "@/lib/gameEngine";
 
 const WheelOfFate = forwardRef(function WheelOfFate(
-  { monster, player, onSpinComplete, spinTrigger, onSpinStateChange, autoSpin = false },
+  { monster, player, onSpinComplete, spinTrigger, onSpinStateChange, autoSpin = false, targetSegmentIndex = null },
   ref
 ) {
   const [spinning, setSpinning] = useState(false);
@@ -16,6 +16,21 @@ const WheelOfFate = forwardRef(function WheelOfFate(
   const onSpinStateChangeRef = useRef(onSpinStateChange);
   onSpinStateChangeRef.current = onSpinStateChange;
   const isBot = Boolean(player?.isBot);
+
+  const playerRef = useRef(player);
+  playerRef.current = player;
+  const monsterRef = useRef(monster);
+  monsterRef.current = monster;
+  const spinTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (spinTimeoutRef.current) {
+        clearTimeout(spinTimeoutRef.current);
+        spinTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (autoSpin && !spinning && !spunResult) {
@@ -120,7 +135,12 @@ const WheelOfFate = forwardRef(function WheelOfFate(
     }
   }, [spinTrigger, spinning, spunResult]);
 
-  function spinWheel() {
+  useImperativeHandle(ref, () => ({
+    spin: (idx = null) => spinWheel(idx),
+    isSpinning: () => spinning,
+  }));
+
+  function spinWheel(overrideIndex = null) {
     if (spinning || spunResult) return;
 
     setSpinning(true);
@@ -128,21 +148,29 @@ const WheelOfFate = forwardRef(function WheelOfFate(
       onSpinStateChangeRef.current({ spinning: true, spunResult: null });
     }
 
-    // Random spin: 5 to 10 full turns + random segment angle
-    const selectedIndex = Math.floor(Math.random() * segments.length);
+    // Determine segment index
+    const selectedIndex = typeof overrideIndex === "number"
+      ? overrideIndex
+      : typeof targetSegmentIndex === "number"
+      ? targetSegmentIndex
+      : Math.floor(Math.random() * segments.length);
+
     const segDegree = 360 / segments.length;
     const targetDegree = 360 * 5 + (360 - selectedIndex * segDegree - segDegree / 2);
 
     setRotation(targetDegree);
 
-    setTimeout(() => {
+    if (spinTimeoutRef.current) clearTimeout(spinTimeoutRef.current);
+    spinTimeoutRef.current = setTimeout(() => {
       setSpinning(false);
-      const selectedSeg = segments[selectedIndex];
+      const selectedSeg = segments[selectedIndex] || segments[0];
       const { dmg: rolledDmg, hp: rolledHpThreshold } = selectedSeg.getStats();
 
-      const currentDmg = getTotalDmg(player);
-      const currentHp = player.hp;
-      const monsterHp = typeof monster?.currentHp === "number" ? monster.currentHp : (monster?.hp || 50);
+      const currentPlayer = playerRef.current || player;
+      const currentMonster = monsterRef.current || monster;
+      const currentDmg = getTotalDmg(currentPlayer);
+      const currentHp = currentPlayer?.hp ?? 100;
+      const monsterHp = typeof currentMonster?.currentHp === "number" ? currentMonster.currentHp : (currentMonster?.hp || 50);
 
       // ผู้เล่นชนะการปะทะหากพลังโจมตีผู้เล่น (playerDmg) >= rolledHpThreshold (เกณฑ์การปะทะของวงล้อ)
       const isWinClash = currentDmg >= rolledHpThreshold;

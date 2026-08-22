@@ -201,16 +201,16 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             <SlotFrame
               label="Skill 1"
               icon="✨"
-              active={currentPlayer.skills.length > 0}
-              itemTitle={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.name : "Not Assigned"}
-              itemSub={currentPlayer.skills[0] ? SKILLS[currentPlayer.skills[0]]?.nameTh : "Tap to select"}
+              active={(currentPlayer.skills || []).length > 0}
+              itemTitle={currentPlayer.skills?.[0] ? SKILLS[currentPlayer.skills[0]]?.name : "Not Assigned"}
+              itemSub={currentPlayer.skills?.[0] ? SKILLS[currentPlayer.skills[0]]?.nameTh : "Tap to select"}
             />
             <SlotFrame
               label="Skill 2"
               icon="🔮"
-              active={currentPlayer.skills.length > 1}
-              itemTitle={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.name : "Not Assigned"}
-              itemSub={currentPlayer.skills[1] ? SKILLS[currentPlayer.skills[1]]?.nameTh : "Tap to select"}
+              active={(currentPlayer.skills || []).length > 1}
+              itemTitle={currentPlayer.skills?.[1] ? SKILLS[currentPlayer.skills[1]]?.name : "Not Assigned"}
+              itemSub={currentPlayer.skills?.[1] ? SKILLS[currentPlayer.skills[1]]?.nameTh : "Tap to select"}
             />
           </div>
 
@@ -276,7 +276,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
             {activeTab === "skills" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {SKILL_LIST.map((sk) => {
-                  const isOwned = currentPlayer.skills.includes(sk.id);
+                  const isOwned = (currentPlayer.skills || []).includes(sk.id);
                   return (
                     <ShopCard
                       key={sk.id}
@@ -285,7 +285,7 @@ export default function SetupModal({ players, onCompleteSetup, onOpenAdmin }) {
                       price={2000}
                       gold={currentPlayer.gold}
                       owned={isOwned}
-                      disabled={!isOwned && currentPlayer.skills.length >= 2}
+                      disabled={!isOwned && (currentPlayer.skills || []).length >= 2}
                       onBuy={() => handleToggleEquip("skill", sk.id)}
                       icon={null}
                       img={`/images/skills/${sk.id}_skill.webp`}

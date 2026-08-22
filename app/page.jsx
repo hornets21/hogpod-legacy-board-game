@@ -255,7 +255,7 @@ export default function Home() {
       emitStepMove();
 
       // หน่วงเวลาตามจำนวนก้าวเดินจริง (400ms ต่อช่อง + 400ms ลงพื้น) เพื่อให้หมากเดินถึงช่องเป้าหมายก่อนเปิด Modal
-      const walkDurationMs = Math.max(1200, rolledVal * 400 + 400);
+      const walkDurationMs = Math.max(1200, rolledVal * 400 + 400) + (rolledVal === 1 ? 900 : 0);
       setTimeout(() => {
         dispatch({ type: "MOVE_AND_CHECK" });
         setIsRolling(false);
@@ -592,6 +592,15 @@ export default function Home() {
                 </button>
               )}
 
+              {currentPlayer.potions?.includes("revive") && (
+                <button
+                  onClick={() => dispatch({ type: "OPEN_SHOP" })}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-yellow-400 text-slate-950 font-black text-sm shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-200 transition-all hover:scale-105"
+                >
+                  Visit Shop
+                </button>
+              )}
+
               <button
                 onClick={() => dispatch({ type: "RESPAWN_PLAYER", playerIndex: state.currentPlayerIndex })}
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs border border-white/10 transition-all hover:scale-102 flex items-center justify-center gap-1.5"
@@ -617,6 +626,7 @@ export default function Home() {
         <CombatModal
           combatState={state.combatState}
           player={currentPlayer}
+          onAttack={() => dispatch({ type: "COMBAT_ATTACK" })}
           onResolveCombat={(combatResult) => dispatch({ type: "COMBAT_RESOLVE", combatResult })}
           onUseSkill={(skillId) =>
             dispatch({

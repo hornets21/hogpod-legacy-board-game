@@ -232,7 +232,7 @@ export default function ShopModal({ player, onBuy, onClose }) {
                       icon="🔮"
                       img={`/images/skills/${skill.id}_skill.webp`}
                       owned={owned}
-                      disabled={!owned && player.skills.length >= 2}
+                      disabled={!owned && (player.skills || []).length >= 2}
                       onBuy={() => onBuy("skill", skill.id)}
                       itemData={{
                         ...skill,

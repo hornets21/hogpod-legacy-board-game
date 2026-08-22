@@ -73,6 +73,14 @@ const Token = memo(function Token({ player, index, isActive, onMoveComplete }) {
       // ถ้าเป็นการ Reset เกม ให้ตั้งตำแหน่งกลับมาช่อง 1 ทันที และล้าง queue เดิน
       a.queue = [];
       a.mode = "idle";
+      a.scale = 1;
+      a.segmentProgress = 0;
+      a.segmentDistance = 0;
+      a.targetCell = null;
+      a.completionCell = null;
+      if (groupRef.current) {
+        groupRef.current.scale.set(1, 1, 1);
+      }
       const [x, , z] = cellToWorld(1);
       groupRef.current?.position.set(x + offset[0], 0, z + offset[2]);
       return;

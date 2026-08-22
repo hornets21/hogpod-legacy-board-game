@@ -18,7 +18,7 @@ export default function PlayerCard({ player, playerIndex, isActive, onUseSkill, 
   }, [isActive]);
 
   const totalDmg = getTotalDmg(player);
-  const hpPct = Math.max(0, (player.hp / player.maxHp) * 100);
+  const hpPct = Math.max(0, Math.min(100, (player.hp / (player.maxHp || 100)) * 100));
 
   const houseData = HOUSES[player?.houseId] || {};
   const wandImg = player.wand

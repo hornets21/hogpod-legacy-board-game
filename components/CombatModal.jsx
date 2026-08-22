@@ -14,6 +14,7 @@ import ItemTooltip from "@/components/fx/ItemTooltip";
 export default function CombatModal({
   combatState,
   player,
+  onAttack,
   onResolveCombat,
   onUseSkill,
   onUsePotion,
@@ -42,13 +43,104 @@ export default function CombatModal({
   const [showSkillDrawer, setShowSkillDrawer] = useState(false);
 
   const [pendingRoll, setPendingRoll] = useState(null);
+  const pendingRollRef = useRef(null);
+  pendingRollRef.current = pendingRoll;
+  const skillTimeoutRef = useRef(null);
+  const attackLockTimeoutRef = useRef(null);
+  const lastObservedResultIdRef = useRef(null);
+
+  // Sync HP bars when monster or player stats change
+  useEffect(() => {
+    setDisplayedPlayerHp(player?.hp ?? 100);
+  }, [player?.hp]);
+
+  useEffect(() => {
+    setDisplayedMonsterHp(monsterCurrentHp);
+  }, [monsterCurrentHp, combatState?.monster?.id, combatState?.round]);
+
+  useEffect(() => {
+    return () => {
+      if (skillTimeoutRef.current) {
+        clearTimeout(skillTimeoutRef.current);
+        skillTimeoutRef.current = null;
+      }
+      if (attackLockTimeoutRef.current) {
+        clearTimeout(attackLockTimeoutRef.current);
+        attackLockTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  // Sync attack action across all clients (Host, Attacker, and Spectators)
+  useEffect(() => {
+    const lastResult = combatState?.lastResult;
+    if (!lastResult || !lastResult.id) return;
+    if (lastObservedResultIdRef.current === lastResult.id) return;
+    lastObservedResultIdRef.current = lastResult.id;
+
+    // The authoritative result arrived: cancel the optimistic-lock fallback.
+    if (attackLockTimeoutRef.current) {
+      clearTimeout(attackLockTimeoutRef.current);
+      attackLockTimeoutRef.current = null;
+    }
+
+    // New attack round: clear any stale outcome/banner from a previous
+    // result so playback starts clean on every viewer.
+    setCombatOutcome(null);
+    setMonsterDamagePopup(null);
+    setPlayerDamagePopup(null);
+    setShowSkillDrawer(false);
+    setShowItemDrawer(false);
+    setIsAttacking(true);
+
+    const pDmg = typeof lastResult.damageDealt === "number" ? lastResult.damageDealt : (lastResult.playerDmg || 0);
+    const mDmg = typeof lastResult.counterDamage === "number" ? lastResult.counterDamage : (lastResult.monsterDmg || 0);
+    const rollType = lastResult.rollType || "HIT";
+    const popupColor = lastResult.popupColor || (rollType === "CRIT" ? "text-yellow-300 drop-shadow-[0_0_20px_rgba(234,179,8,0.9)]" : rollType === "GRAZE" ? "text-orange-400" : rollType === "MISS" ? "text-cyan-300" : "text-amber-200");
+    const popupText = lastResult.popupText || (rollType === "CRIT" ? `CRIT! -${pDmg}` : rollType === "GRAZE" ? `GRAZE -${pDmg}` : rollType === "MISS" ? "MISS!" : `-${pDmg}`);
+
+    const rollData = {
+      ...lastResult,
+      rollType,
+      playerDmg: pDmg,
+      counterDmg: mDmg,
+      popupText,
+      popupColor,
+    };
+    pendingRollRef.current = rollData;
+    setPendingRoll(rollData);
+
+    const spellType = getHouseSpellType(player?.houseId || player?.house);
+    setAttackAction({
+      active: true,
+      id: lastResult.id,
+      spellType,
+    });
+  }, [combatState?.lastResult, player?.houseId, player?.house]);
 
   const handleAttack = () => {
     if (isAttacking || combatOutcome) return;
     setShowSkillDrawer(false);
     setShowItemDrawer(false);
-    setIsAttacking(true);
 
+    if (typeof onAttack === "function") {
+      // Optimistic lock: the authoritative lastResult arrives only after a
+      // Firebase round-trip (online) or the next render (local). Locking
+      // immediately prevents a double-click from dispatching a second
+      // COMBAT_ATTACK that would re-roll the damage. If the action is
+      // rejected or lost in transit, the lock auto-releases below.
+      setIsAttacking(true);
+      if (attackLockTimeoutRef.current) clearTimeout(attackLockTimeoutRef.current);
+      attackLockTimeoutRef.current = setTimeout(() => {
+        attackLockTimeoutRef.current = null;
+        setIsAttacking(false);
+      }, 6000);
+      onAttack();
+      return;
+    }
+
+    // Standalone local preview fallback if onAttack is not provided
+    setIsAttacking(true);
     const baseDmg = getTotalDmg(player);
     const roll = Math.random();
 
@@ -111,9 +203,10 @@ export default function CombatModal({
   // Phase 1: Player spell hits Monster
   const handlePlayerSpellImpact = () => {
     setHitStop(true);
-    const pDmg = pendingRoll?.playerDmg ?? getTotalDmg(player);
-    const pText = pendingRoll?.popupText ?? `-${pDmg}`;
-    const pColor = pendingRoll?.popupColor ?? "text-amber-300";
+    const pRoll = pendingRollRef.current || pendingRoll || combatState?.lastResult;
+    const pDmg = pRoll?.playerDmg ?? pRoll?.damageDealt ?? getTotalDmg(player);
+    const pText = pRoll?.popupText ?? `-${pDmg}`;
+    const pColor = pRoll?.popupColor ?? "text-amber-300";
 
     setMonsterDamagePopup({
       key: Date.now(),
@@ -126,7 +219,19 @@ export default function CombatModal({
   // Phase 2: Monster counter-spell hits Player
   const handleMonsterSpellImpact = () => {
     setHitStop(true);
-    const mDmg = pendingRoll?.counterDmg ?? (combatState?.monster?.dmg || 20);
+    const pRoll = pendingRollRef.current || pendingRoll || combatState?.lastResult;
+    const mDmg = pRoll?.counterDmg ?? pRoll?.monsterDmg ?? (combatState?.monster?.dmg || 20);
+    // A won clash means the counter-attack was deflected — the authoritative
+    // resolve never deducts player HP in that case, so show a BLOCKED popup
+    // instead of faking a number that PlayerCard will contradict afterwards.
+    if (pRoll?.outcome === "win" || player?.isInvincible) {
+      setPlayerDamagePopup({
+        key: Date.now(),
+        text: player?.isInvincible ? "IMMUNE!" : "BLOCKED!",
+        colorClass: "text-cyan-300 drop-shadow-[0_0_15px_rgba(34,211,238,0.9)]",
+      });
+      return;
+    }
     setPlayerDamagePopup({
       key: Date.now(),
       text: `-${mDmg}`,
@@ -137,12 +242,14 @@ export default function CombatModal({
 
   // Phase 3: Spell sequence complete
   const handleSpellComplete = () => {
-    const pDmg = pendingRoll?.playerDmg ?? getTotalDmg(player);
-    const mDmg = pendingRoll?.counterDmg ?? (combatState?.monster?.dmg || 20);
-    const remainingMonsterHp = Math.max(0, monsterCurrentHp - pDmg);
+    const pRoll = pendingRollRef.current || pendingRoll || combatState?.lastResult;
+    const pDmg = pRoll?.playerDmg ?? pRoll?.damageDealt ?? getTotalDmg(player);
+    const mDmg = pRoll?.counterDmg ?? pRoll?.monsterDmg ?? (combatState?.monster?.dmg || 20);
+    const remainingMonsterHp = typeof pRoll?.remainingHp === "number" ? pRoll.remainingHp : Math.max(0, monsterCurrentHp - pDmg);
 
-    const isWin = remainingMonsterHp <= 0 || (pendingRoll?.rollType === "CRIT") || (pDmg >= mDmg && pendingRoll?.rollType === "HIT");
-    const outcome = isWin ? "win" : "lose";
+    // Mirror the authoritative rule in gameEngine.calculateCombatAttack:
+    // a clash is won only by a killing blow or a CRIT — never by a plain HIT.
+    const outcome = pRoll?.outcome || (remainingMonsterHp <= 0 || pRoll?.rollType === "CRIT" ? "win" : "lose");
 
     setCombatOutcome({
       outcome,
@@ -151,20 +258,25 @@ export default function CombatModal({
       monsterDmg: mDmg,
       monsterHp: monsterMaxHp,
       remainingHp: remainingMonsterHp,
-      rollType: pendingRoll?.rollType || "HIT",
+      rollType: pRoll?.rollType || "HIT",
+      counterDamage: mDmg,
     });
     setIsAttacking(false);
   };
 
-  // Auto-trigger attack for bot players
+  // Auto-trigger attack for bot players — only on clients that can actually
+  // drive the bot (host in online mode / local mode). Without this gate every
+  // viewer ran the random LOCAL PREVIEW fallback, so spectators and players
+  // saw fake damage numbers that differed from the authoritative result.
+  const canAttack = typeof onAttack === "function";
   useEffect(() => {
-    if (player?.isBot && !isAttacking && !combatOutcome) {
+    if (player?.isBot && canAttack && !isAttacking && !combatOutcome) {
       const timer = setTimeout(() => {
         handleAttack();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [player?.isBot, isAttacking, combatOutcome]);
+  }, [player?.isBot, canAttack, isAttacking, combatOutcome]);
 
   // Auto-confirm result for bot
   useEffect(() => {
@@ -184,6 +296,8 @@ export default function CombatModal({
         spunDmg: combatOutcome.monsterDmg,
         spunHp: combatOutcome.monsterHp,
         damageDealt: combatOutcome.damageDealt,
+        counterDamage: combatOutcome.counterDamage,
+        rollType: combatOutcome.rollType,
       });
     }
   };
@@ -214,7 +328,8 @@ export default function CombatModal({
       const newHp = Math.max(0, displayedMonsterHp - 50);
       setDisplayedMonsterHp(newHp);
       if (newHp <= 0) {
-        setTimeout(() => {
+        if (skillTimeoutRef.current) clearTimeout(skillTimeoutRef.current);
+        skillTimeoutRef.current = setTimeout(() => {
           setCombatOutcome({
             outcome: "win",
             damageDealt: 50,
@@ -242,7 +357,8 @@ export default function CombatModal({
       const newHp = Math.max(0, displayedMonsterHp - 80);
       setDisplayedMonsterHp(newHp);
       if (newHp <= 0) {
-        setTimeout(() => {
+        if (skillTimeoutRef.current) clearTimeout(skillTimeoutRef.current);
+        skillTimeoutRef.current = setTimeout(() => {
           setCombatOutcome({
             outcome: "win",
             damageDealt: 80,
@@ -548,19 +664,28 @@ export default function CombatModal({
                 <div className="text-xs font-bold text-white/90 truncate mt-1">
                   {combatOutcome.remainingHp <= 0
                     ? `สร้าง ${combatOutcome.damageDealt} ดาเมจ ปราบ ${monster?.name || "มอนสเตอร์"} สำเร็จ!`
+                    : combatOutcome.outcome === "win"
+                    ? `ชนะการปะทะ! สร้าง ${combatOutcome.damageDealt} ดาเมจ (ป้องกันการสวนกลับ ไม่เสีย HP)`
                     : `คุณทำ ${combatOutcome.damageDealt} ดาเมจ | โดน ${monster?.name || "มอนสเตอร์"} สวนกลับ ${combatOutcome.monsterDmg} ดาเมจ`}
                 </div>
               </div>
 
               <button
                 onClick={handleConfirmResult}
-                className={`w-full py-3 px-6 rounded-xl font-black text-sm shadow-2xl transition-all duration-200 active:scale-95 border border-white/30 tracking-wider uppercase cursor-pointer ${
-                  combatOutcome.outcome === "win"
-                    ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-white shadow-emerald-500/60 hover:brightness-110"
-                    : "bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-red-500/60 hover:brightness-110"
+                disabled={!onResolveCombat}
+                className={`w-full py-3 px-6 rounded-xl font-black text-sm shadow-2xl transition-all duration-200 active:scale-95 border border-white/30 tracking-wider uppercase ${
+                  !onResolveCombat
+                    ? "bg-slate-800 text-slate-400 border-slate-700 cursor-not-allowed opacity-70"
+                    : combatOutcome.outcome === "win"
+                    ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 text-white shadow-emerald-500/60 hover:brightness-110 cursor-pointer"
+                    : "bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white shadow-red-500/60 hover:brightness-110 cursor-pointer"
                 }`}
               >
-                {combatOutcome.outcome === "win" ? "รับรางวัล & จบการต่อสู้" : "บันทึกผล & จบการต่อสู้"}
+                {!onResolveCombat
+                  ? "รอผู้เล่นยืนยันผลการต่อสู้..."
+                  : combatOutcome.outcome === "win"
+                  ? "รับรางวัล & จบการต่อสู้"
+                  : "บันทึกผล & จบการต่อสู้"}
               </button>
             </motion.div>
           )}
@@ -717,15 +842,15 @@ export default function CombatModal({
           {/* 1. ATTACK BUTTON (Dominant Crimson & Amber Glow) */}
           <button
             type="button"
-            disabled={isAttacking || !!combatOutcome}
+            disabled={!onAttack || isAttacking || !!combatOutcome}
             onClick={handleAttack}
             className={`flex-[1.4] py-3 sm:py-3.5 px-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_25px_rgba(239,68,68,0.5)] ${
-              isAttacking || !!combatOutcome
+              !onAttack || isAttacking || !!combatOutcome
                 ? "bg-slate-900/80 border border-slate-700 text-slate-500 opacity-60 cursor-not-allowed"
                 : "bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 border border-amber-400/80 text-white hover:scale-103 active:scale-95 cursor-pointer animate-pulse"
             }`}
           >
-            <span>{isAttacking ? "CASTING..." : "ATTACK"}</span>
+            <span>{isAttacking ? "CASTING..." : !onAttack ? "SPECTATING..." : "ATTACK"}</span>
           </button>
 
           {/* 2. SKILL BUTTON (Amethyst Purple Glow with Hover Quick-Bar) */}
